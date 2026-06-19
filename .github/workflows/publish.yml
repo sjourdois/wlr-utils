@@ -22,4 +22,13 @@ jobs:
             libegl1-mesa-dev libgl1-mesa-dev
       - name: Publish to crates.io
         if: env.CARGO_REGISTRY_TOKEN != ''
-        run: cargo publish
+        run: |
+          if cargo publish 2>publish-err.log; then
+            echo "published"
+          elif grep -qi 'already' publish-err.log; then
+            echo "this version is already on crates.io — skipping"
+            cat publish-err.log
+          else
+            cat publish-err.log >&2
+            exit 1
+          fi
