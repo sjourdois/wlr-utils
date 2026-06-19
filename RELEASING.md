@@ -16,7 +16,8 @@ git add .github/workflows/release.yml Cargo.toml && git commit -m "ci: cargo-dis
 
 Repository secrets needed on GitHub:
 
-- `CARGO_REGISTRY_TOKEN` — a crates.io API token, if you publish from CI.
+- `CARGO_REGISTRY_TOKEN` — a crates.io API token; the `publish` workflow uses it to
+  publish on tag. Set it with `gh secret set CARGO_REGISTRY_TOKEN`.
 
 ## Cutting a release `vX.Y.Z`
 
@@ -26,10 +27,10 @@ Repository secrets needed on GitHub:
    git tag vX.Y.Z
    git push --tags
    ```
-   The `release` workflow builds the binaries + a shell installer and creates the
-   GitHub Release.
-3. **crates.io:** `cargo publish` (or let CI do it).
-4. **`.deb`:** `cargo deb` produces `target/debian/wlr-chooser_X.Y.Z_amd64.deb`;
+   - The `publish` workflow publishes the crate to **crates.io** automatically.
+   - The cargo-dist `release` workflow builds the binaries + installer and creates
+     the GitHub Release.
+3. **`.deb`:** `cargo deb` produces `target/debian/wlr-chooser_X.Y.Z_amd64.deb`;
    attach it to the GitHub Release.
 5. **AUR:** in `packaging/aur/`, bump `pkgver`, run `updpkgsums` to fill the
    `sha256sums`, regenerate `.SRCINFO` (`makepkg --printsrcinfo > .SRCINFO`), and
