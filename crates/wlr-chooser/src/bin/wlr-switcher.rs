@@ -113,10 +113,11 @@ fn main() {
         Ok(Some(sel)) => {
             // Focus the picked window (outputs aren't focusable, so ignore them).
             if sel.is_window
-                && let Err(e) = wl::activate_window(&sel.app_id, &sel.title, sel.dup_index) {
-                    eprintln!("{}", tr!("error", error = format!("{e:#}")));
-                    std::process::exit(2);
-                }
+                && let Err(e) = wl::activate_window(&sel.app_id, &sel.title, sel.dup_index)
+            {
+                eprintln!("{}", tr!("error", error = format!("{e:#}")));
+                std::process::exit(2);
+            }
         }
         Ok(None) => std::process::exit(1), // cancelled
         Err(e) => {

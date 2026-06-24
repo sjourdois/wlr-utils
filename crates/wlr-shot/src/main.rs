@@ -732,9 +732,10 @@ mod record_impl {
                 break;
             }
             if let Some(dl) = deadline
-                && Instant::now() >= dl {
-                    break;
-                }
+                && Instant::now() >= dl
+            {
+                break;
+            }
 
             // Poll for new content, but never overshoot the next emit tick.
             let budget = match next_tick {

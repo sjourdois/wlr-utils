@@ -885,10 +885,11 @@ impl State {
                     if let Some(txt) = &event.utf8 {
                         // Printable input only (skip control characters).
                         if txt.chars().any(|c| !c.is_control())
-                            && let Some((_, buf)) = self.text_edit.as_mut() {
-                                buf.push_str(txt);
-                                self.dirty = true;
-                            }
+                            && let Some((_, buf)) = self.text_edit.as_mut()
+                        {
+                            buf.push_str(txt);
+                            self.dirty = true;
+                        }
                     }
                 }
             }

@@ -353,10 +353,11 @@ impl SeatHandler for State {
             // `Mod1+Tab`) while we're up, so Tab reaches us to cycle. Held until
             // the surface (and inhibitor) is dropped at exit.
             if self.shortcuts_inhibitor.is_none()
-                && let Some(mgr) = &self.shortcuts_mgr {
-                    self.shortcuts_inhibitor =
-                        Some(mgr.inhibit_shortcuts(self.layer.wl_surface(), &seat, qh, ()));
-                }
+                && let Some(mgr) = &self.shortcuts_mgr
+            {
+                self.shortcuts_inhibitor =
+                    Some(mgr.inhibit_shortcuts(self.layer.wl_surface(), &seat, qh, ()));
+            }
         }
         if cap == Capability::Pointer && self.pointer.is_none() {
             self.pointer = self.seat_state.get_pointer(qh, &seat).ok();
@@ -520,11 +521,15 @@ impl State {
                 modifiers: self.modifiers,
             });
         }
-        if pressed && !self.modifiers.ctrl && !self.modifiers.alt
+        if pressed
+            && !self.modifiers.ctrl
+            && !self.modifiers.alt
             && let Some(txt) = event.utf8
-                && !txt.chars().any(|c| c.is_control()) && !txt.is_empty() {
-                    self.events.push(egui::Event::Text(txt));
-                }
+            && !txt.chars().any(|c| c.is_control())
+            && !txt.is_empty()
+        {
+            self.events.push(egui::Event::Text(txt));
+        }
     }
 }
 

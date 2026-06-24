@@ -515,9 +515,10 @@ pub fn run_on(conn: &Connection, source: Source, config: Config) -> anyhow::Resu
     while !state.closing {
         event_loop.dispatch(Duration::from_millis(400), &mut state)?;
         if let Some(t) = state.gone_since
-            && t.elapsed() >= GONE_LINGER {
-                break;
-            }
+            && t.elapsed() >= GONE_LINGER
+        {
+            break;
+        }
     }
     Ok(())
 }

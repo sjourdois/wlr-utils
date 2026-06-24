@@ -267,22 +267,23 @@ pub fn capture_thread(tx: Sender<Msg>) {
             // of its thumbnail.
             if let Capturable::Window(w) = cap
                 && iconed.insert(s.key.clone())
-                    && let Some(path) = icons::resolve(&w.app_id) {
-                        // Loaded large so the macOS-style Alt-Tab strip stays crisp;
-                        // smaller tile/exposé uses just downscale it.
-                        if let Some((iw, ih, rgba)) = icons::load(&path, 128)
-                            && tx
-                                .send(Msg::Icon {
-                                    key: s.key.clone(),
-                                    w: iw as usize,
-                                    h: ih as usize,
-                                    rgba,
-                                })
-                                .is_err()
-                            {
-                                break 'outer;
-                            }
-                    }
+                && let Some(path) = icons::resolve(&w.app_id)
+            {
+                // Loaded large so the macOS-style Alt-Tab strip stays crisp;
+                // smaller tile/exposé uses just downscale it.
+                if let Some((iw, ih, rgba)) = icons::load(&path, 128)
+                    && tx
+                        .send(Msg::Icon {
+                            key: s.key.clone(),
+                            w: iw as usize,
+                            h: ih as usize,
+                            rgba,
+                        })
+                        .is_err()
+                {
+                    break 'outer;
+                }
+            }
         }
 
         // Drive all sessions for one round: this blocks up to the round budget
@@ -764,10 +765,9 @@ impl App {
                 self.selected = (self.selected + vis_len - 1) % vis_len;
             }
         }
-        if enter
-            && let Some(sel) = self.visible().get(self.selected).map(|s| s.selection()) {
-                self.choose(sel);
-            }
+        if enter && let Some(sel) = self.visible().get(self.selected).map(|s| s.selection()) {
+            self.choose(sel);
+        }
 
         match self.view {
             View::Grid => {
@@ -1306,27 +1306,26 @@ impl App {
     /// the big app icon.
     fn paint_switch_cell(&self, ui: &egui::Ui, s: &Source, rect: egui::Rect, live: bool) {
         let full = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-        if live
-            && let Some((tex, ts)) = self.thumb_tex(&s.key) {
-                let p = ui.painter();
-                p.rect_filled(rect, 6.0, self.theme.thumb); // backdrop for letterboxing
-                let scale = (rect.width() / ts.x).min(rect.height() / ts.y);
-                let d = egui::Rect::from_center_size(rect.center(), ts * scale);
-                p.image(tex, d, full, egui::Color32::WHITE);
-                // App-icon badge, bottom-left, so the window stays identifiable.
-                if let Some(ic) = self.icons.get(&s.key) {
-                    let bsz = (rect.width() * 0.34).clamp(20.0, 48.0);
-                    let brect = egui::Rect::from_min_size(
-                        egui::pos2(rect.left() + 4.0, rect.bottom() - bsz - 4.0),
-                        egui::vec2(bsz, bsz),
-                    );
-                    let isz = ic.size_vec2();
-                    let sc = (brect.width() / isz.x).min(brect.height() / isz.y);
-                    let bd = egui::Rect::from_center_size(brect.center(), isz * sc);
-                    p.image(ic.id(), bd, full, egui::Color32::WHITE);
-                }
-                return;
+        if live && let Some((tex, ts)) = self.thumb_tex(&s.key) {
+            let p = ui.painter();
+            p.rect_filled(rect, 6.0, self.theme.thumb); // backdrop for letterboxing
+            let scale = (rect.width() / ts.x).min(rect.height() / ts.y);
+            let d = egui::Rect::from_center_size(rect.center(), ts * scale);
+            p.image(tex, d, full, egui::Color32::WHITE);
+            // App-icon badge, bottom-left, so the window stays identifiable.
+            if let Some(ic) = self.icons.get(&s.key) {
+                let bsz = (rect.width() * 0.34).clamp(20.0, 48.0);
+                let brect = egui::Rect::from_min_size(
+                    egui::pos2(rect.left() + 4.0, rect.bottom() - bsz - 4.0),
+                    egui::vec2(bsz, bsz),
+                );
+                let isz = ic.size_vec2();
+                let sc = (brect.width() / isz.x).min(brect.height() / isz.y);
+                let bd = egui::Rect::from_center_size(brect.center(), isz * sc);
+                p.image(ic.id(), bd, full, egui::Color32::WHITE);
             }
+            return;
+        }
         // No live preview (mode off, or no frame yet): big centred app icon.
         self.paint_app_icon(ui, s, rect);
     }

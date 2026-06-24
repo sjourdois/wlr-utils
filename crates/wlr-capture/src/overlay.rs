@@ -198,14 +198,16 @@ fn draw_region_overlay(
                     // Dim everything, then restore the selected area at full brightness.
                     p.rect_filled(screen, 0.0, egui::Color32::from_black_alpha(120));
                     let vis = local.intersect(screen);
-                    if vis.width() > 0.5 && vis.height() > 0.5
-                        && let Some(t) = tex {
-                            let uv = egui::Rect::from_min_max(
-                                egui::pos2(vis.min.x / w, vis.min.y / h),
-                                egui::pos2(vis.max.x / w, vis.max.y / h),
-                            );
-                            p.image(t.id(), vis, uv, egui::Color32::WHITE);
-                        }
+                    if vis.width() > 0.5
+                        && vis.height() > 0.5
+                        && let Some(t) = tex
+                    {
+                        let uv = egui::Rect::from_min_max(
+                            egui::pos2(vis.min.x / w, vis.min.y / h),
+                            egui::pos2(vis.max.x / w, vis.max.y / h),
+                        );
+                        p.image(t.id(), vis, uv, egui::Color32::WHITE);
+                    }
                     p.rect_stroke(
                         local,
                         0.0,

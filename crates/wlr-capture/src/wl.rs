@@ -760,9 +760,10 @@ impl Client {
             // Terminal: source gone. Drop the in-flight frame and report it.
             if is_stopped {
                 if let Some(os) = self.open.get_mut(&id)
-                    && let Some(frame) = os.frame.take() {
-                        frame.destroy();
-                    }
+                    && let Some(frame) = os.frame.take()
+                {
+                    frame.destroy();
+                }
                 stopped.push(id);
                 continue;
             }
@@ -770,9 +771,10 @@ impl Client {
             if ready {
                 let frame = harvest(self.open[&id].buf.as_ref().unwrap());
                 if let Some(os) = self.open.get_mut(&id)
-                    && let Some(f) = os.frame.take() {
-                        f.destroy();
-                    }
+                    && let Some(f) = os.frame.take()
+                {
+                    f.destroy();
+                }
                 if let Some(d) = self.state.sessions.get_mut(&id) {
                     d.ready = false;
                     d.frame_failed = None;
@@ -784,9 +786,10 @@ impl Client {
                 // Transient: drop the failed frame and re-arm next round. A
                 // buffer_constraints failure also means our buffer is stale.
                 if let Some(os) = self.open.get_mut(&id)
-                    && let Some(f) = os.frame.take() {
-                        f.destroy();
-                    }
+                    && let Some(f) = os.frame.take()
+                {
+                    f.destroy();
+                }
                 if let Some(d) = self.state.sessions.get_mut(&id) {
                     d.frame_failed = None;
                     if matches!(reason, FailureReason::BufferConstraints) {
