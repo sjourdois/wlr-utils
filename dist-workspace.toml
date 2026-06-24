@@ -11,6 +11,11 @@ ci = "github"
 installers = ["shell"]
 # Target platforms to build apps for (Linux/wlroots only).
 targets = ["x86_64-unknown-linux-gnu"]
+# Build on 24.04, not the cargo-dist default 22.04: the pipewire 0.10 crate needs a
+# libpipewire newer than 22.04 ships (libspa-sys fails to bind spa_meta_first / the
+# spa_video_info_raw.flags field). wlroots desktops run recent glibc anyway.
+[dist.github-custom-runners]
+x86_64-unknown-linux-gnu = "ubuntu-24.04"
 
 # System libraries needed to build on the CI runners (EGL/GL are loaded at
 # runtime via dlopen, so they are not build dependencies).
