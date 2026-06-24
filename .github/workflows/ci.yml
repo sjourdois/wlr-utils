@@ -23,7 +23,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libwayland-dev libxkbcommon-dev libfontconfig-dev libgbm-dev \
             clang libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev \
-            libavdevice-dev libswscale-dev libswresample-dev libva-dev
+            libavdevice-dev libswscale-dev libswresample-dev libva-dev \
+            libpipewire-0.3-dev libtesseract-dev libleptonica-dev libdbus-1-dev
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Clippy
