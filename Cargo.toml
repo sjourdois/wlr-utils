@@ -2,6 +2,7 @@
 members = [
     "crates/wlr-capture",
     "crates/wlr-chooser",
+    "crates/wlr-draw",
     "crates/wlr-peek",
     "crates/wlr-pip",
     "crates/wlr-shot",

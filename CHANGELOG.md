@@ -8,6 +8,34 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **`wlr-draw`**: a new tool — draw and annotate **live on screen**, a Wayland-native
+  take on gromit-mpx. A transparent always-on-top `wlr-layer-shell` overlay per output
+  you scribble on with **pen**, **rectangle**, **arrow**, **text** and a **mask** (solid
+  box to redact areas) tool, plus an **eraser** (line and ellipse come from the pen's
+  dwell-to-snap rather than dedicated tools); toggle draw mode on to grab input, off to click through to your
+  apps while the annotations stay on screen. Because a layer-shell client can't grab a
+  global hotkey, it runs as a daemon driven over a per-user **control socket** — bind
+  `wlr-draw toggle` / `clear` / `undo` / `tool …` / `color …` to compositor keys. Also
+  **dwell-to-snap**: hold the pen still mid-stroke to snap a rough freehand loop to a
+  clean circle/ellipse (or a straight line) and resize it live before releasing. While
+  drawing, single-key shortcuts switch tool/width, `h` shows an on-screen key legend,
+  `c` opens a colour-picker palette, **Ctrl** constrains a shape (square/circle/axis)
+  and **Caps Lock** toggles a pointer pass-through to the apps below without leaving
+  draw mode. Ships a **StatusNotifierItem tray icon** (the `tray` feature, on by
+  default) whose glyph reflects the **current tool** (in the stroke colour while
+  drawing), with a click-to-toggle menu including a **Shortcuts** submenu, and a systemd
+  `--user` unit (`contrib/wlr-draw.service`, bound to `graphical-session.target`). The
+  status chip **pulses** when draw mode is entered on an empty canvas or when the pointer
+  is jabbed repeatedly at one spot (a "you're in draw mode" reminder).
+- **`wlr-peek region`**: select a region (or a point, `-p`) with the mouse and print
+  its geometry as `X,Y WxH` — a native **slurp replacement** (reusing the frozen
+  overlay), with a `--format` string (`%x %y %w %h`). Exits 1 if cancelled.
+- **`wlr-peek mirror`** now takes the **same source flags as the rest of the suite**:
+  besides a window `id` and `-g "X,Y WxH"`, it accepts `-s` (interactive region select,
+  no slurp needed), `-o NAME` / `--current-output` (mirror a whole output), `-a`
+  (active window) and `-w`/`--pick-window`. For a region, **`--follow window`** captures
+  the window under it (cropped to the region) so the loupe follows that window across
+  moves/workspaces, instead of the output (`--follow output`, the default).
 - **Compositor compatibility**: a [`COMPATIBILITY.md`](COMPATIBILITY.md) matrix
   (which protocols each compositor needs and supports), a new **`wlr-peek doctor`**
   that reports which capture protocols the running compositor advertises (and whether

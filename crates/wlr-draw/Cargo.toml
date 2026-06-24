@@ -1,0 +1,58 @@
+[package]
+name = "wlr-draw"
+description = "Draw and annotate live on screen on wlroots compositors — a gromit-mpx-style overlay driven over a control socket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["wayland", "wlroots", "annotation", "screen-drawing", "sway"]
+categories = ["command-line-utilities", "multimedia"]
+
+[[bin]]
+name = "wlr-draw"
+path = "src/main.rs"
+
+[features]
+default = ["i18n", "tray"]
+# Localised UI (the on-screen HUD hints) via Fluent. On by default; `--no-default-features`
+# builds English-only with no Fluent dependency.
+i18n = ["wlr-capture/i18n"]
+# StatusNotifierItem tray icon (status + a click-to-toggle menu) via `ksni`. On by
+# default; links system `libdbus`. `--no-default-features` drops it (no D-Bus).
+tray = ["dep:ksni"]
+
+[dependencies]
+# The shared engine: the egui/EGL `render::Gpu`, theme and the `tr!` macro (`toolkit`),
+# plus the one-shot output capture (`compose`) used for the freeze-frame backdrop. The
+# overlay is otherwise a transparent vector layer (no live stream).
+wlr-capture = { path = "../wlr-capture", version = "1.2.0", default-features = false, features = ["toolkit", "compose"] }
+anyhow.workspace = true
+clap.workspace = true
+egui.workspace = true
+# Layer-shell windowing + the calloop event loop (reused via sctk's reexports), so the
+# control socket and Wayland events drive one loop together.
+smithay-client-toolkit.workspace = true
+wayland-client.workspace = true
+# StatusNotifierItem tray icon (the `tray` feature). Links system libdbus.
+ksni = { version = "0.2", optional = true }
+
+[package.metadata.deb]
+maintainer = "Stéphane Jourdois <stephane@jourdois.fr>"
+section = "utils"
+priority = "optional"
+license-file = ["../../LICENSE-MIT", "0"]
+depends = "$auto, libegl1"
+extended-description = """\
+A live screen annotation tool for wlroots compositors, in the spirit of gromit-mpx: a \
+transparent always-on-top overlay you draw on with freehand strokes, lines, rectangles, \
+ellipses, arrows and text. A daemon holds the overlay; further invocations \
+(`wlr-draw toggle`, `--clear`, `--undo`, `tool`, `color`…) drive it over a control \
+socket, so you bind them to compositor keys."""
+assets = [
+    ["../../target/release/wlr-draw", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/wlr-draw/README.md", "644"],
+]

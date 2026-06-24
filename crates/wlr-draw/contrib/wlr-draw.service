@@ -1,0 +1,19 @@
+[Unit]
+Description=wlr-draw — live on-screen annotation overlay (wlroots)
+Documentation=https://github.com/sjourdois/wlr-utils
+# Tie the daemon's lifetime to the Wayland graphical session (works with uwsm, which
+# imports WAYLAND_DISPLAY into the user manager). For a non-systemd session, launch it
+# from the compositor instead (e.g. sway `exec wlr-draw`).
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+# Relies on wlr-draw being on the user manager's PATH (~/.local/bin or /usr/bin).
+ExecStart=wlr-draw
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
