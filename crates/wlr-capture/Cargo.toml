@@ -40,7 +40,7 @@ smithay-client-toolkit = { workspace = true, optional = true }
 ffmpeg-next = { workspace = true, optional = true }
 # Native PipeWire bindings for audio capture (the `audio` feature). `v0_3_44` exposes
 # TARGET_OBJECT (for `--audio <node>`); libpipewire 1.x supports it.
-pipewire = { version = "0.8", optional = true, features = ["v0_3_44"] }
+pipewire = { version = "0.10", optional = true, features = ["v0_3_44"] }
 
 # --- Toolkit (the `toolkit` feature): egui/EGL overlay rendering + theme/i18n/icons.
 egui = { workspace = true, optional = true }

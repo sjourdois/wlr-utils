@@ -1054,12 +1054,11 @@ mod watch_impl {
         let mut last_change: Option<Instant> = None;
 
         loop {
-            if let Some(t) = timeout {
-                if start.elapsed() >= t {
+            if let Some(t) = timeout
+                && start.elapsed() >= t {
                     eprintln!("wlr-peek: no trigger within {}s", t.as_secs());
                     std::process::exit(2);
                 }
-            }
 
             let step = s.step(&mut client, ROUND);
             let mut changed_pct: Option<f64> = None;
@@ -1090,21 +1089,19 @@ mod watch_impl {
 
             match args.on {
                 Trigger::Change => {
-                    if let Some(pct) = changed_pct {
-                        if fire(&args, &format!("change {pct:.1}%"))? {
+                    if let Some(pct) = changed_pct
+                        && fire(&args, &format!("change {pct:.1}%"))? {
                             return Ok(());
                         }
-                    }
                 }
                 Trigger::Idle => {
-                    if let Some(lc) = last_change {
-                        if lc.elapsed() >= settle {
+                    if let Some(lc) = last_change
+                        && lc.elapsed() >= settle {
                             if fire(&args, "idle")? {
                                 return Ok(());
                             }
                             last_change = Some(Instant::now()); // await the next idle period
                         }
-                    }
                 }
             }
 

@@ -122,7 +122,7 @@ impl Content {
     #[allow(clippy::too_many_arguments)]
     fn draw(
         &self,
-        ctx: &egui::Context,
+        ui: &mut egui::Ui,
         size: (f32, f32),
         collapsed: bool,
         hovered: bool,
@@ -137,7 +137,7 @@ impl Content {
         let tint = egui::Color32::from_white_alpha((opacity.clamp(0.0, 1.0) * 255.0) as u8);
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 let p = ui.painter();
                 // The captured image, contained (letterboxed) in the tile. In region
                 // mode only `crop_uv` of the frame is shown, so the visible source
@@ -221,7 +221,7 @@ impl Content {
                     job.wrap = egui::text::TextWrapping::truncate_at_width(
                         (collapse.left() - 12.0).max(0.0),
                     );
-                    let galley = ui.fonts(|f| f.layout_job(job));
+                    let galley = ui.painter().layout_job(job);
                     p.galley(
                         egui::pos2(8.0, strip.center().y - galley.size().y / 2.0),
                         galley,
@@ -514,11 +514,10 @@ pub fn run_on(conn: &Connection, source: Source, config: Config) -> anyhow::Resu
 
     while !state.closing {
         event_loop.dispatch(Duration::from_millis(400), &mut state)?;
-        if let Some(t) = state.gone_since {
-            if t.elapsed() >= GONE_LINGER {
+        if let Some(t) = state.gone_since
+            && t.elapsed() >= GONE_LINGER {
                 break;
             }
-        }
     }
     Ok(())
 }
@@ -652,9 +651,10 @@ impl State {
             self.scale as f32,
             (pw, ph),
             backdrop,
-            |ctx, imp| {
-                content.pump(ctx, imp);
-                content.draw(ctx, size, collapsed, hovered, accent, frozen, opacity);
+            |ui, imp| {
+                let ctx = ui.ctx().clone();
+                content.pump(&ctx, imp);
+                content.draw(ui, size, collapsed, hovered, accent, frozen, opacity);
             },
         );
         if self.accent > 0 {

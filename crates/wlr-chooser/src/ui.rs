@@ -265,13 +265,13 @@ pub fn capture_thread(tx: Sender<Msg>) {
 
             // App icon (cheap) once per window, so it's identifiable independently
             // of its thumbnail.
-            if let Capturable::Window(w) = cap {
-                if iconed.insert(s.key.clone()) {
-                    if let Some(path) = icons::resolve(&w.app_id) {
+            if let Capturable::Window(w) = cap
+                && iconed.insert(s.key.clone())
+                    && let Some(path) = icons::resolve(&w.app_id) {
                         // Loaded large so the macOS-style Alt-Tab strip stays crisp;
                         // smaller tile/exposé uses just downscale it.
-                        if let Some((iw, ih, rgba)) = icons::load(&path, 128) {
-                            if tx
+                        if let Some((iw, ih, rgba)) = icons::load(&path, 128)
+                            && tx
                                 .send(Msg::Icon {
                                     key: s.key.clone(),
                                     w: iw as usize,
@@ -282,10 +282,7 @@ pub fn capture_thread(tx: Sender<Msg>) {
                             {
                                 break 'outer;
                             }
-                        }
                     }
-                }
-            }
         }
 
         // Drive all sessions for one round: this blocks up to the round budget
@@ -722,8 +719,9 @@ impl App {
     /// Build one egui frame. Toolkit-agnostic: the host loop drives it and checks
     /// [`App::closing`] afterwards. The host passes its dma-buf importer (it owns
     /// the GL context) so GPU frames can be turned into drawable textures.
-    pub fn run_ui(&mut self, ctx: &egui::Context, importer: &mut dyn DmabufImporter) {
-        self.pump(ctx, importer);
+    pub fn run_ui(&mut self, ui: &mut egui::Ui, importer: &mut dyn DmabufImporter) {
+        let ctx = ui.ctx().clone();
+        self.pump(&ctx, importer);
         ctx.request_repaint(); // keep draining the channel while captures stream in
 
         // Alt-Tab: once sources exist, jump to the next window so releasing Alt
@@ -766,21 +764,20 @@ impl App {
                 self.selected = (self.selected + vis_len - 1) % vis_len;
             }
         }
-        if enter {
-            if let Some(sel) = self.visible().get(self.selected).map(|s| s.selection()) {
+        if enter
+            && let Some(sel) = self.visible().get(self.selected).map(|s| s.selection()) {
                 self.choose(sel);
             }
-        }
 
         match self.view {
             View::Grid => {
-                if let Some(sel) = self.render_expose(ctx) {
+                if let Some(sel) = self.render_expose(ui) {
                     self.choose(sel);
                 }
                 return;
             }
             View::Strip => {
-                if let Some(sel) = self.render_switcher(ctx) {
+                if let Some(sel) = self.render_switcher(ui) {
                     self.choose(sel);
                 }
                 return;
@@ -792,7 +789,7 @@ impl App {
         // A centred card on the dimmed overlay backdrop. Its size is either fixed
         // to show exactly `grid` tiles, or a sensible default. Clicking the
         // backdrop cancels, like rofi.
-        let screen = ctx.screen_rect();
+        let screen = ctx.content_rect();
         let forced_cols = self.grid.map(|(c, _)| c as usize);
         let (cw, ch) = match self.grid {
             Some((cols, rows)) => {
@@ -820,7 +817,7 @@ impl App {
                     .corner_radius(radius)
                     .inner_margin(12.0),
             )
-            .show(ctx, |ui| {
+            .show(&ctx, |ui| {
                 ui.horizontal(|ui| {
                     let before = self.mode;
                     ui.selectable_value(&mut self.mode, Mode::All, tr!("tab-all"));
@@ -1001,7 +998,7 @@ impl App {
             t.text,
         );
         job.wrap = egui::text::TextWrapping::truncate_at_width(rect.max.x - 6.0 - text_x);
-        let galley = ui.fonts(|f| f.layout_job(job));
+        let galley = ui.painter().layout_job(job);
         p.galley(
             egui::pos2(text_x, rect.max.y - 20.0),
             galley,
@@ -1017,8 +1014,9 @@ impl App {
     /// backdrop. Tiles are placed in justified rows (variable heights, each row
     /// filling the width with aspect ratios preserved) and scaled to fit on
     /// screen. Returns the picked source, if any.
-    fn render_expose(&mut self, ctx: &egui::Context) -> Option<Selection> {
-        let area = ctx.screen_rect().shrink(24.0);
+    fn render_expose(&mut self, ui: &mut egui::Ui) -> Option<Selection> {
+        let ctx = ui.ctx().clone();
+        let area = ctx.content_rect().shrink(24.0);
         let gap = 12.0;
 
         // Intro animation clock: anchor t0 to the first exposé frame so startup
@@ -1044,7 +1042,7 @@ impl App {
         let mut chosen = None;
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 for (i, rect) in &rects {
                     let s = vis[*i];
                     let resp =
@@ -1166,7 +1164,7 @@ impl App {
             fade(t.text),
         );
         job.wrap = egui::text::TextWrapping::truncate_at_width((strip.right() - 6.0 - tx).max(0.0));
-        let galley = ui.fonts(|f| f.layout_job(job));
+        let galley = ui.painter().layout_job(job);
         p.galley(
             egui::pos2(tx, strip.center().y - galley.size().y / 2.0),
             galley,
@@ -1200,10 +1198,11 @@ impl App {
     /// preview (per `--live`) with an app-icon badge, or just the big app icon.
     /// Returns the picked source, if any. Used for `--alt-tab` (compact); the
     /// full-screen exposé is a separate path.
-    fn render_switcher(&mut self, ctx: &egui::Context) -> Option<Selection> {
+    fn render_switcher(&mut self, ui: &mut egui::Ui) -> Option<Selection> {
+        let ctx = ui.ctx().clone();
         let vis = self.visible();
         let n = vis.len();
-        let screen = ctx.screen_rect();
+        let screen = ctx.content_rect();
         if n == 0 {
             return None;
         }
@@ -1233,7 +1232,7 @@ impl App {
         let mut hovered = None;
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 ui.painter().rect_filled(panel, 16.0, self.theme.card);
 
                 // Highlighted window's name, centred above the row.
@@ -1307,8 +1306,8 @@ impl App {
     /// the big app icon.
     fn paint_switch_cell(&self, ui: &egui::Ui, s: &Source, rect: egui::Rect, live: bool) {
         let full = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-        if live {
-            if let Some((tex, ts)) = self.thumb_tex(&s.key) {
+        if live
+            && let Some((tex, ts)) = self.thumb_tex(&s.key) {
                 let p = ui.painter();
                 p.rect_filled(rect, 6.0, self.theme.thumb); // backdrop for letterboxing
                 let scale = (rect.width() / ts.x).min(rect.height() / ts.y);
@@ -1328,7 +1327,6 @@ impl App {
                 }
                 return;
             }
-        }
         // No live preview (mode off, or no frame yet): big centred app icon.
         self.paint_app_icon(ui, s, rect);
     }

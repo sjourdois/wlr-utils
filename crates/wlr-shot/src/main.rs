@@ -731,11 +731,10 @@ mod record_impl {
             if stop.load(Ordering::SeqCst) {
                 break;
             }
-            if let Some(dl) = deadline {
-                if Instant::now() >= dl {
+            if let Some(dl) = deadline
+                && Instant::now() >= dl {
                     break;
                 }
-            }
 
             // Poll for new content, but never overshoot the next emit tick.
             let budget = match next_tick {

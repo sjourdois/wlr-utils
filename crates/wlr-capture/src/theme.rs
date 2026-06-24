@@ -136,7 +136,7 @@ impl Theme {
 
         self.install_fonts(ctx);
         if let Some(sz) = self.font_size {
-            ctx.style_mut(|s| {
+            ctx.global_style_mut(|s| {
                 use egui::{FontFamily, FontId, TextStyle};
                 let prop = FontFamily::Proportional;
                 s.text_styles

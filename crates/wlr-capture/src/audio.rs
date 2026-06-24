@@ -85,9 +85,12 @@ fn run_loop(
     ready: &mpsc::Sender<Result<pw::channel::Sender<()>, String>>,
 ) -> Result<()> {
     pw::init();
-    let mainloop = pw::main_loop::MainLoop::new(None).map_err(|e| anyhow!("main loop: {e}"))?;
-    let context = pw::context::Context::new(&mainloop).map_err(|e| anyhow!("context: {e}"))?;
-    let core = context.connect(None).map_err(|e| anyhow!("connect: {e}"))?;
+    let mainloop = pw::main_loop::MainLoopRc::new(None).map_err(|e| anyhow!("main loop: {e}"))?;
+    let context =
+        pw::context::ContextRc::new(&mainloop, None).map_err(|e| anyhow!("context: {e}"))?;
+    let core = context
+        .connect_rc(None)
+        .map_err(|e| anyhow!("connect: {e}"))?;
 
     let mut props = properties! {
         *pw::keys::MEDIA_TYPE => "Audio",
@@ -104,7 +107,7 @@ fn run_loop(
         }
     }
 
-    let stream = pw::stream::Stream::new(&core, "wlr-shot-audio", props)
+    let stream = pw::stream::StreamBox::new(&core, "wlr-shot-audio", props)
         .map_err(|e| anyhow!("stream: {e}"))?;
 
     let pcm_cb = pcm.clone();

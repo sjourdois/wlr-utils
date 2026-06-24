@@ -107,9 +107,9 @@ fn sway_is_window(node: &serde_json::Value) -> bool {
 /// foreign-toplevel capture actually contains (no server-side borders).
 fn sway_content_rect(node: &serde_json::Value) -> Option<Region> {
     let rect = rect_of(node)?;
-    if let Some(wr) = node.get("window_rect") {
-        if let (Some(w), Some(h)) = (wr["width"].as_u64(), wr["height"].as_u64()) {
-            if w > 0 && h > 0 {
+    if let Some(wr) = node.get("window_rect")
+        && let (Some(w), Some(h)) = (wr["width"].as_u64(), wr["height"].as_u64())
+            && w > 0 && h > 0 {
                 return Some(Region {
                     x: rect.x + wr["x"].as_i64().unwrap_or(0) as i32,
                     y: rect.y + wr["y"].as_i64().unwrap_or(0) as i32,
@@ -117,8 +117,6 @@ fn sway_content_rect(node: &serde_json::Value) -> Option<Region> {
                     h: h as u32,
                 });
             }
-        }
-    }
     Some(rect)
 }
 
@@ -134,11 +132,10 @@ fn sway_window_at(node: &serde_json::Value, x: i32, y: i32) -> Option<WindowRef>
     for key in ["floating_nodes", "nodes"] {
         if let Some(children) = node.get(key).and_then(|c| c.as_array()) {
             for child in children {
-                if rect_of(child).is_some_and(|r| contains(&r, x, y)) {
-                    if let Some(found) = sway_window_at(child, x, y) {
+                if rect_of(child).is_some_and(|r| contains(&r, x, y))
+                    && let Some(found) = sway_window_at(child, x, y) {
                         return Some(found);
                     }
-                }
             }
         }
     }

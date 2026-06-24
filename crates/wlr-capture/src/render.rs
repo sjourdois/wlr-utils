@@ -252,7 +252,7 @@ impl Gpu {
         ppp: f32,
         size_px: (u32, u32),
         backdrop: [f32; 4],
-        mut run_ui: impl FnMut(&egui::Context, &mut dyn DmabufImporter),
+        mut run_ui: impl FnMut(&mut egui::Ui, &mut dyn DmabufImporter),
     ) {
         // Lay text out at the same pixels-per-point we tessellate with, or epaint warns
         // ("pixels_per_point have changed between text layout and tessellation") and
@@ -284,7 +284,9 @@ impl Gpu {
                 painter: &mut self.painter,
                 cache: &mut self.dmabuf_tex,
             };
-            let full = egui_ctx.run(raw_input, |ctx| run_ui(ctx, &mut importer));
+            // `run_ui` hands the closure a full-screen root `Ui`; paint functions add
+            // their panels into it with `show_inside`.
+            let full = egui_ctx.run_ui(raw_input, |ui| run_ui(ui, &mut importer));
             (egui_ctx.tessellate(full.shapes, ppp), full.textures_delta)
         };
 

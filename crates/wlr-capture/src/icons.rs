@@ -41,15 +41,14 @@ fn icon_name(app_id: &str) -> String {
         };
         for e in entries.flatten() {
             let fname = e.file_name().to_string_lossy().to_lowercase();
-            if fname.ends_with(".desktop") && fname.contains(&needle) {
-                if let Ok(content) = std::fs::read_to_string(e.path()) {
+            if fname.ends_with(".desktop") && fname.contains(&needle)
+                && let Ok(content) = std::fs::read_to_string(e.path()) {
                     for line in content.lines() {
                         if let Some(v) = line.strip_prefix("Icon=") {
                             return v.trim().to_string();
                         }
                     }
                 }
-            }
         }
     }
     app_id.to_string()

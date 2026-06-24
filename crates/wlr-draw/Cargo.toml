@@ -38,7 +38,12 @@ egui.workspace = true
 smithay-client-toolkit.workspace = true
 wayland-client.workspace = true
 # StatusNotifierItem tray icon (the `tray` feature). Links system libdbus.
-ksni = { version = "0.2", optional = true }
+# StatusNotifierItem tray (the `tray` feature). 0.3+ is async (zbus 5); use its
+# `blocking` API over the `async-io` backend so the calloop daemon stays synchronous.
+ksni = { version = "0.3", optional = true, default-features = false, features = [
+    "blocking",
+    "async-io",
+] }
 
 [package.metadata.deb]
 maintainer = "Stéphane Jourdois <stephane@jourdois.fr>"

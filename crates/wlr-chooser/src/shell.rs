@@ -231,7 +231,7 @@ impl State {
             self.scale as f32,
             (pw, ph),
             backdrop,
-            |ctx, imp| app.run_ui(ctx, imp),
+            |ui, imp| app.run_ui(ui, imp),
         );
     }
 
@@ -352,12 +352,11 @@ impl SeatHandler for State {
             // Stop the compositor from eating our own keybinding chord (e.g.
             // `Mod1+Tab`) while we're up, so Tab reaches us to cycle. Held until
             // the surface (and inhibitor) is dropped at exit.
-            if self.shortcuts_inhibitor.is_none() {
-                if let Some(mgr) = &self.shortcuts_mgr {
+            if self.shortcuts_inhibitor.is_none()
+                && let Some(mgr) = &self.shortcuts_mgr {
                     self.shortcuts_inhibitor =
                         Some(mgr.inhibit_shortcuts(self.layer.wl_surface(), &seat, qh, ()));
                 }
-            }
         }
         if cap == Capability::Pointer && self.pointer.is_none() {
             self.pointer = self.seat_state.get_pointer(qh, &seat).ok();
@@ -521,13 +520,11 @@ impl State {
                 modifiers: self.modifiers,
             });
         }
-        if pressed && !self.modifiers.ctrl && !self.modifiers.alt {
-            if let Some(txt) = event.utf8 {
-                if !txt.chars().any(|c| c.is_control()) && !txt.is_empty() {
+        if pressed && !self.modifiers.ctrl && !self.modifiers.alt
+            && let Some(txt) = event.utf8
+                && !txt.chars().any(|c| c.is_control()) && !txt.is_empty() {
                     self.events.push(egui::Event::Text(txt));
                 }
-            }
-        }
     }
 }
 
@@ -574,6 +571,7 @@ impl PointerHandler for State {
                     self.events.push(egui::Event::MouseWheel {
                         unit: egui::MouseWheelUnit::Point,
                         delta,
+                        phase: egui::TouchPhase::Move,
                         modifiers: self.modifiers,
                     });
                 }

@@ -692,13 +692,11 @@ mod tests {
             ])
             .arg(&path)
             .output()
-        {
-            if out.status.success() {
+            && out.status.success() {
                 let s = String::from_utf8_lossy(&out.stdout);
                 let fields: Vec<&str> = s.split_whitespace().collect();
                 assert_eq!(fields, ["h264", "320", "240"], "ffprobe stream metadata");
             }
-        }
 
         let _ = std::fs::remove_file(&path);
     }

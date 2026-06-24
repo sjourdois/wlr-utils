@@ -135,12 +135,12 @@ impl Surface {
             self.scale as f32,
             (pw, ph),
             [0.0, 0.0, 0.0, 1.0],
-            |ctx, _importer| match mode {
+            |ui, _importer| match mode {
                 Mode::Region => {
-                    draw_region_overlay(ctx, tex.as_ref(), w, h, lx, ly, selection, pointer)
+                    draw_region_overlay(ui, tex.as_ref(), w, h, lx, ly, selection, pointer)
                 }
                 Mode::Point => draw_point_overlay(
-                    ctx,
+                    ui,
                     tex.as_ref(),
                     w,
                     h,
@@ -152,7 +152,7 @@ impl Surface {
                     img_h,
                 ),
                 Mode::Magnify => {
-                    draw_magnify_overlay(ctx, tex.as_ref(), w, h, lx, ly, pointer, zoom)
+                    draw_magnify_overlay(ui, tex.as_ref(), w, h, lx, ly, pointer, zoom)
                 }
             },
         );
@@ -164,7 +164,7 @@ impl Surface {
 /// outline + size label.
 #[allow(clippy::too_many_arguments)]
 fn draw_region_overlay(
-    ctx: &egui::Context,
+    ui: &mut egui::Ui,
     tex: Option<&egui::TextureHandle>,
     w: f32,
     h: f32,
@@ -176,7 +176,7 @@ fn draw_region_overlay(
     let full_uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
     egui::CentralPanel::default()
         .frame(egui::Frame::NONE)
-        .show(ctx, |ui| {
+        .show_inside(ui, |ui| {
             let p = ui.painter();
             let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
             if let Some(t) = tex {
@@ -198,15 +198,14 @@ fn draw_region_overlay(
                     // Dim everything, then restore the selected area at full brightness.
                     p.rect_filled(screen, 0.0, egui::Color32::from_black_alpha(120));
                     let vis = local.intersect(screen);
-                    if vis.width() > 0.5 && vis.height() > 0.5 {
-                        if let Some(t) = tex {
+                    if vis.width() > 0.5 && vis.height() > 0.5
+                        && let Some(t) = tex {
                             let uv = egui::Rect::from_min_max(
                                 egui::pos2(vis.min.x / w, vis.min.y / h),
                                 egui::pos2(vis.max.x / w, vis.max.y / h),
                             );
                             p.image(t.id(), vis, uv, egui::Color32::WHITE);
                         }
-                    }
                     p.rect_stroke(
                         local,
                         0.0,
@@ -265,7 +264,7 @@ fn draw_region_overlay(
 /// is pixel-exact regardless of the backdrop texture's filtering.
 #[allow(clippy::too_many_arguments)]
 fn draw_point_overlay(
-    ctx: &egui::Context,
+    ui: &mut egui::Ui,
     tex: Option<&egui::TextureHandle>,
     w: f32,
     h: f32,
@@ -279,7 +278,7 @@ fn draw_point_overlay(
     let full_uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
     egui::CentralPanel::default()
         .frame(egui::Frame::NONE)
-        .show(ctx, |ui| {
+        .show_inside(ui, |ui| {
             let p = ui.painter();
             let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
             if let Some(t) = tex {
@@ -395,7 +394,7 @@ fn draw_point_overlay(
 /// A surface not holding the cursor shows its frozen image at 1×.
 #[allow(clippy::too_many_arguments)]
 fn draw_magnify_overlay(
-    ctx: &egui::Context,
+    ui: &mut egui::Ui,
     tex: Option<&egui::TextureHandle>,
     w: f32,
     h: f32,
@@ -407,7 +406,7 @@ fn draw_magnify_overlay(
     let full_uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
     egui::CentralPanel::default()
         .frame(egui::Frame::NONE)
-        .show(ctx, |ui| {
+        .show_inside(ui, |ui| {
             let p = ui.painter();
             let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
             let Some(t) = tex else { return };

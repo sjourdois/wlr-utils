@@ -159,7 +159,7 @@ impl Surface {
             self.scale as f32,
             (pw, ph),
             [0.0, 0.0, 0.0, 0.0], // transparent: the live screen shows through
-            |ctx, _imp| paint(ctx, lx, ly, frame, frozen_tex),
+            |ui, _imp| paint(ui, lx, ly, frame, frozen_tex),
         );
         self.layer.commit();
     }
@@ -286,7 +286,7 @@ struct State {
 
     /// Tray icon handle, for pushing status changes (the `tray` feature).
     #[cfg(feature = "tray")]
-    tray: Option<ksni::Handle<crate::tray::DrawTray>>,
+    tray: Option<ksni::blocking::Handle<crate::tray::DrawTray>>,
 
     dirty: bool,
     quit: bool,
@@ -884,12 +884,11 @@ impl State {
                 _ => {
                     if let Some(txt) = &event.utf8 {
                         // Printable input only (skip control characters).
-                        if txt.chars().any(|c| !c.is_control()) {
-                            if let Some((_, buf)) = self.text_edit.as_mut() {
+                        if txt.chars().any(|c| !c.is_control())
+                            && let Some((_, buf)) = self.text_edit.as_mut() {
                                 buf.push_str(txt);
                                 self.dirty = true;
                             }
-                        }
                     }
                 }
             }
@@ -1180,7 +1179,7 @@ fn col(c: Color) -> egui::Color32 {
 /// Paint one surface: every element, the in-progress gesture and the live text, all
 /// offset by `(lx, ly)` into local coordinates, plus the draw-mode HUD.
 fn paint(
-    ctx: &egui::Context,
+    ui: &mut egui::Ui,
     lx: f32,
     ly: f32,
     frame: &Frame,
@@ -1188,7 +1187,7 @@ fn paint(
 ) {
     egui::CentralPanel::default()
         .frame(egui::Frame::NONE)
-        .show(ctx, |ui| {
+        .show_inside(ui, |ui| {
             let p = ui.painter();
             let off = egui::vec2(-lx, -ly);
 

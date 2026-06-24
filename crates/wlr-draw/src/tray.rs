@@ -13,8 +13,9 @@
 
 use crate::model::{Color, Tool};
 use crate::proto::Cmd;
+use ksni::blocking::{Handle, TrayMethods};
 use ksni::menu::{StandardItem, SubMenu};
-use ksni::{Handle, Icon, MenuItem, ToolTip, Tray, TrayService};
+use ksni::{Icon, MenuItem, ToolTip, Tray};
 use smithay_client_toolkit::reexports::calloop::channel::Sender;
 use wlr_capture::tr;
 
@@ -125,15 +126,14 @@ fn shortcut_items() -> Vec<MenuItem<DrawTray>> {
 /// there is no D-Bus session bus (e.g. headless), so the daemon still runs.
 pub fn spawn(tx: Sender<Cmd>, color: Color, tool: Tool) -> Option<Handle<DrawTray>> {
     std::env::var_os("DBUS_SESSION_BUS_ADDRESS")?; // no session bus → no tray
-    let service = TrayService::new(DrawTray {
+    DrawTray {
         tx,
         active: false,
         color,
         tool,
-    });
-    let handle = service.handle();
-    service.spawn();
-    Some(handle)
+    }
+    .spawn()
+    .ok()
 }
 
 /// A tiny ARGB32 (network byte order) canvas for the icon glyphs.
