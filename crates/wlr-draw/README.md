@@ -54,6 +54,7 @@ don't clash with the compositor's `$mod+…` bindings, so you only need to bind 
 | `m` | mask (solid box) | `+` / `-` | width up / down |
 | `a` | arrow | `Delete` | clear |
 | `t` | text | `v` | hide / show |
+| `w` | save annotated screenshot | | |
 | `e` | eraser | `h` | toggle the help legend |
 | `s` | move tool (or right-drag) | `Ctrl` | constrain shape / move axis (hold) |
 | `Space` | freeze-frame on/off | `Shift` | spotlight (hold); wheel/`ijkl` size & dim |
@@ -89,6 +90,9 @@ the colour — and it **pulses** a few times when you enter draw mode on an empt
   move tool the **arrow keys** then nudge it — held to glide (key-repeat), `Shift` for
   1px-precise, `Ctrl` for a big step. Switching tools, undo/redo, clear or leaving draw
   mode deselects.
+- **Save** — press `w` (or `wlr-draw save [path]`) to write the **annotated screen** (the
+  output under the cursor) to a PNG in your Pictures directory. The capture is the
+  composited output, so your strokes are baked in — works on a frozen frame too.
 - **Freeze-frame** — press `Space` to **freeze the screen**: each output is captured and
   shown as a still backdrop so you can annotate (and spotlight) a frozen moment while
   everything keeps running underneath. `Space` again or `Esc` returns to live. Freeze a

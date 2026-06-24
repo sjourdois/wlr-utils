@@ -49,3 +49,4 @@ draw-help-move = 矢印: 選択を移動 · Ctrl: 大きく移動
 draw-tool-move = 移動
 draw-help-freeze = Space: 画面を静止して注釈
 draw-help-rightmove = 右ドラッグ: 要素を移動
+draw-help-save = 注釈付きスクリーンショットを保存

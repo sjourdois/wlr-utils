@@ -453,6 +453,51 @@ impl State {
         Ok(())
     }
 
+    /// Save the annotated screen to a PNG — the output under the cursor (or the whole
+    /// layout). The capture grabs the composited output, so the overlay's strokes are
+    /// baked into the image.
+    fn save_screenshot(&mut self, path: Option<String>) {
+        match self.do_save(path) {
+            Ok(p) => eprintln!("wlr-draw: saved {}", p.display()),
+            Err(e) => eprintln!("wlr-draw: save failed: {e}"),
+        }
+    }
+
+    fn do_save(&mut self, path: Option<String>) -> anyhow::Result<std::path::PathBuf> {
+        if self.capture_client.is_none() {
+            self.capture_client = Some(wl::Client::connect()?);
+        }
+        let pointer = self.pointer_pos;
+        let client = self.capture_client.as_mut().unwrap();
+        let caps = capture::capture_all(client, FREEZE_BUDGET)?;
+        let under_cursor = pointer.and_then(|(px, py)| {
+            caps.iter().find(|c| {
+                let o = &c.output;
+                let (w, h) = o.logical_size();
+                (px as i32) >= o.logical_x
+                    && (px as i32) < o.logical_x + w
+                    && (py as i32) >= o.logical_y
+                    && (py as i32) < o.logical_y + h
+            })
+        });
+        // The output under the cursor, else the whole-layout composite.
+        let bytes = match under_cursor {
+            Some(c) => capture::encode_png(&c.image)?,
+            None => {
+                let whole = capture::composite(&caps, capture::whole_layout(client)?)?;
+                capture::encode_png(&whole)?
+            }
+        };
+        let path = path
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(default_save_path);
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        std::fs::write(&path, bytes)?;
+        Ok(path)
+    }
+
     /// Note a press for the "stuck user" detector: several clicks in quick succession
     /// near the same spot re-pulse the chip to remind them they're in draw mode.
     fn note_click(&mut self, g: (f32, f32)) {
@@ -613,6 +658,7 @@ impl State {
                 self.width = w.clamp(1.0, 200.0);
                 self.dirty = true;
             }
+            Cmd::Save(path) => self.save_screenshot(path),
             Cmd::Quit => self.quit = true,
         }
     }
@@ -912,6 +958,7 @@ impl State {
             Keysym::u => self.apply_cmd(Cmd::Undo),
             Keysym::y => self.apply_cmd(Cmd::Redo),
             Keysym::v => self.apply_cmd(Cmd::Visibility),
+            Keysym::w => self.apply_cmd(Cmd::Save(None)),
             Keysym::Delete => self.apply_cmd(Cmd::Clear),
             Keysym::plus | Keysym::equal | Keysym::KP_Add => {
                 self.apply_cmd(Cmd::Width(self.width + 2.0))
@@ -1852,6 +1899,7 @@ pub(crate) fn shortcut_rows() -> Vec<(&'static str, String)> {
         ("+ / -", tr!("draw-help-width")),
         ("Del", tr!("draw-help-clear")),
         ("v", tr!("draw-help-visibility")),
+        ("w", tr!("draw-help-save")),
         ("h", tr!("draw-help-help")),
         ("Esc", tr!("draw-help-leave")),
         ("Ctrl", tr!("draw-help-constrain")),
@@ -2116,6 +2164,30 @@ impl KeyboardHandler for State {
             self.dirty = true;
         }
     }
+}
+
+/// Default screenshot path: `<Pictures>/wlr-draw-<timestamp>.png`. The Pictures dir comes
+/// from `xdg-user-dir` (falling back to `~/Pictures`), the stamp from `date`.
+fn default_save_path() -> std::path::PathBuf {
+    let dir = run_cmd("xdg-user-dir", &["PICTURES"])
+        .map(std::path::PathBuf::from)
+        .filter(|p| p.is_dir())
+        .unwrap_or_else(|| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+            std::path::Path::new(&home).join("Pictures")
+        });
+    let stamp = run_cmd("date", &["+%Y%m%d-%H%M%S"]).unwrap_or_else(|| "shot".into());
+    dir.join(format!("wlr-draw-{stamp}.png"))
+}
+
+/// Run a command and return its trimmed stdout, or `None` on any failure/empty output.
+fn run_cmd(cmd: &str, args: &[&str]) -> Option<String> {
+    let out = std::process::Command::new(cmd).args(args).output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!s.is_empty()).then_some(s)
 }
 
 /// A scroll event's direction as ±1 (or 0): the click count when discrete, else the sign

@@ -206,6 +206,18 @@ pub fn resize(img: CapturedImage, nw: u32, nh: u32) -> CapturedImage {
     }
 }
 
+/// Encode a captured image as PNG bytes (for tools that save a still without pulling in
+/// `image` themselves).
+pub fn encode_png(img: &CapturedImage) -> Result<Vec<u8>> {
+    let buf = image::RgbaImage::from_raw(img.width, img.height, img.rgba.clone())
+        .ok_or_else(|| anyhow::anyhow!("image dimensions don't match the buffer"))?;
+    let mut out = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(buf)
+        .write_to(&mut out, image::ImageFormat::Png)
+        .context("PNG encode")?;
+    Ok(out.into_inner())
+}
+
 /// Parse a slurp-style geometry: `"X,Y WxH"` (X/Y may be negative).
 pub fn parse_geometry(s: &str) -> Result<Region> {
     let err = || anyhow::anyhow!("invalid geometry '{s}' (expected 'X,Y WxH')");

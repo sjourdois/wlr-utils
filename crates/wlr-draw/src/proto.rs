@@ -30,6 +30,9 @@ pub enum Cmd {
     Color(Color),
     /// Set the stroke width (logical px).
     Width(f32),
+    /// Save the annotated screen (the output under the cursor) to a PNG. With no path,
+    /// a timestamped file in the user's Pictures directory.
+    Save(Option<String>),
     /// Stop the daemon.
     Quit,
 }
@@ -52,6 +55,7 @@ impl Cmd {
             "undo" => Cmd::Undo,
             "redo" => Cmd::Redo,
             "visibility" | "hide" | "show" => Cmd::Visibility,
+            "save" | "screenshot" => Cmd::Save(arg.map(str::to_string)),
             "quit" | "exit" => Cmd::Quit,
             "tool" => {
                 let a = need("a tool name")?;
@@ -83,6 +87,8 @@ impl Cmd {
             Cmd::Tool(t) => format!("tool {}", t.name()),
             Cmd::Color([r, g, b, a]) => format!("color #{r:02x}{g:02x}{b:02x}{a:02x}"),
             Cmd::Width(w) => format!("width {w}"),
+            Cmd::Save(None) => "save".into(),
+            Cmd::Save(Some(p)) => format!("save {p}"),
         }
     }
 }
@@ -105,6 +111,8 @@ mod tests {
             Cmd::Tool(Tool::Arrow),
             Cmd::Color([0xff, 0x3b, 0x30, 0xff]),
             Cmd::Width(6.0),
+            Cmd::Save(None),
+            Cmd::Save(Some("/tmp/a.png".into())),
         ];
         for c in cases {
             assert_eq!(Cmd::parse(&c.to_line()), Ok(c.clone()), "{c:?}");

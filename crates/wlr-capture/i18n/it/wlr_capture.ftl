@@ -49,3 +49,4 @@ draw-help-move = frecce: sposta selezione · Ctrl: passo maggiore
 draw-tool-move = Sposta
 draw-help-freeze = Spazio: congela lo schermo per annotare
 draw-help-rightmove = trascina col destro: sposta un elemento
+draw-help-save = salva screenshot annotato

@@ -49,3 +49,4 @@ draw-help-move = Pfeile: Auswahl verschieben · Ctrl: größerer Schritt
 draw-tool-move = Verschieben
 draw-help-freeze = Leertaste: Bildschirm einfrieren zum Annotieren
 draw-help-rightmove = Rechtsziehen: Element verschieben
+draw-help-save = annotierten Screenshot speichern

@@ -49,3 +49,4 @@ draw-help-move = 方向键：移动所选 · Ctrl：大步移动
 draw-tool-move = 移动
 draw-help-freeze = 空格：冻结屏幕以标注
 draw-help-rightmove = 右键拖动：移动元素
+draw-help-save = 保存带标注的截图

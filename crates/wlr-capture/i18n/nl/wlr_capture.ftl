@@ -49,3 +49,4 @@ draw-help-move = pijlen: selectie verplaatsen · Ctrl: grotere stap
 draw-tool-move = Verplaatsen
 draw-help-freeze = Spatie: scherm bevriezen om te annoteren
 draw-help-rightmove = rechts slepen: element verplaatsen
+draw-help-save = geannoteerde schermafbeelding opslaan

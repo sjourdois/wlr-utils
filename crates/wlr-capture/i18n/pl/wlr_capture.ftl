@@ -49,3 +49,4 @@ draw-help-move = strzałki: przesuń zaznaczenie · Ctrl: większy krok
 draw-tool-move = Przesuń
 draw-help-freeze = Spacja: zamroź ekran, aby dodać adnotacje
 draw-help-rightmove = przeciągnij PPM: przesuń element
+draw-help-save = zapisz adnotowany zrzut ekranu

@@ -49,3 +49,4 @@ draw-help-move = 화살표: 선택 이동 · Ctrl: 크게 이동
 draw-tool-move = 이동
 draw-help-freeze = Space: 화면을 정지하고 주석
 draw-help-rightmove = 오른쪽 드래그: 요소 이동
+draw-help-save = 주석 스크린샷 저장

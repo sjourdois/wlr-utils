@@ -37,6 +37,7 @@ draw-help-undo = annuler / refaire
 draw-help-width = épaisseur du trait
 draw-help-clear = tout effacer
 draw-help-visibility = masquer / afficher
+draw-help-save = enregistrer une capture annotée
 draw-help-help = cette aide
 draw-help-leave = quitter le mode dessin
 draw-help-constrain = maintenir : contraindre (cercle / carré / axe)

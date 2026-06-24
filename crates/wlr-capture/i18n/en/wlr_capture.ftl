@@ -39,6 +39,7 @@ draw-help-undo = undo / redo
 draw-help-width = stroke width
 draw-help-clear = clear all
 draw-help-visibility = hide / show
+draw-help-save = save annotated screenshot
 draw-help-help = this help
 draw-help-leave = leave draw mode
 draw-help-constrain = hold: constrain (circle / square / axis)
