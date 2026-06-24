@@ -99,8 +99,6 @@ focused output. You can pass options in `chooser_cmd`, e.g.
 -w, --windows          Show only windows
 -o, --outputs          Show only screens          (alias: --screens)
     --both             Show both (default)
-    --switch           Window switcher: focus the picked window (implies --windows)
-    --layout <LAYOUT>  Switcher presentation: full (full-screen, default) | compact
     --include-system   Include windows with no app-id (system surfaces)
     --grid COLSxROWS   Fixed grid of that many thumbnails (e.g. 4x3)
 -h, --help             Print help
@@ -110,25 +108,49 @@ focused output. You can pass options in `chooser_cmd`, e.g.
 In the overlay: type to filter, arrows to move, Enter/click to pick, Escape or
 click-outside to cancel, and the tab bar switches All / Windows / Screens.
 
-## Window switcher
+> **Looking for an Alt-Tab / window switcher?** That is now a separate binary,
+> **`wlr-switcher`** (shipped alongside this one) — see [its section](#window-switcher--wlr-switcher) below.
 
-`wlr-chooser --switch` turns the picker into a live alt-tab / exposé: a grid of
-**live** window thumbnails (updating in real time, even for windows on other
-workspaces); picking one **focuses** it instead of printing to stdout.
+## Window switcher — `wlr-switcher`
 
-Two presentations via `--layout`:
+The same crate ships a second binary, **`wlr-switcher`**: a live Alt-Tab / exposé
+that **focuses** the picked window (via `zwlr-foreign-toplevel-management-v1`)
+instead of printing to stdout. It reuses this engine, so previews are **live** —
+even for windows on other workspaces — which is what sets it apart from a plain
+Cmd-Tab.
 
-- `full` (default) — a full-screen, mission-control grid that dims the desktop.
-- `compact` — the centred rofi-like card.
+Three presentations via `--layout`:
 
-Bind it in your compositor, e.g. Sway:
+- `strip` (default) — a macOS-style single row of tiles, the highlighted window's
+  name above the row;
+- `grid` — a full-screen, mission-control exposé;
+- `card` — the centred rofi-like card.
+
+Each tile shows a live preview with the app icon as a badge; tune it with
+`--live none|current|all` (default `all`): `current` previews only the highlighted
+window, `none` shows app icons only.
+
+### True Alt-Tab (hold-to-switch)
+
+Bind `wlr-switcher` to a **held** modifier and it behaves like a classic Alt-Tab:
 
 ```
-bindsym $mod+Tab  exec wlr-chooser --switch                  # full-screen
-bindsym Alt+Tab   exec wlr-chooser --switch --layout compact # compact card
+bindsym Mod1+Tab exec wlr-switcher                 # hold Alt, Tab cycles, release switches
+bindsym $mod+Tab exec wlr-switcher --layout grid   # full-screen exposé
 ```
 
-Only one switcher opens at a time (re-pressing the keybind is a no-op).
+- The overlay appears while the modifier (Alt **or** Super) is held.
+- **`Tab`** moves to the next window, **`Shift+Tab`** to the previous one.
+- **Releasing the modifier** confirms the highlighted window and switches to it.
+- Mouse click and `Esc` (cancel) still work.
+
+Hold-to-switch is **on by default for `strip`** and **off for `grid`/`card`**;
+force it either way with `--hold` / `--no-hold`. With it off, the overlay stays
+open after release — confirm with Enter or a click. Only one switcher opens at a
+time (re-pressing the keybind is a no-op).
+
+> **Tip:** set `WLR_CHOOSER_TIMING=1` to print cold-start timing milestones to
+> stderr if you want to profile how fast the overlay appears.
 
 > **Looking for a floating live mirror?** The companion tool **`wlr-pip`** keeps a
 > picture-in-picture of a window always on top — see its

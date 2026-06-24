@@ -11,3 +11,8 @@ show-system = Fenêtres système
 
 error = wlr-chooser : { $error }
 pip-gone = Fenêtre source fermée
+
+# Overlay gelé partagé (sélecteur de région / pipette)
+overlay-region-hint = Glissez pour sélectionner · Échap pour annuler
+overlay-pick-hint = Cliquez pour choisir · Échap pour annuler
+overlay-magnify-hint = Molette pour zoomer · Échap pour quitter

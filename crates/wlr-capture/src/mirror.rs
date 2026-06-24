@@ -12,7 +12,10 @@
 //! icon badge or close, and `Esc` to close. The tile keeps the source aspect
 //! ratio; collapsing shrinks it, and any new frame while collapsed restores it.
 
-use crate::pip::PipMsg;
+use crate::render::{DmabufImporter, Gpu};
+use crate::theme::Theme;
+use crate::tr;
+use crate::wl;
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
     delegate_compositor, delegate_keyboard, delegate_output, delegate_pointer, delegate_registry,
@@ -43,9 +46,6 @@ use wayland_client::{
     globals::registry_queue_init,
     protocol::{wl_keyboard, wl_output, wl_pointer, wl_seat, wl_surface},
 };
-use wlr_capture::render::{DmabufImporter, Gpu};
-use wlr_capture::theme::Theme;
-use wlr_capture::tr;
 
 /// Texture cache key for the single mirrored source.
 const KEY: &str = "pip";
@@ -59,6 +59,10 @@ const MIN_W: u32 = 120;
 const ACCENT_FRAMES: u32 = 60;
 /// How long to show the "window closed" notice before exiting.
 const GONE_LINGER: Duration = Duration::from_millis(1400);
+/// Frame budget per capture round (~30 fps ceiling; capture is damage-driven).
+const ROUND: Duration = Duration::from_millis(33);
+/// How long to wait for the target window to appear before giving up.
+const APPEAR_GRACE: Duration = Duration::from_secs(5);
 
 /// Frames + textures for the mirrored source; a pure painter (the host owns input).
 struct Content {
@@ -72,6 +76,9 @@ struct Content {
     gone: bool,
     label: String,
     theme: Theme,
+    /// Region mode: the normalized sub-rectangle of the captured frame to show
+    /// (the magnified region). `None` shows the whole frame (toplevel mirror).
+    crop_uv: Option<egui::Rect>,
 }
 
 impl Content {
@@ -131,16 +138,18 @@ impl Content {
             .frame(egui::Frame::NONE)
             .show(ctx, |ui| {
                 let p = ui.painter();
-                // The captured image, contained (letterboxed) in the tile.
+                // The captured image, contained (letterboxed) in the tile. In region
+                // mode only `crop_uv` of the frame is shown, so the visible source
+                // size is the texture scaled by the crop's normalized extent.
                 if let Some((id, ts)) = self.tex() {
-                    let scale = (full.width() / ts.x).min(full.height() / ts.y);
-                    let draw = egui::Rect::from_center_size(full.center(), ts * scale);
-                    p.image(
-                        id,
-                        draw,
-                        egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
-                        tint,
-                    );
+                    let uv = self.crop_uv.unwrap_or(egui::Rect::from_min_max(
+                        egui::pos2(0.0, 0.0),
+                        egui::pos2(1.0, 1.0),
+                    ));
+                    let src = egui::vec2(ts.x * uv.width(), ts.y * uv.height());
+                    let scale = (full.width() / src.x).min(full.height() / src.y);
+                    let draw = egui::Rect::from_center_size(full.center(), src * scale);
+                    p.image(id, draw, uv, tint);
                 } else if let Some(icon) = &self.icon {
                     let isz = icon.size_vec2();
                     let scale = (full.width() / isz.x).min(full.height() / isz.y).min(1.0);
@@ -227,6 +236,15 @@ impl Content {
     }
 }
 
+/// Smallest tile size honouring the source aspect (width is the floor at `MIN_W`).
+/// Falls back to 16:9 before the aspect is known (toplevel mirror's first frame).
+fn min_size_for(aspect: Option<f32>) -> (u32, u32) {
+    match aspect {
+        Some(a) if a > 0.0 => (MIN_W, ((MIN_W as f32 / a).round() as u32).max(1)),
+        _ => (MIN_W, (MIN_W * 9 / 16).max(1)),
+    }
+}
+
 /// Close / collapse button rects (top-right), in logical coordinates.
 fn toolbar_rects(w: f32) -> (egui::Rect, egui::Rect) {
     let s = 22.0;
@@ -290,6 +308,9 @@ struct State {
     height: u32,
     scale: u32,
     aspect: Option<f32>,
+    /// Region mode: the aspect is pinned to the region, so frame sizes (the whole
+    /// output) must not retune it.
+    fixed_aspect: bool,
     /// Remembered expanded size, restored when un-collapsing.
     expanded: (u32, u32),
     collapsed: bool,
@@ -307,15 +328,52 @@ struct State {
     start: Instant,
     closing: bool,
     configured: bool,
+    /// Args to re-exec ourselves with on re-pick (`r`); empty disables it.
+    relaunch: Vec<String>,
 }
 
-/// Run the mirror until the source closes or the user quits. `label` is shown in
-/// the hover toolbar; `icon` is the app icon for the collapsed badge.
-pub fn run(
-    identifier: String,
-    label: String,
-    icon: Option<(u32, u32, Vec<u8>)>,
-) -> anyhow::Result<()> {
+/// What the mirror window streams.
+pub enum Source {
+    /// Mirror the toplevel with this `ext-foreign-toplevel` identifier.
+    Toplevel(String),
+    /// Mirror (and magnify) a fixed logical region. We capture the covering output
+    /// live and show only the region's sub-rectangle of it; mono-output for now.
+    Region {
+        /// Name of the output to capture (the one covering the region's top-left).
+        output: String,
+        /// Normalized sub-rectangle `(min_x, min_y, max_x, max_y)` of the region
+        /// within that output's frame (scale-independent, so it survives any
+        /// physical resolution the frames arrive at).
+        crop: [f32; 4],
+        /// Logical region size; fixes the window aspect ratio.
+        region_w: u32,
+        region_h: u32,
+        /// Magnification factor (initial window size = region × zoom).
+        zoom: f32,
+    },
+}
+
+/// Window chrome + behaviour for [`run`].
+pub struct Config {
+    /// Wayland `app_id` (for compositor window rules).
+    pub app_id: String,
+    /// Title shown in the hover toolbar.
+    pub label: String,
+    /// App icon for the collapsed badge, as `(w, h, rgba)`.
+    pub icon: Option<(u32, u32, Vec<u8>)>,
+    /// Args to re-exec the current binary with when the user presses `r` (re-pick).
+    /// Empty disables re-pick.
+    pub relaunch: Vec<String>,
+}
+
+/// Run the mirror until the source closes or the user quits.
+pub fn run(source: Source, config: Config) -> anyhow::Result<()> {
+    let Config {
+        app_id,
+        label,
+        icon,
+        relaunch,
+    } = config;
     let conn = Connection::connect_to_env()?;
     let (globals, event_queue) = registry_queue_init::<State>(&conn)?;
     let qh = event_queue.handle();
@@ -328,19 +386,49 @@ pub fn run(
     let compositor =
         CompositorState::bind(&globals, &qh).map_err(|e| anyhow::anyhow!("wl_compositor: {e}"))?;
     let xdg_shell =
-        XdgShell::bind(&globals, &qh).map_err(|e| anyhow::anyhow!("xdg-shell absent: {e}"))?;
+        XdgShell::bind(&globals, &qh).map_err(|e| anyhow::anyhow!("xdg-shell missing: {e}"))?;
+
+    // Region mode fixes the window aspect to the region and starts at region × zoom,
+    // showing only the region's sub-rectangle of the captured output. Toplevel mode
+    // learns its aspect from the first frame and starts at a default 16:9 tile.
+    let (init_w, init_h, fixed_aspect, aspect0, crop_uv) = match &source {
+        Source::Toplevel(_) => (DEFAULT_W, DEFAULT_W * 9 / 16, false, None, None),
+        Source::Region {
+            crop,
+            region_w,
+            region_h,
+            zoom,
+            ..
+        } => {
+            let w = ((*region_w as f32 * zoom).round() as u32).max(MIN_W);
+            let h = ((*region_h as f32 * zoom).round() as u32).max(1);
+            let aspect = *region_w as f32 / (*region_h).max(1) as f32;
+            let uv = egui::Rect::from_min_max(
+                egui::pos2(crop[0], crop[1]),
+                egui::pos2(crop[2], crop[3]),
+            );
+            (w, h, true, Some(aspect), Some(uv))
+        }
+    };
+    let min0 = min_size_for(aspect0);
 
     let surface = compositor.create_surface(&qh);
     let window = xdg_shell.create_window(surface, WindowDecorations::RequestServer, &qh);
-    window.set_app_id("wlr-pip");
+    window.set_app_id(&app_id);
     window.set_title(label.clone());
-    window.set_min_size(Some((MIN_W, (MIN_W * 9 / 16).max(1))));
+    window.set_min_size(Some(min0));
     window.commit();
 
     // Capture thread streams frames over a calloop channel; we repaint on each.
     let (tx, ch): (_, Channel<PipMsg>) = channel();
-    let id = identifier.clone();
-    std::thread::spawn(move || crate::pip::capture_thread(id, move |m| tx.send(m).is_ok()));
+    match source {
+        Source::Toplevel(id) => {
+            std::thread::spawn(move || capture_thread(id, move |m| tx.send(m).is_ok()));
+        }
+        Source::Region { output, .. } => {
+            std::thread::spawn(move || output_capture_thread(output, move |m| tx.send(m).is_ok()));
+        }
+    }
     lh.insert_source(ch, |event, _, state: &mut State| {
         if let ChannelEvent::Msg(m) = event {
             state.on_msg(m);
@@ -374,12 +462,14 @@ pub fn run(
             gone: false,
             label,
             theme,
+            crop_uv,
         },
-        width: DEFAULT_W,
-        height: DEFAULT_W * 9 / 16,
+        width: init_w,
+        height: init_h,
         scale: 1,
-        aspect: None,
-        expanded: (DEFAULT_W, DEFAULT_W * 9 / 16),
+        aspect: aspect0,
+        fixed_aspect,
+        expanded: (init_w, init_h),
         collapsed: false,
         hovered: false,
         pointer_pos: egui::Pos2::ZERO,
@@ -390,6 +480,7 @@ pub fn run(
         start: Instant::now(),
         closing: false,
         configured: false,
+        relaunch,
     };
 
     while !state.closing {
@@ -435,7 +526,9 @@ impl State {
     /// Learn (or update) the source aspect ratio and, when expanded, keep the
     /// tile's height matching it.
     fn on_source_size(&mut self, sw: u32, sh: u32) {
-        if sw == 0 || sh == 0 {
+        // Region mode pins the aspect to the region; the frame is the whole output,
+        // so its size must not retune the tile.
+        if self.fixed_aspect || sw == 0 || sh == 0 {
             return;
         }
         let a = sw as f32 / sh as f32;
@@ -477,8 +570,7 @@ impl State {
             self.window.set_max_size(Some((BADGE, BADGE)));
             self.apply_size(BADGE, BADGE);
         } else {
-            self.window
-                .set_min_size(Some((MIN_W, (MIN_W * 9 / 16).max(1))));
+            self.window.set_min_size(Some(min_size_for(self.aspect)));
             self.window.set_max_size(None);
             let (w, h) = self.expanded;
             self.apply_size(w, h);
@@ -809,12 +901,15 @@ impl State {
         }
     }
 
-    /// Re-pick the mirrored window: launch a fresh `wlr-pip` (which runs the
-    /// chooser) and close this tile. Simpler and more robust than swapping the
-    /// capture thread in place, and the compositor controls position anyway.
+    /// Re-pick the mirrored source: re-exec ourselves (which runs the chooser) and
+    /// close this tile. Simpler and more robust than swapping the capture thread in
+    /// place, and the compositor controls position anyway. No-op if disabled.
     fn repick(&mut self) {
+        if self.relaunch.is_empty() {
+            return;
+        }
         if let Ok(exe) = std::env::current_exe() {
-            let _ = std::process::Command::new(exe).spawn();
+            let _ = std::process::Command::new(exe).args(&self.relaunch).spawn();
         }
         self.closing = true;
     }
@@ -844,3 +939,161 @@ delegate_pointer!(State);
 delegate_xdg_shell!(State);
 delegate_xdg_window!(State);
 delegate_registry!(State);
+/// A captured frame (or the source's demise) for the single mirrored window.
+pub enum PipMsg {
+    /// CPU shm frame at full resolution (RGBA8).
+    Shm { w: usize, h: usize, rgba: Vec<u8> },
+    /// GPU dma-buf frame to import zero-copy as a GL texture (host-side).
+    Dmabuf { frame: wl::DmabufFrame },
+    /// The source window is gone (closed, or never appeared): the mirror ends.
+    Gone,
+}
+
+/// Capture thread body: open one persistent session for the window whose
+/// `ext-foreign-toplevel` identifier matches `identifier`, then stream its frames
+/// until it closes or the host drops the channel. Reopens the session if the
+/// compositor transiently stops it (e.g. on resize).
+///
+/// `sink` consumes each message and returns `false` once the receiver is gone (so
+/// the thread can stop). It is generic so the host (calloop channel) and the
+/// headless bench (std mpsc) can both drive it.
+pub fn capture_thread(identifier: String, mut sink: impl FnMut(PipMsg) -> bool) {
+    let mut client = match wl::Client::connect() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("wlr-capture: mirror: {e:#}");
+            sink(PipMsg::Gone);
+            return;
+        }
+    };
+
+    let mut session: Option<wl::SessionId> = None;
+    let appear_deadline = Instant::now() + APPEAR_GRACE;
+
+    loop {
+        if client.refresh().is_err() {
+            sink(PipMsg::Gone);
+            return;
+        }
+
+        let present = client
+            .toplevels()
+            .iter()
+            .any(|t| t.identifier == identifier);
+        if session.is_none() {
+            match client
+                .toplevels()
+                .iter()
+                .find(|t| t.identifier == identifier)
+                .cloned()
+            {
+                Some(t) => {
+                    if let Ok(id) = client.open_toplevel_session(&t) {
+                        session = Some(id);
+                    }
+                }
+                // Not mapped yet: keep polling until the grace period elapses.
+                None if Instant::now() >= appear_deadline => {
+                    sink(PipMsg::Gone);
+                    return;
+                }
+                None => {}
+            }
+        } else if !present {
+            // We had a live session and the source vanished: the window closed.
+            sink(PipMsg::Gone);
+            return;
+        }
+
+        let (frames, failed) = client.poll(ROUND);
+        // Single source, so every delivered frame is ours.
+        for (_id, frame) in frames {
+            let msg = match frame {
+                wl::Frame::Shm(img) => PipMsg::Shm {
+                    w: img.width as usize,
+                    h: img.height as usize,
+                    rgba: img.rgba,
+                },
+                wl::Frame::Dmabuf(frame) => PipMsg::Dmabuf { frame },
+            };
+            if !sink(msg) {
+                return; // host gone
+            }
+        }
+        // A stopped session (e.g. resize): drop it; we reopen next round if the
+        // window is still listed.
+        for id in failed {
+            if session.as_ref() == Some(&id) {
+                session = None;
+            }
+            client.close_session(&id);
+        }
+    }
+}
+
+/// Capture thread body for region mirroring: stream the named output's frames (the
+/// host crops to the region's sub-rectangle). Mirrors [`capture_thread`] but keyed
+/// on an output name; ends if the output disappears (e.g. unplugged).
+pub fn output_capture_thread(name: String, mut sink: impl FnMut(PipMsg) -> bool) {
+    let mut client = match wl::Client::connect() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("wlr-capture: mirror: {e:#}");
+            sink(PipMsg::Gone);
+            return;
+        }
+    };
+
+    let mut session: Option<wl::SessionId> = None;
+    let appear_deadline = Instant::now() + APPEAR_GRACE;
+
+    loop {
+        if client.refresh().is_err() {
+            sink(PipMsg::Gone);
+            return;
+        }
+
+        let output = client.outputs().iter().find(|o| o.name == name).cloned();
+        if session.is_none() {
+            match output {
+                Some(o) => {
+                    if let Ok(id) = client.open_output_session(&o) {
+                        session = Some(id);
+                    }
+                }
+                // Not present yet: keep polling until the grace period elapses.
+                None if Instant::now() >= appear_deadline => {
+                    sink(PipMsg::Gone);
+                    return;
+                }
+                None => {}
+            }
+        } else if output.is_none() {
+            // We had a live session and the output vanished (e.g. unplugged).
+            sink(PipMsg::Gone);
+            return;
+        }
+
+        let (frames, failed) = client.poll(ROUND);
+        // Single source, so every delivered frame is ours.
+        for (_id, frame) in frames {
+            let msg = match frame {
+                wl::Frame::Shm(img) => PipMsg::Shm {
+                    w: img.width as usize,
+                    h: img.height as usize,
+                    rgba: img.rgba,
+                },
+                wl::Frame::Dmabuf(frame) => PipMsg::Dmabuf { frame },
+            };
+            if !sink(msg) {
+                return; // host gone
+            }
+        }
+        for id in failed {
+            if session.as_ref() == Some(&id) {
+                session = None;
+            }
+            client.close_session(&id);
+        }
+    }
+}

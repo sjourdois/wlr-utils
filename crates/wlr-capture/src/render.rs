@@ -7,15 +7,16 @@
 //! [`Gpu::render`]. The host owns the GL context, so it (via the importer handed
 //! to the UI closure) turns capture dma-bufs into drawable textures.
 
+use crate::gl::{
+    DmabufEgl, EGL_LINUX_DMA_BUF_EXT, Egl, EglImage, GL_TEXTURE_2D, dmabuf_image_attribs,
+    load_dmabuf_egl,
+};
 use crate::wl;
 use khronos_egl as egl;
 use std::collections::HashMap;
 use std::ffi::c_void;
-use std::os::fd::AsRawFd;
 use std::sync::Arc;
 use wayland_client::{Connection, Proxy, protocol::wl_surface::WlSurface};
-
-type Egl = egl::Instance<egl::Dynamic<libloading::Library, egl::EGL1_4>>;
 
 /// Host-side importer for GPU dma-buf frames. The windowing host owns the GL
 /// context, so it (not a toolkit-agnostic UI) turns a dma-buf into a drawable
@@ -30,60 +31,11 @@ pub trait DmabufImporter {
     fn forget(&mut self, key: &str);
 }
 
-// --- dma-buf → GL texture import (EGL_EXT_image_dma_buf_import) ---
-//
-// The capture thread hands us a dma-buf fd; we wrap it in an EGLImage and bind it
-// to a GL texture egui can sample — zero copy, no readback. Function pointers are
-// loaded at runtime via eglGetProcAddress (khronos-egl has no typed bindings for
-// these extensions).
-
-type EglImage = *mut c_void;
-const EGL_LINUX_DMA_BUF_EXT: u32 = 0x3270;
-const EGL_WIDTH: i32 = 0x3057;
-const EGL_HEIGHT: i32 = 0x3056;
-const EGL_LINUX_DRM_FOURCC_EXT: i32 = 0x3271;
-const EGL_DMA_BUF_PLANE0_FD_EXT: i32 = 0x3272;
-const EGL_DMA_BUF_PLANE0_OFFSET_EXT: i32 = 0x3273;
-const EGL_DMA_BUF_PLANE0_PITCH_EXT: i32 = 0x3274;
-const EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT: i32 = 0x3443;
-const EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT: i32 = 0x3444;
-const EGL_ATTRIB_NONE: i32 = 0x3038;
-const GL_TEXTURE_2D: u32 = 0x0DE1;
+// dma-buf → GL texture import: the EGL/GL core (entry points, EGLImage creation,
+// readback) lives in `crate::gl`; here we only sample the imported texture for
+// display. These two GL swizzle constants are display-only.
 const GL_TEXTURE_SWIZZLE_A: u32 = 0x8E45;
 const GL_ONE: i32 = 1;
-
-type EglCreateImageKhr =
-    unsafe extern "system" fn(*mut c_void, *mut c_void, u32, *mut c_void, *const i32) -> EglImage;
-type EglDestroyImageKhr = unsafe extern "system" fn(*mut c_void, EglImage) -> u32;
-type GlEglImageTargetTexture2dOes = unsafe extern "system" fn(u32, EglImage);
-
-/// Resolved EGL/GL extension entry points + the EGL display, for dma-buf import.
-#[derive(Clone, Copy)]
-struct DmabufEgl {
-    display: *mut c_void,
-    create_image: EglCreateImageKhr,
-    destroy_image: EglDestroyImageKhr,
-    image_target: GlEglImageTargetTexture2dOes,
-}
-
-/// Load the dma-buf import entry points. `None` if the driver lacks them (then we
-/// have no GPU display path and tiles fall back to whatever shm provided).
-fn load_dmabuf_egl(egl: &Egl, display: egl::Display) -> Option<DmabufEgl> {
-    let create = egl.get_proc_address("eglCreateImageKHR")?;
-    let destroy = egl.get_proc_address("eglDestroyImageKHR")?;
-    let target = egl.get_proc_address("glEGLImageTargetTexture2DOES")?;
-    // Same calling convention (extern "system"), just typed signatures.
-    Some(unsafe {
-        DmabufEgl {
-            display: display.as_ptr(),
-            create_image: std::mem::transmute::<extern "system" fn(), EglCreateImageKhr>(create),
-            destroy_image: std::mem::transmute::<extern "system" fn(), EglDestroyImageKhr>(destroy),
-            image_target: std::mem::transmute::<extern "system" fn(), GlEglImageTargetTexture2dOes>(
-                target,
-            ),
-        }
-    })
-}
 
 /// A dma-buf imported as a GL texture, cached per source key.
 struct NativeTex {
@@ -112,25 +64,7 @@ impl DmabufImporter for HostImporter<'_> {
         use glow::HasContext as _;
         let egl = self.egl?;
         let size = egui::vec2(frame.width as f32, frame.height as f32);
-        let attribs: [i32; 17] = [
-            EGL_WIDTH,
-            frame.width as i32,
-            EGL_HEIGHT,
-            frame.height as i32,
-            EGL_LINUX_DRM_FOURCC_EXT,
-            frame.fourcc as i32,
-            EGL_DMA_BUF_PLANE0_FD_EXT,
-            frame.fd.as_raw_fd(),
-            EGL_DMA_BUF_PLANE0_OFFSET_EXT,
-            frame.offset as i32,
-            EGL_DMA_BUF_PLANE0_PITCH_EXT,
-            frame.stride as i32,
-            EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT,
-            (frame.modifier & 0xffff_ffff) as i32,
-            EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT,
-            (frame.modifier >> 32) as i32,
-            EGL_ATTRIB_NONE,
-        ];
+        let attribs = dmabuf_image_attribs(&frame);
         // EGL_NO_CONTEXT for dma-buf import; EGL dups the fd, so we may close ours.
         let image = unsafe {
             (egl.create_image)(
@@ -228,7 +162,7 @@ impl Gpu {
     /// Panics on EGL setup failure (the host can't render without it).
     pub fn new(conn: &Connection, surface: &WlSurface, pw: i32, ph: i32) -> Gpu {
         let lib = unsafe { egl::DynamicInstance::<egl::EGL1_4>::load_required() }
-            .expect("libEGL introuvable");
+            .expect("libEGL not found");
         let egl: Egl = lib;
 
         let display_ptr = conn.backend().display_ptr() as *mut c_void;
@@ -254,7 +188,7 @@ impl Gpu {
         let config = egl
             .choose_first_config(display, &attribs)
             .expect("eglChooseConfig")
-            .expect("aucune config EGL avec alpha");
+            .expect("no EGL config with alpha");
 
         let ctx_attribs = [egl::CONTEXT_CLIENT_VERSION, 3, egl::NONE];
         let context = egl
@@ -287,7 +221,7 @@ impl Gpu {
         let painter = egui_glow::Painter::new(Arc::new(gl), "", None, false).expect("egui_glow");
         let dmabuf_egl = load_dmabuf_egl(&egl, display);
         if dmabuf_egl.is_none() {
-            eprintln!("wlr-capture: import dma-buf EGL indisponible (affichage GPU désactivé)");
+            eprintln!("wlr-capture: EGL dma-buf import unavailable (GPU display disabled)");
         }
 
         Gpu {
@@ -314,12 +248,22 @@ impl Gpu {
     pub fn render(
         &mut self,
         egui_ctx: &egui::Context,
-        raw_input: egui::RawInput,
+        mut raw_input: egui::RawInput,
         ppp: f32,
         size_px: (u32, u32),
         backdrop: [f32; 4],
         mut run_ui: impl FnMut(&egui::Context, &mut dyn DmabufImporter),
     ) {
+        // Lay text out at the same pixels-per-point we tessellate with, or epaint warns
+        // ("pixels_per_point have changed between text layout and tessellation") and
+        // text shapes can be mis-scaled — happens on fractional/HiDPI outputs where
+        // `ppp != 1.0` but the caller left it unset in `raw_input`.
+        raw_input
+            .viewports
+            .entry(egui::ViewportId::ROOT)
+            .or_default()
+            .native_pixels_per_point = Some(ppp);
+
         let (pw, ph) = size_px;
         self.egl
             .make_current(

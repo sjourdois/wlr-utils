@@ -15,30 +15,85 @@ name = "wlr_capture"
 path = "src/lib.rs"
 
 [dependencies]
+# --- Always-on core: capture engine, clipboard, dma-buf import + readback, sink.
+# No egui/SVG/font deps, so headless builds (a future recorder) stay lean.
 anyhow.workspace = true
-egui.workspace = true
-# egui → GLES rendering core (render.rs), shared by every windowing host.
-egui_glow.workspace = true
 glow.workspace = true
 khronos-egl.workspace = true
-wayland-egl.workspace = true
 libloading.workspace = true
-wayland-client.workspace = true
-wayland-protocols.workspace = true
+# `system` exposes `Backend::display_ptr` (the wl_display ptr EGL needs in `gl`).
+# The toolkit build gets it transitively via wayland-egl; enable it directly so the
+# headless GPU readback path keeps it too.
+wayland-client = { workspace = true, features = ["system"] }
+# `unstable` adds xdg-output (zxdg_output_manager_v1) for reliable logical output
+# geometry — positions and fractional-scale logical sizes wl_output can't express.
+wayland-protocols = { workspace = true, features = ["unstable"] }
 wayland-protocols-wlr.workspace = true
 rustix.workspace = true
-image.workspace = true
-i18n-embed.workspace = true
-rust-embed.workspace = true
-unic-langid.workspace = true
-resvg.workspace = true
-toml.workspace = true
-serde.workspace = true
-fontdb.workspace = true
+# Zero-copy GPU capture (the `gpu` feature): allocate dma-bufs via gbm.
 gbm = { workspace = true, optional = true }
+# Compositor IPC for focus-aware capture (the `focus` feature).
+serde_json = { workspace = true, optional = true }
+# Windowing host for the shared frozen overlay (the `overlay` feature).
+smithay-client-toolkit = { workspace = true, optional = true }
+# Native FFmpeg bindings for video encoding (the `video` feature).
+ffmpeg-next = { workspace = true, optional = true }
+
+# --- Toolkit (the `toolkit` feature): egui/EGL overlay rendering + theme/i18n/icons.
+egui = { workspace = true, optional = true }
+egui_glow = { workspace = true, optional = true }
+wayland-egl = { workspace = true, optional = true }
+image = { workspace = true, optional = true }
+i18n-embed = { workspace = true, optional = true }
+rust-embed = { workspace = true, optional = true }
+unic-langid = { workspace = true, optional = true }
+resvg = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+fontdb = { workspace = true, optional = true }
 
 [features]
-default = ["gpu"]
+default = ["gpu", "toolkit", "i18n"]
 # Zero-copy GPU capture: allocate dma-bufs via gbm and import them as GL textures.
 # Without it, only the CPU shm path is built (no gbm / libgbm-dev dependency).
+# Note: the EGL/GL dma-buf import + readback in `gl` is built regardless — it needs
+# no gbm — so headless readback works without this feature.
 gpu = ["dep:gbm"]
+# High-level capture/compositing (`capture`): resolve a source to a CapturedImage,
+# stitching mixed-scale outputs. Pulls `image` for resampling. A headless recorder
+# that only streams frames through `sink` doesn't need it.
+compose = ["dep:image"]
+# Focus-aware capture (`focus`): query the compositor's IPC for the active window /
+# current output. Pulls `serde_json` to parse it.
+focus = ["dep:serde_json"]
+# The shared frozen-screen overlay (`overlay`): a layer-shell surface per output
+# rendering a frozen capture for interactive region/point selection. Needs the
+# toolkit (egui rendering), compose (OutputCapture) and a windowing host (sctk).
+overlay = ["toolkit", "compose", "dep:smithay-client-toolkit"]
+# The floating live-mirror host (`mirror`): an xdg-toplevel egui window that streams
+# a source (a window, or a magnified region) live. Shared by `wlr-peek mirror`. Needs
+# the toolkit (egui rendering) and a windowing host (sctk, with its calloop + xdg).
+mirror = ["toolkit", "dep:smithay-client-toolkit"]
+# Hardware/software video encoding (`video`): a FrameSink that encodes a capture
+# stream to a file via FFmpeg (NVENC / VAAPI / libx264). Headless — no toolkit. Pulls
+# `ffmpeg-next`, which links the system libav* libraries (needs the `-dev` packages).
+video = ["dep:ffmpeg-next"]
+# Localisation via Fluent (`i18n`). On by default. Without it, `tr!` returns the
+# English text generated from the `en` catalog at build time and the whole Fluent
+# stack (i18n-embed, rust-embed, unic-langid) is dropped — so a minimal/headless
+# build needs no i18n dependency.
+i18n = ["dep:i18n-embed", "dep:rust-embed", "dep:unic-langid"]
+# The egui/EGL overlay toolkit (`render` + `theme`/`icons`). On by default; disable it
+# (`--no-default-features`) for a headless build that only captures and reads back,
+# dropping egui, resvg and fontdb. (UI strings localise via the separate `i18n`
+# feature; the toolkit uses `tr!`, which works with or without it.)
+toolkit = [
+    "dep:egui",
+    "dep:egui_glow",
+    "dep:wayland-egl",
+    "dep:image",
+    "dep:resvg",
+    "dep:toml",
+    "dep:serde",
+    "dep:fontdb",
+]

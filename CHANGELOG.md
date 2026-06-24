@@ -4,6 +4,89 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **`wlr-shot`**: a new screen-capture binary (built on the shared `wlr-capture`
+  engine). `wlr-shot screenshot` captures a full output (`-o`), a logical region
+  (`-g "X,Y WxH"`, slurp-compatible, stitched across the outputs it covers), or a
+  window (`-w ID` / `--pick-window` via `wlr-chooser`), the whole layout (`--all`),
+  the active window (`-a`) or the focused output (`--current-output`), to
+  PNG/JPEG/PPM (file or stdout); `--list-outputs` prints names and logical
+  geometry. Single-output captures keep native resolution (incl. fractional
+  scaling); multi-output regions composite at logical resolution. Focus-aware modes
+  use compositor IPC via a small extensible backend (Sway today; Hyprland/niri
+  next). `-s` opens an **interactive frozen region selector** — a layer-shell
+  overlay per output showing the frozen screen; drag to select (spanning outputs),
+  `Esc` cancels, `Enter` confirms — then crops from the same frozen pixels.
+  `-c`/`--clipboard` copies the shot to the Wayland clipboard (wlroots
+  `data-control`) instead of writing a file: a tiny daemon detaches to serve the
+  selection until another client replaces it (`--clipboard-foreground` keeps it in
+  the foreground).
+- **`wlr-shot record`**: record a source to an H.264 video file (container from the
+  extension, e.g. `.mp4`). Same sources as `screenshot` — output (`-o`/sole),
+  `--current-output`, window (`-w`/`--pick-window`, follows it across workspaces and
+  while occluded), `-a`, and a single-output region (`-g`/`-s`). Pluggable encoder
+  (`--encoder auto|nvenc|vaapi|software`): `auto` prefers hardware (NVENC, then
+  VAAPI on a `--device` render node) and falls back to software `libx264`. Capture is
+  damage-driven, so a normal recording emits a constant frame rate at `--fps` (default
+  30), repeating the last frame through static stretches; `--timelapse INTERVAL`
+  instead samples one frame per interval and plays them at `--fps`, so the footage is
+  sped up. Stops on `--duration SECS`, Ctrl-C (the file is finalised cleanly), or the
+  window closing. Built on a new `wlr_capture::video` `FrameSink` (feature `video`,
+  on by default; `--no-default-features` builds screenshots-only with no FFmpeg
+  dependency).
+- **`wlr-capture`** engine additions (foundations for the capture suite): accurate
+  output geometry via `xdg-output` with a `wl_output` fallback (multi-monitor
+  positions and fractional-scale logical sizes), one-shot capture
+  (`capture_output_once` / `capture_toplevel_once`), a `Region` type with
+  `CapturedImage::pixel` / `crop` / `blit_into` for cropping and multi-output
+  compositing, and a `clipboard` module that puts a captured blob on the wlroots
+  clipboard via `zwlr_data_control_v1`. New `gl::GpuReadback` reads a capture
+  dma-buf back to CPU RGBA8 through a headless offscreen EGL context (1×1 pbuffer +
+  `glReadPixels`), so the GPU path can feed CPU encoders. New `sink::FrameSink` is
+  the common output seam for screenshot/record/timelapse, with `sink::pump` routing
+  shm frames straight through and reading dma-buf frames back via `GpuReadback`
+  (built lazily, so pure-shm streams never spin up EGL). The crate now splits into
+  an always-on core (`wl`, `clipboard`, `gl`, `sink`) and a `toolkit` feature (on by
+  default) gating the egui/EGL overlay UI (`render` + `theme`/`i18n`/`icons`) — a
+  headless build (`--no-default-features`) drops egui, resvg, fontdb and the i18n
+  stack for a ~6× smaller dependency tree. `wlr-shot` gains an off-by-default `gpu`
+  feature that builds the dma-buf capture path and reads frames back before
+  encoding (the shipped binary stays shm-only, no `libgbm`).
+
+- **`wlr-switcher`**: a new binary — a live window switcher / Alt-Tab / exposé that
+  **focuses** the picked window (via `zwlr-foreign-toplevel-management-v1`). Bind it
+  to a held modifier for a true Alt-Tab (`bindsym Mod1+Tab exec wlr-switcher`): the
+  overlay appears while the modifier (Alt **or** Super) is held, `Tab`/`Shift+Tab`
+  cycle, and **releasing the modifier** confirms and switches. Three presentations
+  via `--layout strip|grid|card`:
+  - `strip` (default) — a macOS-style single row of tiles, highlighted window's
+    name above; each tile shows a **live preview** with the app icon as a badge
+    (live capture being the differentiator);
+  - `grid` — the full-screen mission-control exposé;
+  - `card` — the centred rofi-like card.
+  Live previews are tunable with `--live none|current|all` (default `all`).
+  Hold-to-switch is on by default for `strip`, off for `grid`/`card`; force it with
+  `--hold` / `--no-hold`. Mouse click and `Esc` still work; only one switcher opens
+  at a time. It uses the `keyboard-shortcuts-inhibit` protocol so the compositor
+  forwards the full chord (e.g. `Mod1+Tab`) to the overlay instead of re-running its
+  binding — this is what lets `Tab` cycle forward under Sway and other wlroots
+  compositors. App icons are loaded at higher resolution to stay crisp, and the
+  exposé intro animation is skipped while hold-to-switch is armed for an instant
+  first frame.
+
+### Changed
+
+- **`wlr-chooser`** is now strictly the xdg-desktop-portal-wlr picker (prints the
+  chosen source to stdout). The window-switcher modes (`--switch` / `--alt-tab`)
+  moved to the new `wlr-switcher` binary. Both binaries ship from the same package
+  and share the capture engine.
+- The overlay now starts capturing before building itself, so thumbnails stream in
+  sooner. Set `WLR_CHOOSER_TIMING=1` to print cold-start timing milestones to
+  stderr.
+
 ## 1.2.0
 
 ### Added

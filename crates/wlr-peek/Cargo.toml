@@ -1,0 +1,59 @@
+[package]
+name = "wlr-peek"
+description = "Inspect the screen on wlroots: colour picker (OCR & live magnifier coming next)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["wayland", "wlroots", "color-picker", "pipette", "sway"]
+categories = ["command-line-utilities", "multimedia"]
+
+[[bin]]
+name = "wlr-peek"
+path = "src/main.rs"
+
+[features]
+default = ["ocr", "i18n"]
+# Localised UI (the overlay hint) via Fluent. On by default; `--no-default-features`
+# builds English-only with no Fluent dependency.
+i18n = ["wlr-capture/i18n"]
+# OCR (`wlr-peek ocr`) via the Tesseract/Leptonica bindings. On by default. The build
+# links system `libtesseract`/`libleptonica` (`-dev` packages) and uses libclang for
+# bindgen; the `eng` tessdata language pack is needed at runtime. It also enables the
+# engine's `focus` feature (active-window / current-output OCR sources) and `image`
+# (PNG encoding for Tesseract). Disable with `--no-default-features` for an OCR-free
+# build that needs no native OCR deps.
+ocr = ["dep:leptess", "dep:image", "wlr-capture/focus"]
+
+[dependencies]
+# The shared engine: `overlay` (the frozen point-pick overlay with its loupe) pulls
+# the egui toolkit + `compose` (source→image); `mirror` is the floating live-mirror
+# host (the `mirror` subcommand: window PiP + live region magnifier).
+wlr-capture = { path = "../wlr-capture", version = "1.2.0", default-features = false, features = ["overlay", "mirror"] }
+anyhow.workspace = true
+# Single-instance advisory lock (flock) for `mirror --window`.
+rustix.workspace = true
+clap.workspace = true
+# Tesseract OCR binding (the `ocr` feature). Links libtesseract + libleptonica.
+leptess = { version = "0.14", optional = true }
+# PNG encoding of a capture to feed Tesseract (`set_image_from_mem`).
+image = { workspace = true, optional = true }
+
+[package.metadata.deb]
+maintainer = "Stéphane Jourdois <stephane@jourdois.fr>"
+section = "utils"
+priority = "optional"
+license-file = ["../../LICENSE-MIT", "0"]
+depends = "$auto, libegl1"
+extended-description = """\
+A screen inspection tool for wlroots compositors built on the shared wlr-capture \
+engine: a colour picker (pipette) with a magnifying loupe; OCR and a live magnifier \
+are on the roadmap."""
+assets = [
+    ["../../target/release/wlr-peek", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/wlr-peek/README.md", "644"],
+]

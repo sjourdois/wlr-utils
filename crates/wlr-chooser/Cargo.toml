@@ -12,23 +12,38 @@ readme = "README.md"
 keywords = ["wayland", "wlroots", "screencast", "portal", "sway"]
 categories = ["gui", "command-line-utilities"]
 
+[lib]
+name = "wlr_chooser"
+path = "src/lib.rs"
+
 [[bin]]
 name = "wlr-chooser"
-path = "src/main.rs"
+path = "src/bin/wlr-chooser.rs"
+
+[[bin]]
+name = "wlr-switcher"
+path = "src/bin/wlr-switcher.rs"
 
 [dependencies]
-wlr-capture = { path = "../wlr-capture", version = "1.2.0", default-features = false }
+wlr-capture = { path = "../wlr-capture", version = "1.2.0", default-features = false, features = ["toolkit"] }
 anyhow.workspace = true
 egui.workspace = true
 smithay-client-toolkit.workspace = true
 wayland-client.workspace = true
+# keyboard-shortcuts-inhibit (unstable): suspend compositor shortcuts while the
+# overlay is focused so a held Alt-Tab chord reaches us instead of re-firing the
+# binding. The workspace dep already pulls staging+client; add the unstable set.
+wayland-protocols = { workspace = true, features = ["unstable"] }
 rustix.workspace = true
 image.workspace = true
 clap.workspace = true
 
 [features]
-default = ["gpu"]
+default = ["gpu", "i18n"]
 gpu = ["wlr-capture/gpu"]
+# Localised UI via Fluent. On by default; `--no-default-features` builds English-only
+# with no Fluent dependency.
+i18n = ["wlr-capture/i18n"]
 
 [package.metadata.deb]
 maintainer = "Stéphane Jourdois <stephane@jourdois.fr>"
@@ -44,6 +59,7 @@ A graphical window & screen picker for wlroots screencast portals \
 window or monitor to share."""
 assets = [
     ["../../target/release/wlr-chooser", "usr/bin/", "755"],
+    ["../../target/release/wlr-switcher", "usr/bin/", "755"],
     ["README.md", "usr/share/doc/wlr-chooser/README.md", "644"],
     ["../../docs/themes/*.toml", "usr/share/doc/wlr-chooser/themes/", "644"],
 ]

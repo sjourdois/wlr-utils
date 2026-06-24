@@ -9,8 +9,10 @@ workspaces), live and near-free.
 
 | Tool | What it does | crate |
 | --- | --- | --- |
-| **[wlr-chooser](crates/wlr-chooser)** | Window & screen picker for screencast portals (`xdg-desktop-portal-wlr`) — a rofi-like overlay with live thumbnails; doubles as a window switcher (`--switch`). | [![v](https://img.shields.io/crates/v/wlr-chooser.svg)](https://crates.io/crates/wlr-chooser) |
+| **[wlr-chooser](crates/wlr-chooser)** | Window & screen picker for screencast portals (`xdg-desktop-portal-wlr`) — a rofi-like overlay with live thumbnails. | [![v](https://img.shields.io/crates/v/wlr-chooser.svg)](https://crates.io/crates/wlr-chooser) |
+| **[wlr-switcher](crates/wlr-chooser)** | Live **Alt-Tab / exposé** window switcher (macOS-style strip, full-screen grid, or card) with hold-to-switch and live previews. Ships with `wlr-chooser`. | [![v](https://img.shields.io/crates/v/wlr-chooser.svg)](https://crates.io/crates/wlr-chooser) |
 | **[wlr-pip](crates/wlr-pip)** | Floating, always-on-top **live picture-in-picture** mirror of a window. | [![v](https://img.shields.io/crates/v/wlr-pip.svg)](https://crates.io/crates/wlr-pip) |
+| **[wlr-shot](crates/wlr-shot)** | **Screen capture** — screenshots of an output/region/window (PNG/JPEG/PPM), copy to clipboard; plus H.264 **recording** & **timelapse** (NVENC/VAAPI/libx264). | [![v](https://img.shields.io/crates/v/wlr-shot.svg)](https://crates.io/crates/wlr-shot) |
 
 Both share **[wlr-capture](crates/wlr-capture)**, a library with the wlroots
 capture engine (`ext-image-copy-capture-v1`, full-resolution dma-buf zero-copy
@@ -25,8 +27,8 @@ with a CPU shm fallback) and an egui/EGL rendering + dma-buf-import toolkit.
   `wlr-layer-shell` for `wlr-chooser`) — Sway ≥ 1.12 / wlroots ≥ 0.20.
 - For the **GPU path** (default): a working EGL/GLES driver and `libgbm` (Mesa).
   Falls back to CPU shm automatically.
-- `wlr-chooser` also needs `xdg-desktop-portal-wlr` ≥ 0.8 (portal use) and, for
-  `--switch`, `zwlr-foreign-toplevel-management-v1`.
+- `wlr-chooser` also needs `xdg-desktop-portal-wlr` ≥ 0.8 (portal use);
+  `wlr-switcher` needs `zwlr-foreign-toplevel-management-v1` to focus windows.
 
 ## Install
 
@@ -48,7 +50,7 @@ cargo build --release            # builds all binaries
 ## Documentation
 
 - **[wlr-chooser README](crates/wlr-chooser/README.md)** — portal setup, options,
-  the window switcher, theming and localisation.
+  the `wlr-switcher` Alt-Tab/exposé, theming and localisation.
 - **[wlr-pip README](crates/wlr-pip/README.md)** — usage, Sway rules, controls and
   keyboard shortcuts.
 - **[wlr-capture README](crates/wlr-capture/README.md)** — the shared engine.

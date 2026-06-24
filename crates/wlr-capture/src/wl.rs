@@ -22,7 +22,7 @@ use wayland_client::{
     globals::{GlobalListContents, registry_queue_init},
     protocol::{
         wl_buffer::WlBuffer,
-        wl_output::WlOutput,
+        wl_output::{self, Transform, WlOutput},
         wl_registry::WlRegistry,
         wl_seat::WlSeat,
         wl_shm::{self, WlShm},
@@ -58,6 +58,10 @@ use wayland_protocols::ext::{
         ext_image_copy_capture_session_v1::{self, ExtImageCopyCaptureSessionV1},
     },
 };
+use wayland_protocols::xdg::xdg_output::zv1::client::{
+    zxdg_output_manager_v1::ZxdgOutputManagerV1,
+    zxdg_output_v1::{self, ZxdgOutputV1},
+};
 
 /// A capturable window.
 #[derive(Clone)]
@@ -68,11 +72,110 @@ pub struct Toplevel {
     pub app_id: String,
 }
 
-/// A capturable output.
+/// A capturable output, with its placement in the global logical space.
+///
+/// Logical position/size come from `xdg-output` (`zxdg_output_manager_v1`) when the
+/// compositor exposes it — the only reliable source for multi-monitor positions and
+/// fractional-scale logical sizes. Physical pixel size, integer scale and transform
+/// come from `wl_output`; if `xdg-output` is absent we fall back to computing the
+/// logical size from those.
 #[derive(Clone)]
 pub struct Output {
     pub wl_output: WlOutput,
     pub name: String,
+    /// Top-left position in the global logical coordinate space.
+    pub logical_x: i32,
+    pub logical_y: i32,
+    /// Logical size from xdg-output (0 until received; see [`Output::logical_size`]).
+    pub logical_w: i32,
+    pub logical_h: i32,
+    /// Resolution of the current mode, in physical pixels (pre-transform).
+    pub phys_width: i32,
+    pub phys_height: i32,
+    /// Integer buffer scale (wl_output; may be coarser than the real scale).
+    pub scale: i32,
+    /// Output transform (rotation/flip); swaps logical width/height for 90/270.
+    pub transform: Transform,
+    /// Whether xdg-output supplied authoritative logical geometry.
+    pub have_xdg: bool,
+}
+
+/// Logical dimensions from physical pixels: divide by `scale`, swapping
+/// width/height for 90°/270° transforms. Free function so it's unit-testable
+/// without a live `WlOutput`.
+fn logical_dims(phys_w: i32, phys_h: i32, scale: i32, transform: Transform) -> (i32, i32) {
+    let s = scale.max(1);
+    let (w, h) = (phys_w / s, phys_h / s);
+    if matches!(
+        transform,
+        Transform::_90 | Transform::_270 | Transform::Flipped90 | Transform::Flipped270
+    ) {
+        (h, w)
+    } else {
+        (w, h)
+    }
+}
+
+impl Output {
+    /// Logical size (points). Prefers xdg-output's authoritative size (handles
+    /// fractional scale); otherwise physical pixels divided by the integer scale,
+    /// with width/height swapped for 90°/270° transforms.
+    pub fn logical_size(&self) -> (i32, i32) {
+        if self.have_xdg && self.logical_w > 0 && self.logical_h > 0 {
+            (self.logical_w, self.logical_h)
+        } else {
+            logical_dims(
+                self.phys_width,
+                self.phys_height,
+                self.scale,
+                self.transform,
+            )
+        }
+    }
+}
+
+/// An axis-aligned rectangle. Used both for capture cropping (in an image's pixel
+/// space) and for selection geometry (in the global logical space), so `x`/`y` may
+/// be negative; `w`/`h` are unsigned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Region {
+    pub x: i32,
+    pub y: i32,
+    pub w: u32,
+    pub h: u32,
+}
+
+impl Region {
+    pub fn is_empty(&self) -> bool {
+        self.w == 0 || self.h == 0
+    }
+
+    /// The overlapping rectangle of two regions, or `None` if they don't overlap.
+    pub fn intersect(&self, o: &Region) -> Option<Region> {
+        let x0 = self.x.max(o.x);
+        let y0 = self.y.max(o.y);
+        let x1 = (self.x + self.w as i32).min(o.x + o.w as i32);
+        let y1 = (self.y + self.h as i32).min(o.y + o.h as i32);
+        (x1 > x0 && y1 > y0).then_some(Region {
+            x: x0,
+            y: y0,
+            w: (x1 - x0) as u32,
+            h: (y1 - y0) as u32,
+        })
+    }
+}
+
+impl Output {
+    /// The output's placement in the global logical space, as a [`Region`].
+    pub fn logical_rect(&self) -> Region {
+        let (w, h) = self.logical_size();
+        Region {
+            x: self.logical_x,
+            y: self.logical_y,
+            w: w.max(0) as u32,
+            h: h.max(0) as u32,
+        }
+    }
 }
 
 /// Decoded RGBA8 image.
@@ -80,6 +183,78 @@ pub struct CapturedImage {
     pub width: u32,
     pub height: u32,
     pub rgba: Vec<u8>,
+}
+
+impl CapturedImage {
+    /// The RGBA bytes of the pixel at `(x, y)`, or `None` if out of bounds.
+    pub fn pixel(&self, x: u32, y: u32) -> Option<[u8; 4]> {
+        if x >= self.width || y >= self.height {
+            return None;
+        }
+        let i = ((y * self.width + x) * 4) as usize;
+        self.rgba.get(i..i + 4).map(|s| [s[0], s[1], s[2], s[3]])
+    }
+
+    /// Crop to `rect` (in this image's pixel space), clamped to the bounds. Returns
+    /// the overlapping sub-image; empty (0×0) if there is no overlap.
+    pub fn crop(&self, rect: Region) -> CapturedImage {
+        let bounds = Region {
+            x: 0,
+            y: 0,
+            w: self.width,
+            h: self.height,
+        };
+        let Some(r) = rect.intersect(&bounds) else {
+            return CapturedImage {
+                width: 0,
+                height: 0,
+                rgba: Vec::new(),
+            };
+        };
+        let row_bytes = (r.w * 4) as usize;
+        let mut out = vec![0u8; row_bytes * r.h as usize];
+        for row in 0..r.h {
+            let sy = r.y as u32 + row;
+            let src = ((sy * self.width + r.x as u32) * 4) as usize;
+            let dst = row as usize * row_bytes;
+            out[dst..dst + row_bytes].copy_from_slice(&self.rgba[src..src + row_bytes]);
+        }
+        CapturedImage {
+            width: r.w,
+            height: r.h,
+            rgba: out,
+        }
+    }
+
+    /// Composite this image into a `dst_w × dst_h` RGBA8 buffer at `(at_x, at_y)`,
+    /// clipping to the destination. Used to stitch per-output captures into one
+    /// multi-output region.
+    pub fn blit_into(&self, dst: &mut [u8], dst_w: u32, dst_h: u32, at_x: i32, at_y: i32) {
+        let dst_rect = Region {
+            x: 0,
+            y: 0,
+            w: dst_w,
+            h: dst_h,
+        };
+        let src_rect = Region {
+            x: at_x,
+            y: at_y,
+            w: self.width,
+            h: self.height,
+        };
+        let Some(r) = src_rect.intersect(&dst_rect) else {
+            return;
+        };
+        let row_bytes = (r.w * 4) as usize;
+        for row in 0..r.h {
+            let dy = r.y as u32 + row;
+            let sy = (r.y - at_y) as u32 + row;
+            let sx = (r.x - at_x) as u32;
+            let src = ((sy * self.width + sx) * 4) as usize;
+            let dpos = ((dy * dst_w + r.x as u32) * 4) as usize;
+            dst[dpos..dpos + row_bytes].copy_from_slice(&self.rgba[src..src + row_bytes]);
+        }
+    }
 }
 
 /// Byte layout of a wl_shm pixel format (memory order, little-endian), so we can
@@ -349,7 +524,7 @@ pub struct Client {
 impl Client {
     /// Connect, bind the capture managers, and enumerate windows + outputs.
     pub fn connect() -> Result<Self> {
-        let conn = Connection::connect_to_env().context("connexion Wayland")?;
+        let conn = Connection::connect_to_env().context("Wayland connection")?;
         let (globals, mut queue) =
             registry_queue_init::<State>(&conn).context("registre Wayland")?;
         let qh = queue.handle();
@@ -357,21 +532,31 @@ impl Client {
         let shm = globals.bind(&qh, 1..=1, ()).context("wl_shm")?;
         let copy = globals
             .bind(&qh, 1..=1, ())
-            .context("ext_image_copy_capture_manager_v1 absent")?;
+            .context("ext_image_copy_capture_manager_v1 missing")?;
         let tl_src = globals
             .bind(&qh, 1..=1, ())
-            .context("ext_foreign_toplevel_image_capture_source_manager_v1 absent")?;
+            .context("ext_foreign_toplevel_image_capture_source_manager_v1 missing")?;
         let out_src = globals
             .bind(&qh, 1..=1, ())
-            .context("ext_output_image_capture_source_manager_v1 absent")?;
+            .context("ext_output_image_capture_source_manager_v1 missing")?;
         let _list: ExtForeignToplevelListV1 = globals
             .bind(&qh, 1..=1, ())
-            .context("ext_foreign_toplevel_list_v1 absent")?;
+            .context("ext_foreign_toplevel_list_v1 missing")?;
+
+        // Optional: authoritative logical geometry (multi-monitor positions,
+        // fractional scale). Absent on a few compositors — we then fall back to
+        // wl_output-derived sizes.
+        let xdg_mgr: Option<ZxdgOutputManagerV1> = globals.bind(&qh, 1..=3, ()).ok();
 
         globals.contents().with_list(|list| {
             for g in list {
                 if g.interface == WlOutput::interface().name {
-                    let _: WlOutput = globals.registry().bind(g.name, g.version.min(4), &qh, ());
+                    let out: WlOutput = globals.registry().bind(g.name, g.version.min(4), &qh, ());
+                    if let Some(mgr) = &xdg_mgr {
+                        // udata = the wl_output, so the xdg_output's logical-geometry
+                        // events update the matching Output.
+                        mgr.get_xdg_output(&out, &qh, out.clone());
+                    }
                 }
             }
         });
@@ -463,7 +648,7 @@ impl Client {
             self.state.sessions.remove(&id);
             session.destroy();
             src.destroy();
-            bail!("session de capture arrêtée avant la première frame");
+            bail!("capture session stopped before first frame");
         }
 
         self.open.insert(
@@ -482,6 +667,49 @@ impl Client {
     pub fn close_session(&mut self, id: &SessionId) {
         self.open.remove(id); // Drop releases frame + buffer + session + source
         self.state.sessions.remove(id);
+    }
+
+    /// One-shot: capture a single frame of `output`, then tear the session down.
+    /// Blocks up to `budget`. For screenshots / timelapse ticks.
+    pub fn capture_output_once(&mut self, output: &Output, budget: Duration) -> Result<Frame> {
+        let id = self.open_output_session(output)?;
+        let r = self.poll_one(&id, budget);
+        self.close_session(&id);
+        r
+    }
+
+    /// One-shot: capture a single frame of `toplevel`, then tear the session down.
+    pub fn capture_toplevel_once(
+        &mut self,
+        toplevel: &Toplevel,
+        budget: Duration,
+    ) -> Result<Frame> {
+        let id = self.open_toplevel_session(toplevel)?;
+        let r = self.poll_one(&id, budget);
+        self.close_session(&id);
+        r
+    }
+
+    /// Poll until session `id` yields a frame, it stops, or `budget` elapses.
+    /// Frames from other open sessions in this round are discarded.
+    fn poll_one(&mut self, id: &SessionId, budget: Duration) -> Result<Frame> {
+        let deadline = Instant::now() + budget;
+        loop {
+            let now = Instant::now();
+            if now >= deadline {
+                bail!("capture: timed out");
+            }
+            let step = Duration::from_millis(50).min(deadline - now);
+            let (frames, stopped) = self.poll(step);
+            for (sid, frame) in frames {
+                if &sid == id {
+                    return Ok(frame);
+                }
+            }
+            if stopped.iter().any(|s| s == id) {
+                bail!("capture: session stopped before first frame");
+            }
+        }
     }
 
     /// Drive all open sessions for up to `budget`: arm a frame on every idle
@@ -604,7 +832,7 @@ impl Client {
             match poll_res {
                 Ok(0) => break, // timeout: no events within the budget
                 Ok(_) => {
-                    guard.read().context("lecture des events Wayland")?;
+                    guard.read().context("reading Wayland events")?;
                     self.queue.dispatch_pending(&mut self.state)?;
                 }
                 Err(rustix::io::Errno::INTR) => continue,
@@ -657,10 +885,10 @@ impl Client {
             .sessions
             .get(id)
             .and_then(|d| d.format)
-            .context("le compositeur n'a pas proposé de format shm")?;
-        let layout =
-            PixelLayout::of(format).with_context(|| format!("format shm non géré: {format:?}"))?;
-        let stride = w as usize * layout.bpp; // stride correct selon le bpp réel du format
+            .context("compositor offered no shm format")?;
+        let layout = PixelLayout::of(format)
+            .with_context(|| format!("unsupported shm format: {format:?}"))?;
+        let stride = w as usize * layout.bpp; // stride from the format's actual bpp
         let size = stride * h as usize;
 
         let fd = rustix::fs::memfd_create("wlr-chooser-shm", rustix::fs::MemfdFlags::CLOEXEC)
@@ -709,7 +937,7 @@ impl Client {
         };
         let Some((fourcc, mods)) = pick_dmabuf_format(&formats) else {
             if debug() {
-                eprintln!("wlr-chooser: aucun format dma-buf exploitable");
+                eprintln!("wlr-capture: no usable dma-buf format");
             }
             return None;
         };
@@ -942,14 +1170,14 @@ struct ActState {
 /// (both ext-foreign-toplevel-list and zwlr enumerate in that order on wlroots),
 /// so the right one is focused even with duplicates.
 pub fn activate_window(app_id: &str, title: &str, dup_index: usize) -> Result<()> {
-    let conn = Connection::connect_to_env().context("connexion Wayland")?;
+    let conn = Connection::connect_to_env().context("Wayland connection")?;
     let (globals, mut queue) =
         registry_queue_init::<ActState>(&conn).context("registre Wayland")?;
     let qh = queue.handle();
     let _mgr: ZwlrForeignToplevelManagerV1 = globals
         .bind(&qh, 1..=3, ())
-        .context("zwlr_foreign_toplevel_manager_v1 absent (compositeur non supporté)")?;
-    let seat: WlSeat = globals.bind(&qh, 1..=8, ()).context("wl_seat absent")?;
+        .context("zwlr_foreign_toplevel_manager_v1 missing (unsupported compositor)")?;
+    let seat: WlSeat = globals.bind(&qh, 1..=8, ()).context("wl_seat missing")?;
 
     // Binding the manager makes the compositor advertise current toplevels.
     let mut st = ActState::default();
@@ -967,7 +1195,7 @@ pub fn activate_window(app_id: &str, title: &str, dup_index: usize) -> Result<()
                 .find(|(_, a, t)| a == app_id && t == title)
         })
         .map(|(h, _, _)| h.clone())
-        .with_context(|| format!("fenêtre introuvable pour activation: {app_id} / {title}"))?;
+        .with_context(|| format!("window to activate not found: {app_id} / {title}"))?;
     handle.activate(&seat);
     queue.roundtrip(&mut st)?; // flush the activate request
     Ok(())
@@ -1099,6 +1327,30 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for State {
     }
 }
 
+impl State {
+    /// The `Output` for `wl_output`, created (with neutral geometry) on first sight
+    /// so `geometry`/`mode`/`scale` can land before `name`.
+    fn output_entry(&mut self, output: &WlOutput) -> &mut Output {
+        if let Some(i) = self.outputs.iter().position(|o| &o.wl_output == output) {
+            return &mut self.outputs[i];
+        }
+        self.outputs.push(Output {
+            wl_output: output.clone(),
+            name: String::new(),
+            logical_x: 0,
+            logical_y: 0,
+            logical_w: 0,
+            logical_h: 0,
+            phys_width: 0,
+            phys_height: 0,
+            scale: 1,
+            transform: Transform::Normal,
+            have_xdg: false,
+        });
+        self.outputs.last_mut().unwrap()
+    }
+}
+
 impl Dispatch<WlOutput, ()> for State {
     fn event(
         state: &mut Self,
@@ -1109,15 +1361,69 @@ impl Dispatch<WlOutput, ()> for State {
         _: &QueueHandle<Self>,
     ) {
         use wayland_client::protocol::wl_output::Event;
-        if let Event::Name { name } = event {
-            if let Some(o) = state.outputs.iter_mut().find(|o| &o.wl_output == output) {
-                o.name = name;
-            } else {
-                state.outputs.push(Output {
-                    wl_output: output.clone(),
-                    name,
-                });
+        match event {
+            Event::Geometry {
+                x, y, transform, ..
+            } => {
+                let o = state.output_entry(output);
+                o.transform = transform.into_result().unwrap_or(Transform::Normal);
+                // wl_output position is only a fallback; xdg-output is authoritative.
+                if !o.have_xdg {
+                    o.logical_x = x;
+                    o.logical_y = y;
+                }
             }
+            // Keep only the active mode's resolution (physical pixels).
+            Event::Mode {
+                flags,
+                width,
+                height,
+                ..
+            } => {
+                if flags
+                    .into_result()
+                    .is_ok_and(|f| f.contains(wl_output::Mode::Current))
+                {
+                    let o = state.output_entry(output);
+                    o.phys_width = width;
+                    o.phys_height = height;
+                }
+            }
+            Event::Scale { factor } => {
+                state.output_entry(output).scale = factor.max(1);
+            }
+            Event::Name { name } => {
+                state.output_entry(output).name = name;
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch<ZxdgOutputV1, WlOutput> for State {
+    fn event(
+        state: &mut Self,
+        _: &ZxdgOutputV1,
+        event: <ZxdgOutputV1 as Proxy>::Event,
+        wl_output: &WlOutput,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        use zxdg_output_v1::Event;
+        match event {
+            Event::LogicalPosition { x, y } => {
+                let o = state.output_entry(wl_output);
+                o.logical_x = x;
+                o.logical_y = y;
+                o.have_xdg = true;
+            }
+            Event::LogicalSize { width, height } => {
+                let o = state.output_entry(wl_output);
+                o.logical_w = width;
+                o.logical_h = height;
+                o.have_xdg = true;
+            }
+            _ => {}
         }
     }
 }
@@ -1231,9 +1537,128 @@ mod tests {
         // A format we don't decode should be reported, not silently mishandled.
         assert!(PixelLayout::of(Format::C8).is_none());
     }
+
+    #[test]
+    fn region_intersect() {
+        let a = Region {
+            x: 0,
+            y: 0,
+            w: 10,
+            h: 10,
+        };
+        let b = Region {
+            x: 5,
+            y: 5,
+            w: 10,
+            h: 10,
+        };
+        assert_eq!(
+            a.intersect(&b),
+            Some(Region {
+                x: 5,
+                y: 5,
+                w: 5,
+                h: 5
+            })
+        );
+        // Negative origin (selection partly off the image) clamps correctly.
+        let c = Region {
+            x: -3,
+            y: -3,
+            w: 6,
+            h: 6,
+        };
+        assert_eq!(
+            a.intersect(&c),
+            Some(Region {
+                x: 0,
+                y: 0,
+                w: 3,
+                h: 3
+            })
+        );
+        // Disjoint → None.
+        let d = Region {
+            x: 100,
+            y: 100,
+            w: 1,
+            h: 1,
+        };
+        assert_eq!(a.intersect(&d), None);
+    }
+
+    /// A 2×2 RGBA image: four distinct pixels, to verify pixel/crop addressing.
+    fn img_2x2() -> CapturedImage {
+        CapturedImage {
+            width: 2,
+            height: 2,
+            rgba: vec![
+                1, 1, 1, 255, 2, 2, 2, 255, // row 0: (0,0)=1, (1,0)=2
+                3, 3, 3, 255, 4, 4, 4, 255, // row 1: (0,1)=3, (1,1)=4
+            ],
+        }
+    }
+
+    #[test]
+    fn captured_pixel_and_crop() {
+        let img = img_2x2();
+        assert_eq!(img.pixel(0, 0), Some([1, 1, 1, 255]));
+        assert_eq!(img.pixel(1, 1), Some([4, 4, 4, 255]));
+        assert_eq!(img.pixel(2, 0), None); // out of bounds
+
+        // Crop the bottom-right 1×1 pixel.
+        let c = img.crop(Region {
+            x: 1,
+            y: 1,
+            w: 1,
+            h: 1,
+        });
+        assert_eq!((c.width, c.height), (1, 1));
+        assert_eq!(c.rgba, vec![4, 4, 4, 255]);
+
+        // Crop overrunning the bounds clamps to the overlap.
+        let c2 = img.crop(Region {
+            x: 1,
+            y: 0,
+            w: 5,
+            h: 5,
+        });
+        assert_eq!((c2.width, c2.height), (1, 2));
+        assert_eq!(c2.rgba, vec![2, 2, 2, 255, 4, 4, 4, 255]);
+    }
+
+    #[test]
+    fn captured_blit_into() {
+        // Blit the 2×2 image into a 3×2 black canvas at x=1, clipping the overflow.
+        let img = img_2x2();
+        let (dw, dh) = (3u32, 2u32);
+        let mut dst = vec![0u8; (dw * dh * 4) as usize];
+        img.blit_into(&mut dst, dw, dh, 1, 0);
+        // Column 0 stays black; columns 1..3 get the image's two columns.
+        assert_eq!(&dst[0..4], &[0, 0, 0, 0]); // (0,0)
+        assert_eq!(&dst[4..8], &[1, 1, 1, 255]); // (1,0) = img (0,0)
+        assert_eq!(&dst[8..12], &[2, 2, 2, 255]); // (2,0) = img (1,0)
+        assert_eq!(&dst[12..16], &[0, 0, 0, 0]); // (0,1)
+        assert_eq!(&dst[16..20], &[3, 3, 3, 255]); // (1,1) = img (0,1)
+    }
+
+    #[test]
+    fn output_logical_dims_transform() {
+        // 4K at scale 2 → 1920×1080 logical.
+        assert_eq!(logical_dims(3840, 2160, 2, Transform::Normal), (1920, 1080));
+        // 90°/270° swap width and height.
+        assert_eq!(logical_dims(3840, 2160, 2, Transform::_90), (1080, 1920));
+        assert_eq!(
+            logical_dims(3840, 2160, 2, Transform::Flipped270),
+            (1080, 1920)
+        );
+        // 180° keeps orientation; scale 0 is treated as 1.
+        assert_eq!(logical_dims(1000, 500, 0, Transform::_180), (1000, 500));
+    }
 }
 
 // Objects whose events we don't need.
+delegate_noop!(State: ignore ZxdgOutputManagerV1);
 delegate_noop!(State: ignore WlShm);
 delegate_noop!(State: ignore WlShmPool);
 delegate_noop!(State: ignore WlBuffer);

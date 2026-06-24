@@ -1,0 +1,240 @@
+//! High-level capture: resolve a *source* (output, window, logical region) to a
+//! ready-to-use [`CapturedImage`], compositing across outputs when a region spans
+//! several (possibly mixed-scale) monitors.
+//!
+//! This sits above the [`wl`](crate::wl) engine and is shared by the capture tools
+//! (`wlr-shot` screenshots, `wlr-peek` colour/OCR). It is gated behind the `compose`
+//! feature because the multi-output path resamples with `image`; a headless recorder
+//! that only streams frames through [`sink`](crate::sink) doesn't pull it in.
+
+use crate::wl::{CapturedImage, Client, Frame, Output, Region};
+use anyhow::{Context, Result, bail};
+use std::time::Duration;
+
+/// Default time to wait for a one-shot frame from a source.
+pub const DEFAULT_BUDGET: Duration = Duration::from_secs(2);
+
+/// Extract CPU pixels from a one-shot frame. shm frames are already CPU pixels;
+/// dma-buf frames (only produced by the `gpu` build) are read back via an offscreen
+/// GL context. The readback context is built per call — fine for a one-shot tool;
+/// a streaming consumer would reuse one (see [`sink::pump`](crate::sink::pump)).
+pub fn frame_to_image(frame: Frame) -> Result<CapturedImage> {
+    match frame {
+        Frame::Shm(img) => Ok(img),
+        Frame::Dmabuf(d) => crate::gl::GpuReadback::new()
+            .and_then(|mut rb| rb.readback(d))
+            .context("readback GPU de la frame dma-buf"),
+    }
+}
+
+/// Capture a whole output: the named one, or the sole output if unnamed.
+pub fn capture_output(
+    client: &mut Client,
+    name: Option<&str>,
+    budget: Duration,
+) -> Result<CapturedImage> {
+    let outputs = client.outputs().to_vec();
+    let output = match name {
+        Some(n) => outputs
+            .iter()
+            .find(|o| o.name == n)
+            .with_context(|| format!("output '{n}' not found"))?,
+        None => match outputs.as_slice() {
+            [single] => single,
+            [] => bail!("no outputs available"),
+            many => {
+                let names: Vec<&str> = many.iter().map(|o| o.name.as_str()).collect();
+                bail!(
+                    "multiple outputs; specify -o NAME among: {}",
+                    names.join(", ")
+                );
+            }
+        },
+    };
+    frame_to_image(client.capture_output_once(output, budget)?)
+}
+
+/// Capture a window by its foreign-toplevel identifier.
+pub fn capture_window(client: &mut Client, id: &str, budget: Duration) -> Result<CapturedImage> {
+    let tl = client
+        .toplevels()
+        .iter()
+        .find(|t| t.identifier == id)
+        .cloned()
+        .with_context(|| format!("window '{id}' not found"))?;
+    frame_to_image(client.capture_toplevel_once(&tl, budget)?)
+}
+
+/// A captured output paired with its geometry, for compositing a region.
+pub struct OutputCapture {
+    pub output: Output,
+    pub image: CapturedImage,
+}
+
+/// Capture every output once — used as the interactive overlay's frozen backdrop,
+/// and then to composite the chosen region from the very same pixels.
+pub fn capture_all(client: &mut Client, budget: Duration) -> Result<Vec<OutputCapture>> {
+    let outputs = client.outputs().to_vec();
+    if outputs.is_empty() {
+        bail!("no outputs available");
+    }
+    let mut caps = Vec::with_capacity(outputs.len());
+    for output in outputs {
+        let image = frame_to_image(client.capture_output_once(&output, budget)?)?;
+        caps.push(OutputCapture { output, image });
+    }
+    Ok(caps)
+}
+
+/// Composite `region` from already-captured outputs. A region within a single
+/// output is returned at that output's native pixel resolution; a region spanning
+/// several (possibly mixed-scale) outputs is composited at logical resolution.
+pub fn composite(caps: &[OutputCapture], region: Region) -> Result<CapturedImage> {
+    if region.is_empty() {
+        bail!("empty region");
+    }
+    let covering: Vec<&OutputCapture> = caps
+        .iter()
+        .filter(|c| region.intersect(&c.output.logical_rect()).is_some())
+        .collect();
+
+    match covering.as_slice() {
+        [] => bail!("region covers no output"),
+        // Fast path: a single output → crop its native capture, no resampling.
+        [c] => {
+            let inter = region.intersect(&c.output.logical_rect()).unwrap();
+            Ok(c.image.crop(logical_to_physical(&c.output, inter)))
+        }
+        // Multi-output: composite at logical resolution.
+        many => {
+            let (dw, dh) = (region.w, region.h);
+            let mut dst = vec![0u8; (dw as usize) * (dh as usize) * 4];
+            for c in many {
+                let inter = region.intersect(&c.output.logical_rect()).unwrap();
+                let phys = logical_to_physical(&c.output, inter);
+                let logical = resize(c.image.crop(phys), inter.w, inter.h);
+                logical.blit_into(&mut dst, dw, dh, inter.x - region.x, inter.y - region.y);
+            }
+            Ok(CapturedImage {
+                width: dw,
+                height: dh,
+                rgba: dst,
+            })
+        }
+    }
+}
+
+/// Capture a logical region live (capture only the outputs it covers, then
+/// composite).
+pub fn capture_region(
+    client: &mut Client,
+    region: Region,
+    budget: Duration,
+) -> Result<CapturedImage> {
+    if region.is_empty() {
+        bail!("empty region");
+    }
+    let outputs: Vec<Output> = client
+        .outputs()
+        .iter()
+        .filter(|o| region.intersect(&o.logical_rect()).is_some())
+        .cloned()
+        .collect();
+    if outputs.is_empty() {
+        bail!("region covers no output");
+    }
+    let mut caps = Vec::with_capacity(outputs.len());
+    for output in outputs {
+        let image = frame_to_image(client.capture_output_once(&output, budget)?)?;
+        caps.push(OutputCapture { output, image });
+    }
+    composite(&caps, region)
+}
+
+/// The bounding box of every output, in logical coordinates (the whole desktop).
+pub fn whole_layout(client: &Client) -> Result<Region> {
+    let mut it = client.outputs().iter().map(Output::logical_rect);
+    let first = it.next().context("no outputs available")?;
+    let (mut x0, mut y0) = (first.x, first.y);
+    let (mut x1, mut y1) = (first.x + first.w as i32, first.y + first.h as i32);
+    for r in it {
+        x0 = x0.min(r.x);
+        y0 = y0.min(r.y);
+        x1 = x1.max(r.x + r.w as i32);
+        y1 = y1.max(r.y + r.h as i32);
+    }
+    Ok(Region {
+        x: x0,
+        y: y0,
+        w: (x1 - x0) as u32,
+        h: (y1 - y0) as u32,
+    })
+}
+
+/// Map a logical sub-rectangle of `output` to physical pixels within its capture
+/// (handles fractional scale via the physical/logical ratio).
+pub fn logical_to_physical(output: &Output, logical: Region) -> Region {
+    let (lw, lh) = output.logical_size();
+    let sx = output.phys_width as f64 / lw.max(1) as f64;
+    let sy = output.phys_height as f64 / lh.max(1) as f64;
+    let lr = output.logical_rect();
+    Region {
+        x: (((logical.x - lr.x) as f64) * sx).round() as i32,
+        y: (((logical.y - lr.y) as f64) * sy).round() as i32,
+        w: ((logical.w as f64) * sx).round() as u32,
+        h: ((logical.h as f64) * sy).round() as u32,
+    }
+}
+
+/// Resize a capture to `nw × nh` (Triangle filter); identity if already that size.
+pub fn resize(img: CapturedImage, nw: u32, nh: u32) -> CapturedImage {
+    if (img.width, img.height) == (nw, nh) || nw == 0 || nh == 0 {
+        return img;
+    }
+    let Some(buf) = image::RgbaImage::from_raw(img.width, img.height, img.rgba) else {
+        return CapturedImage {
+            width: 0,
+            height: 0,
+            rgba: Vec::new(),
+        };
+    };
+    let small = image::imageops::resize(&buf, nw, nh, image::imageops::FilterType::Triangle);
+    CapturedImage {
+        width: small.width(),
+        height: small.height(),
+        rgba: small.into_raw(),
+    }
+}
+
+/// Parse a slurp-style geometry: `"X,Y WxH"` (X/Y may be negative).
+pub fn parse_geometry(s: &str) -> Result<Region> {
+    let err = || anyhow::anyhow!("invalid geometry '{s}' (expected 'X,Y WxH')");
+    let (pos, size) = s.trim().split_once(' ').ok_or_else(err)?;
+    let (x, y) = pos.split_once(',').ok_or_else(err)?;
+    let (w, h) = size.split_once(['x', 'X', '×']).ok_or_else(err)?;
+    Ok(Region {
+        x: x.trim().parse().map_err(|_| err())?,
+        y: y.trim().parse().map_err(|_| err())?,
+        w: w.trim().parse().map_err(|_| err())?,
+        h: h.trim().parse().map_err(|_| err())?,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_geometry_ok() {
+        let r = parse_geometry("10,20 300x400").unwrap();
+        assert_eq!((r.x, r.y, r.w, r.h), (10, 20, 300, 400));
+        let r = parse_geometry("-5,-6 7x8").unwrap();
+        assert_eq!((r.x, r.y, r.w, r.h), (-5, -6, 7, 8));
+    }
+
+    #[test]
+    fn parse_geometry_bad() {
+        assert!(parse_geometry("nonsense").is_err());
+        assert!(parse_geometry("1,2 3").is_err());
+    }
+}

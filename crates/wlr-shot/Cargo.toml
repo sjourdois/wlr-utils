@@ -1,0 +1,61 @@
+[package]
+name = "wlr-shot"
+description = "Screen capture for wlroots: screenshots, recording and timelapse (H.264, NVENC/VAAPI)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+keywords = ["wayland", "wlroots", "screenshot", "screencapture", "sway"]
+categories = ["command-line-utilities", "multimedia"]
+
+[[bin]]
+name = "wlr-shot"
+path = "src/main.rs"
+
+[features]
+default = ["i18n", "video"]
+# Localised UI (the overlay hint) via Fluent. On by default; `--no-default-features`
+# builds English-only with no Fluent dependency.
+i18n = ["wlr-capture/i18n"]
+# Off by default: screenshots only need CPU pixels (shm), so the shipped binary
+# avoids gbm / libgbm-dev. Enabling it builds the engine's zero-copy dma-buf capture
+# and reads frames back to CPU via `render::GpuReadback` before encoding.
+gpu = ["wlr-capture/gpu"]
+# The `record` subcommand: encode a capture stream to a video file (NVENC / VAAPI /
+# libx264) via the engine's `video` sink. On by default — disable it
+# (`--no-default-features --features i18n`) for a screenshots-only build with no
+# FFmpeg/libav* build dependency.
+video = ["wlr-capture/video", "dep:ctrlc"]
+
+[dependencies]
+# Screenshots only need CPU pixels, so we build the engine without the GPU path
+# (no gbm) by default. The shm capture yields a ready-to-encode RGBA `CapturedImage`;
+# the optional `gpu` feature adds the dma-buf path + readback.
+# `overlay` (the frozen region selector) pulls the egui/EGL toolkit + `compose`
+# (source→image); `focus` adds active-window / current-output via compositor IPC.
+wlr-capture = { path = "../wlr-capture", version = "1.2.0", default-features = false, features = ["overlay", "focus"] }
+anyhow.workspace = true
+clap.workspace = true
+# png comes from the workspace base; add jpeg + pnm (PPM) for `--type`.
+image = { workspace = true, features = ["jpeg", "pnm"] }
+# SIGINT handling for `record` (the `video` feature).
+ctrlc = { workspace = true, optional = true }
+
+[package.metadata.deb]
+maintainer = "Stéphane Jourdois <stephane@jourdois.fr>"
+section = "utils"
+priority = "optional"
+license-file = ["../../LICENSE-MIT", "0"]
+depends = "$auto, libegl1"
+extended-description = """\
+A screen capture tool for wlroots compositors built on the shared wlr-capture \
+engine: screenshots of an output, a region or a window, plus H.264 recording and \
+timelapse (hardware NVENC/VAAPI, software libx264 fallback)."""
+assets = [
+    ["../../target/release/wlr-shot", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/wlr-shot/README.md", "644"],
+]

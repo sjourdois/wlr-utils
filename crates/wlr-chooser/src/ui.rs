@@ -49,6 +49,31 @@ pub enum Mode {
     Outputs,
 }
 
+/// How the overlay presents its sources.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum View {
+    /// Centred rofi-like card with tabs + search (portal picker).
+    #[default]
+    Card,
+    /// macOS-style single horizontal row of tiles (Alt-Tab).
+    Strip,
+    /// Full-screen mission-control exposé grid.
+    Grid,
+}
+
+/// Which tiles show a *live* capture in the Alt-Tab strip (vs. just the app
+/// icon). Live capture is the project's differentiator; `all` is the default.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum Live {
+    /// App icons only (lightest; closest to a plain macOS Cmd-Tab).
+    None,
+    /// Only the highlighted window shows a live preview; others show their icon.
+    Current,
+    /// Every window shows its live preview (default).
+    #[default]
+    All,
+}
+
 /// One pickable source, as shown in the grid.
 #[derive(Clone)]
 pub struct Source {
@@ -243,7 +268,9 @@ pub fn capture_thread(tx: Sender<Msg>) {
             if let Capturable::Window(w) = cap {
                 if iconed.insert(s.key.clone()) {
                     if let Some(path) = icons::resolve(&w.app_id) {
-                        if let Some((iw, ih, rgba)) = icons::load(&path, 32) {
+                        // Loaded large so the macOS-style Alt-Tab strip stays crisp;
+                        // smaller tile/exposé uses just downscale it.
+                        if let Some((iw, ih, rgba)) = icons::load(&path, 128) {
                             if tx
                                 .send(Msg::Icon {
                                     key: s.key.clone(),
@@ -319,7 +346,7 @@ pub fn bench_capture(secs: u64) {
     let mut client = match wl::Client::connect() {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("bench: connexion échouée: {e:#}");
+            eprintln!("bench: connection failed: {e:#}");
             return;
         }
     };
@@ -330,7 +357,7 @@ pub fn bench_capture(secs: u64) {
 
     let _ = client.refresh();
     eprintln!(
-        "bench: {} sortie(s), {} fenêtre(s) ; capture pendant {secs}s…",
+        "bench: {} output(s), {} window(s); capturing for {secs}s…",
         client.outputs().len(),
         client.toplevels().len()
     );
@@ -387,7 +414,7 @@ pub fn bench_capture(secs: u64) {
         }
         for id in failed {
             if let Some(key) = by_id.remove(&id) {
-                eprintln!("bench: session arrêtée {key}");
+                eprintln!("bench: session stopped {key}");
                 sessions.remove(&key);
             }
             client.close_session(&id);
@@ -395,12 +422,12 @@ pub fn bench_capture(secs: u64) {
         rounds += 1;
     }
 
-    eprintln!("bench: {rounds} round(s) en {secs}s");
+    eprintln!("bench: {rounds} round(s) in {secs}s");
     let mut keys: Vec<_> = stats.keys().cloned().collect();
     keys.sort();
     for k in keys {
         let (frames, changed, _) = stats[&k];
-        eprintln!("  {k}: {frames} frames, {changed} changées");
+        eprintln!("  {k}: {frames} frames, {changed} changed");
     }
 }
 
@@ -467,6 +494,21 @@ fn thumbnail(img: wl::CapturedImage) -> (usize, usize, Vec<u8>) {
     )
 }
 
+/// How the picker presents and behaves, as resolved from the CLI.
+pub struct Options {
+    pub mode: Mode,
+    pub show_system: bool,
+    /// Fixed grid size (columns, rows), or `None` for an auto-fitting grid.
+    pub grid: Option<(u32, u32)>,
+    /// How sources are presented (card / strip / grid).
+    pub view: View,
+    /// Hold-to-switch: confirm and close when the held launch modifier (Alt/Super)
+    /// is released. Default on for the switcher, off for the portal picker.
+    pub hold: bool,
+    /// Which Alt-Tab tiles show a live preview (vs. just the icon).
+    pub live: Live,
+}
+
 pub struct App {
     rx: Receiver<Msg>,
     sources: Vec<Source>,
@@ -480,12 +522,23 @@ pub struct App {
     show_system: bool,
     /// Fixed grid size (columns, rows), or `None` for an auto-fitting grid.
     grid: Option<(u32, u32)>,
-    /// Exposé: full-screen mission-control layout instead of the centred card.
-    expose: bool,
+    /// How sources are presented (card / strip / grid).
+    view: View,
     /// Time (egui seconds) of the first exposé frame, to anchor the intro animation.
     expose_t0: Option<f32>,
     /// Selected index into the *visible* list, for keyboard navigation.
     selected: usize,
+    /// Hold-to-switch: release of the launch modifier confirms (host-driven).
+    hold: bool,
+    /// Which Alt-Tab tiles show a live preview (vs. just the icon).
+    live: Live,
+    /// Set once the host confirms Alt was held at startup; enables Tab-cycle and
+    /// confirm-on-Alt-release. Stays false (classic picker) if Alt is never seen.
+    armed: bool,
+    /// On the first armed frame with sources present, jump the selection to the
+    /// next window (index 1) so releasing Alt immediately switches — like a real
+    /// Alt-Tab where the launching Tab already advanced once.
+    pending_initial_select: bool,
     /// Focus the filter field on the first frame.
     focus_filter: bool,
     /// Set once a choice is made or the picker is cancelled; the host loop exits.
@@ -495,15 +548,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(
-        rx: Receiver<Msg>,
-        out: Outcome,
-        mode: Mode,
-        show_system: bool,
-        grid: Option<(u32, u32)>,
-        expose: bool,
-        theme: Theme,
-    ) -> Self {
+    pub fn new(rx: Receiver<Msg>, out: Outcome, opts: Options, theme: Theme) -> Self {
         Self {
             rx,
             sources: Vec::new(),
@@ -511,12 +556,16 @@ impl App {
             native: HashMap::new(),
             icons: HashMap::new(),
             filter: String::new(),
-            mode,
-            show_system,
-            grid,
-            expose,
+            mode: opts.mode,
+            show_system: opts.show_system,
+            grid: opts.grid,
+            view: opts.view,
             expose_t0: None,
             selected: 0,
+            hold: opts.hold,
+            live: opts.live,
+            armed: false,
+            pending_initial_select: false,
             focus_filter: true,
             closing: false,
             out,
@@ -532,6 +581,50 @@ impl App {
     /// Cancel without a selection (e.g. the compositor closed the surface).
     pub fn cancel(&mut self) {
         self.closing = true;
+    }
+
+    /// Whether hold-to-switch is on; the host uses this to decide whether to watch
+    /// the launch modifier (Alt/Super) and confirm on its release.
+    pub fn hold(&self) -> bool {
+        self.hold
+    }
+
+    /// The host detected the launch modifier held at startup: enable Tab-cycle and
+    /// confirm-on-release, and arm the initial MRU-ish jump.
+    pub fn arm(&mut self) {
+        if !self.armed {
+            self.armed = true;
+            self.pending_initial_select = true;
+        }
+    }
+
+    /// Advance (or retreat) the highlighted source — Tab / Shift+Tab.
+    pub fn cycle(&mut self, forward: bool) {
+        let n = self.visible().len();
+        if n == 0 {
+            return; // nothing to cycle yet; keep the pending initial jump
+        }
+        // The initial MRU jump (if still pending) represents the launching chord;
+        // a real Tab press supersedes it.
+        self.pending_initial_select = false;
+        self.selected = if forward {
+            (self.selected + 1) % n
+        } else {
+            (self.selected + n - 1) % n
+        };
+    }
+
+    /// The held launch modifier was released: confirm the highlighted source and
+    /// quit. No-op if a choice was already made or the picker is closing.
+    pub fn confirm_release(&mut self) {
+        if self.closing {
+            return;
+        }
+        if let Some(sel) = self.visible().get(self.selected).map(|s| s.selection()) {
+            self.choose(sel);
+        } else {
+            self.closing = true;
+        }
     }
 
     /// Install the palette into an egui context (host loops own the context).
@@ -620,7 +713,7 @@ impl App {
         let mut c = self.theme.backdrop.to_normalized_gamma_f32();
         // Exposé covers the whole screen: dim almost to opaque so the real windows
         // behind are hidden (a client can't move them; this hides them instead).
-        if self.expose {
+        if self.view == View::Grid {
             c[3] = c[3].max(0.96);
         }
         c
@@ -633,13 +726,32 @@ impl App {
         self.pump(ctx, importer);
         ctx.request_repaint(); // keep draining the channel while captures stream in
 
+        // Alt-Tab: once sources exist, jump to the next window so releasing Alt
+        // switches immediately (the launching chord counts as the first Tab).
+        if self.pending_initial_select {
+            let n = self.visible().len();
+            if n > 0 {
+                self.selected = if n > 1 { 1 } else { 0 };
+                self.pending_initial_select = false;
+            }
+        }
+
         // Keyboard (read states first; don't call ctx methods inside ctx.input).
         let vis_len = self.visible().len();
+        // In the views with no search field (exposé grid, Alt-Tab strip), Tab /
+        // Shift+Tab also navigate — even when not armed (e.g. `$mod+Tab` exposé).
+        // When armed, the host intercepts Tab before egui, so this never collides.
+        let switch_nav = matches!(self.view, View::Strip | View::Grid);
         let (esc, next, prev, enter) = ctx.input(|i| {
+            let tab = switch_nav && i.key_pressed(egui::Key::Tab);
             (
                 i.key_pressed(egui::Key::Escape),
-                i.key_pressed(egui::Key::ArrowRight) || i.key_pressed(egui::Key::ArrowDown),
-                i.key_pressed(egui::Key::ArrowLeft) || i.key_pressed(egui::Key::ArrowUp),
+                i.key_pressed(egui::Key::ArrowRight)
+                    || i.key_pressed(egui::Key::ArrowDown)
+                    || (tab && !i.modifiers.shift),
+                i.key_pressed(egui::Key::ArrowLeft)
+                    || i.key_pressed(egui::Key::ArrowUp)
+                    || (tab && i.modifiers.shift),
                 i.key_pressed(egui::Key::Enter),
             )
         });
@@ -660,14 +772,22 @@ impl App {
             }
         }
 
-        let mut chosen: Option<Selection> = None;
-        if self.expose {
-            chosen = self.render_expose(ctx);
-            if let Some(sel) = chosen {
-                self.choose(sel);
+        match self.view {
+            View::Grid => {
+                if let Some(sel) = self.render_expose(ctx) {
+                    self.choose(sel);
+                }
+                return;
             }
-            return;
+            View::Strip => {
+                if let Some(sel) = self.render_switcher(ctx) {
+                    self.choose(sel);
+                }
+                return;
+            }
+            View::Card => {}
         }
+        let mut chosen: Option<Selection> = None;
 
         // A centred card on the dimmed overlay backdrop. Its size is either fixed
         // to show exactly `grid` tiles, or a sensible default. Clicking the
@@ -929,9 +1049,15 @@ impl App {
                     let s = vis[*i];
                     let resp =
                         ui.interact(*rect, ui.id().with(("expose", *i)), egui::Sense::click());
-                    // Per-tile ease-out, slightly delayed by index.
-                    let lt = ((elapsed - *i as f32 * 0.012) / ANIM).clamp(0.0, 1.0);
-                    let ease = 1.0 - (1.0 - lt).powi(3);
+                    // Per-tile ease-out, slightly delayed by index. Alt-Tab skips
+                    // the intro entirely — every millisecond to first usable frame
+                    // counts, so tiles appear at full size immediately.
+                    let ease = if self.armed {
+                        1.0
+                    } else {
+                        let lt = ((elapsed - *i as f32 * 0.012) / ANIM).clamp(0.0, 1.0);
+                        1.0 - (1.0 - lt).powi(3)
+                    };
                     let scaled = egui::Rect::from_center_size(
                         rect.center(),
                         rect.size() * (0.86 + 0.14 * ease),
@@ -1065,6 +1191,167 @@ impl App {
             egui::Stroke::new(sw, fade(col)),
             egui::StrokeKind::Inside,
         );
+    }
+}
+
+impl App {
+    /// macOS-style Alt-Tab: a single horizontal row of tiles on a centred rounded
+    /// panel, the highlighted window's name above it. Each tile shows a live
+    /// preview (per `--live`) with an app-icon badge, or just the big app icon.
+    /// Returns the picked source, if any. Used for `--alt-tab` (compact); the
+    /// full-screen exposé is a separate path.
+    fn render_switcher(&mut self, ctx: &egui::Context) -> Option<Selection> {
+        let vis = self.visible();
+        let n = vis.len();
+        let screen = ctx.screen_rect();
+        if n == 0 {
+            return None;
+        }
+        let sel = self.selected.min(n - 1);
+
+        // Geometry: shrink the icon until the single row fits the screen width.
+        let gap = 14.0;
+        let pad = 12.0; // inside each cell, around the icon
+        let margin = 22.0; // panel padding
+        let label_h = 30.0;
+        let max_panel_w = screen.width() * 0.92;
+        let cell = |ic: f32| ic + 2.0 * pad;
+        let needed = |ic: f32| n as f32 * cell(ic) + (n as f32 - 1.0) * gap + 2.0 * margin;
+        let mut icon = 96.0_f32;
+        while icon > 44.0 && needed(icon) > max_panel_w {
+            icon -= 4.0;
+        }
+        let cw = cell(icon);
+        let row_w = n as f32 * cw + (n as f32 - 1.0) * gap;
+        let panel_w = (row_w + 2.0 * margin).min(max_panel_w);
+        let panel_h = 2.0 * margin + label_h + cw;
+        let panel = egui::Rect::from_center_size(screen.center(), egui::vec2(panel_w, panel_h));
+        let row_y = panel.top() + margin + label_h;
+        let row_left = panel.center().x - row_w / 2.0;
+
+        let mut chosen = None;
+        let mut hovered = None;
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE)
+            .show(ctx, |ui| {
+                ui.painter().rect_filled(panel, 16.0, self.theme.card);
+
+                // Highlighted window's name, centred above the row.
+                let label = vis
+                    .get(sel)
+                    .map(|s| {
+                        if s.subtitle.is_empty() {
+                            s.title.clone()
+                        } else {
+                            format!("{} — {}", s.title, s.subtitle)
+                        }
+                    })
+                    .unwrap_or_default();
+                ui.painter().text(
+                    egui::pos2(panel.center().x, panel.top() + margin + label_h / 2.0),
+                    egui::Align2::CENTER_CENTER,
+                    label,
+                    egui::FontId::proportional(16.0),
+                    self.theme.text,
+                );
+
+                for (i, s) in vis.iter().enumerate() {
+                    let x = row_left + i as f32 * (cw + gap);
+                    let cell_rect =
+                        egui::Rect::from_min_size(egui::pos2(x, row_y), egui::vec2(cw, cw));
+                    let resp =
+                        ui.interact(cell_rect, ui.id().with(("switch", i)), egui::Sense::click());
+                    if resp.hovered() {
+                        hovered = Some(i);
+                    }
+                    if i == sel {
+                        ui.painter()
+                            .rect_filled(cell_rect, 12.0, self.theme.tile_selected);
+                    } else if resp.hovered() {
+                        ui.painter()
+                            .rect_filled(cell_rect, 12.0, self.theme.tile_hover);
+                    }
+                    let inner =
+                        egui::Rect::from_center_size(cell_rect.center(), egui::vec2(icon, icon));
+                    let live = match self.live {
+                        Live::None => false,
+                        Live::All => true,
+                        Live::Current => i == sel,
+                    };
+                    self.paint_switch_cell(ui, s, inner, live);
+                    if resp.clicked() {
+                        chosen = Some(s.selection());
+                    }
+                }
+            });
+
+        // A press outside the panel cancels.
+        let pressed_outside = ctx.input(|inp| {
+            inp.pointer.any_pressed()
+                && inp
+                    .pointer
+                    .interact_pos()
+                    .is_some_and(|pos| !panel.contains(pos))
+        });
+        if pressed_outside {
+            self.closing = true;
+        }
+        if let Some(i) = hovered {
+            self.selected = i;
+        }
+        chosen
+    }
+
+    /// Draw one Alt-Tab tile's content: a live preview (when `live` and a frame is
+    /// available) with an app-icon badge so the app stays identifiable, otherwise
+    /// the big app icon.
+    fn paint_switch_cell(&self, ui: &egui::Ui, s: &Source, rect: egui::Rect, live: bool) {
+        let full = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+        if live {
+            if let Some((tex, ts)) = self.thumb_tex(&s.key) {
+                let p = ui.painter();
+                p.rect_filled(rect, 6.0, self.theme.thumb); // backdrop for letterboxing
+                let scale = (rect.width() / ts.x).min(rect.height() / ts.y);
+                let d = egui::Rect::from_center_size(rect.center(), ts * scale);
+                p.image(tex, d, full, egui::Color32::WHITE);
+                // App-icon badge, bottom-left, so the window stays identifiable.
+                if let Some(ic) = self.icons.get(&s.key) {
+                    let bsz = (rect.width() * 0.34).clamp(20.0, 48.0);
+                    let brect = egui::Rect::from_min_size(
+                        egui::pos2(rect.left() + 4.0, rect.bottom() - bsz - 4.0),
+                        egui::vec2(bsz, bsz),
+                    );
+                    let isz = ic.size_vec2();
+                    let sc = (brect.width() / isz.x).min(brect.height() / isz.y);
+                    let bd = egui::Rect::from_center_size(brect.center(), isz * sc);
+                    p.image(ic.id(), bd, full, egui::Color32::WHITE);
+                }
+                return;
+            }
+        }
+        // No live preview (mode off, or no frame yet): big centred app icon.
+        self.paint_app_icon(ui, s, rect);
+    }
+
+    /// Draw a source's app icon filling `rect` (contain). Falls back to its live
+    /// thumbnail, then a generic glyph, when no icon resolved.
+    fn paint_app_icon(&self, ui: &egui::Ui, s: &Source, rect: egui::Rect) {
+        let full = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+        let p = ui.painter();
+        if let Some(ic) = self.icons.get(&s.key) {
+            let sz = ic.size_vec2();
+            let scale = (rect.width() / sz.x).min(rect.height() / sz.y);
+            let d = egui::Rect::from_center_size(rect.center(), sz * scale);
+            p.image(ic.id(), d, full, egui::Color32::WHITE);
+        } else if let Some((tex, ts)) = self.thumb_tex(&s.key) {
+            let scale = (rect.width() / ts.x).min(rect.height() / ts.y);
+            let d = egui::Rect::from_center_size(rect.center(), ts * scale);
+            p.image(tex, d, full, egui::Color32::WHITE);
+        } else if s.is_window {
+            draw_window_glyph(p, rect, self.theme.window_accent);
+        } else {
+            draw_monitor_glyph(p, rect, self.theme.screen_accent);
+        }
     }
 }
 
