@@ -223,15 +223,37 @@ impl Canvas {
     }
 }
 
-/// Render the tray icon: a glyph for the current `tool`, in the stroke `color` while
-/// drawing (`active`) or grey when idle, with a 1px black outline for contrast.
+/// Render the tray icon. While drawing (`active`), a glyph for the current `tool` in the
+/// stroke `color`; when idle, a **grey pencil drawing a red scribble** (clearly "annotate
+/// the screen"). A 1px black outline gives contrast on any panel.
 fn draw_icon(active: bool, color: Color, tool: Tool) -> Icon {
     let mut c = Canvas::new();
-    let fg = if active {
-        [255, color[0], color[1], color[2]]
-    } else {
-        [255, 190, 190, 190]
-    };
+    if !active {
+        // Idle: a grey pencil drawing a red scribble — clearly "annotate the screen",
+        // and the red mark stays visible on any panel (plain grey was too faint).
+        let grey = [255, 190, 190, 190];
+        let red = [255, 0xff, 0x3b, 0x30];
+        c.line((15.0, 4.0), (9.0, 12.0), 4.0, grey); // pencil shaft
+        c.line((9.0, 12.0), (6.0, 15.0), 2.5, grey); // sharpened tip
+        let wave = [
+            (6.0, 16.0),
+            (9.0, 19.0),
+            (12.0, 15.0),
+            (15.0, 19.0),
+            (18.0, 16.0),
+        ];
+        for seg in wave.windows(2) {
+            c.line(seg[0], seg[1], 2.0, red); // the red mark it draws
+        }
+        c.outline_black();
+        return Icon {
+            width: ICON,
+            height: ICON,
+            data: c.px,
+        };
+    }
+    // Drawing: a glyph for the current tool, in the stroke colour.
+    let fg = [255, color[0], color[1], color[2]];
     match tool {
         // Pen: a thick diagonal stroke.
         Tool::Pen => c.line((5.0, 16.0), (16.0, 5.0), 3.0, fg),
