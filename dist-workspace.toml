@@ -21,3 +21,20 @@ libfontconfig-dev = '*'
 # Build dep for the default `gpu` feature (dma-buf via gbm); libgbm itself ships
 # with Mesa at runtime and is picked up as an auto runtime dependency.
 libgbm-dev = '*'
+# wlr-shot `video` (FFmpeg) — links the system libav* at build time.
+clang = '*'
+libavcodec-dev = '*'
+libavformat-dev = '*'
+libavutil-dev = '*'
+libavfilter-dev = '*'
+libavdevice-dev = '*'
+libswscale-dev = '*'
+libswresample-dev = '*'
+libva-dev = '*'
+# wlr-shot `audio` — native PipeWire capture.
+libpipewire-0.3-dev = '*'
+# wlr-peek `ocr` — Tesseract/Leptonica.
+libtesseract-dev = '*'
+libleptonica-dev = '*'
+# wlr-draw `tray` — StatusNotifierItem over D-Bus.
+libdbus-1-dev = '*'
