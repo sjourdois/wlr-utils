@@ -541,7 +541,16 @@ pub fn select_region_on(conn: &Connection, captures: &[OutputCapture]) -> Result
 /// position in global logical coordinates, or `None` if cancelled (`Esc`).
 pub fn pick_point(captures: &[OutputCapture]) -> Result<Option<(i32, i32)>> {
     let conn = Connection::connect_to_env()?;
-    Ok(run(&conn, captures, Mode::Point)?.map(|o| match o {
+    pick_point_on(&conn, captures)
+}
+
+/// [`pick_point`] on a caller-provided connection. Establish this connection *before*
+/// capturing: capture may open and drop a transient EGL connection (the GPU readback),
+/// and EGL caches its display by the `wl_display` pointer, so an overlay connection
+/// opened afterwards can alias the freed one and fail (`eglCreateWindowSurface:
+/// BadAlloc`). Creating the overlay connection first keeps its `EGLDisplay` valid.
+pub fn pick_point_on(conn: &Connection, captures: &[OutputCapture]) -> Result<Option<(i32, i32)>> {
+    Ok(run(conn, captures, Mode::Point)?.map(|o| match o {
         Outcome::Point { x, y } => (x, y),
         Outcome::Region(_) => unreachable!("point mode yields a point"),
     }))
@@ -553,7 +562,13 @@ pub fn pick_point(captures: &[OutputCapture]) -> Result<Option<(i32, i32)>> {
 /// would capture its own output.
 pub fn magnify(captures: &[OutputCapture]) -> Result<()> {
     let conn = Connection::connect_to_env()?;
-    run(&conn, captures, Mode::Magnify)?;
+    magnify_on(&conn, captures)
+}
+
+/// [`magnify`] on a caller-provided connection. As with [`pick_point_on`], open this
+/// connection before capturing so the overlay's `EGLDisplay` can't alias a freed one.
+pub fn magnify_on(conn: &Connection, captures: &[OutputCapture]) -> Result<()> {
+    run(conn, captures, Mode::Magnify)?;
     Ok(())
 }
 

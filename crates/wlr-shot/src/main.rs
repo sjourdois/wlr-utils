@@ -130,10 +130,16 @@ fn screenshot(args: ShotArgs) -> Result<()> {
 
     // Resolve the source (the flags form an exclusive group).
     let img = if args.select {
+        // Open the overlay connection BEFORE capturing. Capture can briefly open and
+        // drop a transient EGL connection (the GPU readback); EGL caches its display
+        // by the `wl_display` pointer, so an overlay connection opened afterwards may
+        // alias the freed one and fail with `eglCreateWindowSurface: BadAlloc`. (See
+        // overlay::select_region_on.)
+        let conn = wlr_capture::Connection::connect_to_env()?;
         // Freeze every output, let the user drag a region, then crop from the same
         // frozen pixels (so the shot matches exactly what was on screen).
         let caps = capture::capture_all(&mut client, DEFAULT_BUDGET)?;
-        match overlay::select_region(&caps)? {
+        match overlay::select_region_on(&conn, &caps)? {
             Some(region) => capture::composite(&caps, region)?,
             None => std::process::exit(1), // cancelled
         }
@@ -608,8 +614,10 @@ mod record_impl {
     /// Resolve the CLI source flags (an exclusive group) to a [`Target`].
     fn resolve_target(client: &mut wl::Client, args: &RecordArgs) -> Result<Target> {
         if args.select {
+            // Overlay connection before capture — see `screenshot -s` for why (EGL).
+            let conn = wlr_capture::Connection::connect_to_env()?;
             let caps = capture::capture_all(client, capture::DEFAULT_BUDGET)?;
-            match wlr_capture::overlay::select_region(&caps)? {
+            match wlr_capture::overlay::select_region_on(&conn, &caps)? {
                 Some(region) => region_target(client, region),
                 None => std::process::exit(1), // cancelled
             }

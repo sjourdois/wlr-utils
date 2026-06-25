@@ -103,13 +103,19 @@ fn main() {
 }
 
 fn color(args: ColorArgs) -> Result<()> {
+    // Open the overlay's connection BEFORE capturing. Capture can briefly open and
+    // drop a transient EGL connection (the GPU readback); EGL caches its display by the
+    // `wl_display` pointer, so an overlay connection opened afterwards may alias the
+    // freed one and fail with `eglCreateWindowSurface: BadAlloc`. Establishing the
+    // overlay connection first keeps its `EGLDisplay` valid. (See overlay::pick_point_on.)
+    let conn = wlr_capture::Connection::connect_to_env().context("Wayland connection")?;
     let mut client = wl::Client::connect().context("Wayland connection")?;
     client.refresh().ok();
 
     // Freeze every output, let the user aim and click a pixel on the loupe overlay,
     // then read that pixel back from the very same frozen capture.
     let caps = capture::capture_all(&mut client, DEFAULT_BUDGET)?;
-    let Some((x, y)) = overlay::pick_point(&caps)? else {
+    let Some((x, y)) = overlay::pick_point_on(&conn, &caps)? else {
         std::process::exit(1); // cancelled
     };
 
@@ -129,10 +135,12 @@ fn color(args: ColorArgs) -> Result<()> {
 /// to zoom, Esc to quit). Frozen rather than live: a full-screen live magnifier would
 /// capture its own output. For a live zoom of a fixed region, use `mirror -g`.
 fn loupe() -> Result<()> {
+    // Overlay connection first, then capture — see `color` for why (EGL BadAlloc).
+    let conn = wlr_capture::Connection::connect_to_env().context("Wayland connection")?;
     let mut client = wl::Client::connect().context("Wayland connection")?;
     client.refresh().ok();
     let caps = capture::capture_all(&mut client, DEFAULT_BUDGET)?;
-    overlay::magnify(&caps)
+    overlay::magnify_on(&conn, &caps)
 }
 
 #[derive(Args)]
@@ -150,18 +158,20 @@ struct RegionArgs {
 /// geometry — a native slurp replacement. Exits 1 if cancelled (Esc). Reuses the same
 /// frozen overlay as `wlr-shot -s` and the colour picker.
 fn region(args: RegionArgs) -> Result<()> {
+    // Overlay connection first, then capture — see `color` for why (EGL BadAlloc).
+    let conn = wlr_capture::Connection::connect_to_env().context("Wayland connection")?;
     let mut client = wl::Client::connect().context("Wayland connection")?;
     client.refresh().ok();
     let caps = capture::capture_all(&mut client, DEFAULT_BUDGET)?;
     if args.point {
-        let (x, y) = match overlay::pick_point(&caps)? {
+        let (x, y) = match overlay::pick_point_on(&conn, &caps)? {
             Some(p) => p,
             None => std::process::exit(1),
         };
         let fmt = args.format.as_deref().unwrap_or("%x,%y");
         println!("{}", fill_geometry(fmt, x, y, 0, 0));
     } else {
-        let r = match overlay::select_region(&caps)? {
+        let r = match overlay::select_region_on(&conn, &caps)? {
             Some(r) => r,
             None => std::process::exit(1),
         };
