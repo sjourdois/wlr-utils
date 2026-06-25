@@ -7,10 +7,25 @@ rectangles, ellipses, arrows and text over whatever is on screen, then toggle it
 go back to clicking through to your apps — the annotations stay visible until you clear
 them.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-draw/annotate.gif"
+       alt="wlr-draw annotating a screen with an arrow, a highlight box, a circled line and a text label" width="820">
+</p>
+
+Presenter **spotlight** — hold Shift to dim the screen except a flashlight that
+follows the cursor, or pose a fixed spotlight on a window:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-draw/spotlight.gif"
+       alt="wlr-draw presenter spotlight darkening the screen around a flashlight that follows the cursor" width="820">
+</p>
+
 Part of [wlr-utils](../../README.md); built on the shared `wlr-capture` engine (the
 egui/EGL overlay toolkit). Each surface is a transparent vector layer the compositor
 alpha-blends over the live screen — nothing is captured until you press `Space` to
 freeze-frame, which grabs a still backdrop to annotate.
+
+<p align="center"><sub>📖 See every tool in action on the <a href="https://sjourdois.github.io/wlr-utils/">showcase</a>.</sub></p>
 
 ## How it works
 

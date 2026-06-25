@@ -34,9 +34,9 @@ Repository secrets needed on GitHub:
 3. **AUR** (once an AUR account exists): in `packaging/aur/`, bump `pkgver`, run
    `updpkgsums` to fill the
    `sha256sums`, regenerate `.SRCINFO` (`makepkg --printsrcinfo > .SRCINFO`), and
-   push to the `wlr-chooser` and `wlr-chooser-bin` AUR repositories. The
-   `-bin` package's `package()` paths may need adjusting to match the actual
-   cargo-dist archive layout.
+   push to the `wlr-utils` and `wlr-utils-bin` AUR repositories (both build the
+   whole suite of binaries). The `-bin` package's `package()` paths may need
+   adjusting to match the actual cargo-dist archive layout.
 
 ## Checks before tagging
 

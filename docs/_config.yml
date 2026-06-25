@@ -1,0 +1,13 @@
+# GitHub Pages (Jekyll) config for the wlr-utils showcase.
+# Served from the `main` branch `/docs` folder — Settings ▸ Pages ▸
+# "Deploy from a branch" ▸ main ▸ /docs. No CI needed; GitHub builds the Jekyll
+# site itself.
+title: wlr-utils
+description: >-
+  Capture · switch · inspect · annotate your screen — the native Wayland way.
+theme: jekyll-theme-cayman
+show_downloads: false
+
+# Keep the generator and the raw asset tree out of the built site's noise.
+exclude:
+  - screenshots/overlay.png

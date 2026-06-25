@@ -4,6 +4,21 @@ Inspect the screen on wlroots compositors. The "look at the screen and extract
 something" companion to [`wlr-shot`](../wlr-shot) (which produces image artifacts),
 built on the shared [`wlr-capture`](../wlr-capture) engine.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-peek/color.gif"
+       alt="wlr-peek colour picker: a magnifying loupe and the hex value of the pixel under the crosshair" width="410">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-peek/loupe.gif"
+       alt="wlr-peek loupe: a full-screen magnifier panning and zooming" width="410">
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-peek/mirror.png"
+       alt="wlr-peek mirror: a floating picture-in-picture window zooming a region of the screen" width="410">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-peek/cli.gif"
+       alt="wlr-peek CLI: ocr and watch running against a page on screen" width="410">
+</p>
+
+<p align="center"><sub>📖 See every tool in action on the <a href="https://sjourdois.github.io/wlr-utils/">showcase</a>.</sub></p>
+
 ## Subcommands
 
 ### `color` — colour picker (pipette)

@@ -8,6 +8,13 @@ strides, occlusion-independent).
 > `-g`/slurp), or a window — as a screenshot (PNG/JPEG/PPM) or an H.264 recording /
 > timelapse.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-shot/select.gif"
+       alt="wlr-shot's interactive region selector: dragging a bright rectangle over a dimmed, frozen screen" width="820">
+</p>
+
+<p align="center"><sub>📖 See every tool in action on the <a href="https://sjourdois.github.io/wlr-utils/">showcase</a>.</sub></p>
+
 ## Usage
 
 ```sh

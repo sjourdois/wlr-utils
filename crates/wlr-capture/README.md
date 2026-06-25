@@ -5,8 +5,18 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 The shared engine behind the [wlr-utils](https://github.com/sjourdois/wlr-utils)
-tools (`wlr-chooser`, `wlr-switcher`, `wlr-peek`, `wlr-shot`, `wlr-draw`). The
-reusable bricks plus the overlay UI helpers they share:
+tools (`wlr-chooser`, `wlr-switcher`, `wlr-peek`, `wlr-shot`, `wlr-draw`) — the
+capture + overlay toolkit they all build on:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-switcher/expose.gif" width="32%" alt="wlr-switcher exposé">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-draw/annotate.gif" width="32%" alt="wlr-draw annotation">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-peek/color.gif" width="32%" alt="wlr-peek colour picker">
+</p>
+<p align="center"><sub>See all the tools in action on the
+<a href="https://sjourdois.github.io/wlr-utils/">showcase</a>.</sub></p>
+
+The reusable bricks plus the overlay UI helpers they share:
 
 - **`wl`** — a native Wayland client that enumerates foreign toplevels and outputs
   (`ext-foreign-toplevel-list-v1`) and captures them at full resolution via

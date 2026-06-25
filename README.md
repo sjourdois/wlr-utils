@@ -2,10 +2,14 @@
 
 [![CI](https://github.com/sjourdois/wlr-utils/actions/workflows/ci.yml/badge.svg)](https://github.com/sjourdois/wlr-utils/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+[![Showcase](https://img.shields.io/badge/▶_showcase-sjourdois.github.io%2Fwlr--utils-8aadf4)](https://sjourdois.github.io/wlr-utils/)
 
-A small set of **wlroots** desktop utilities built around one zero-copy GPU
-capture engine: enumerate and capture toplevels/outputs (even occluded or on other
-workspaces), live and near-free.
+### Capture · switch · inspect · annotate your screen — the native Wayland way.
+
+⚡ Zero-copy GPU capture &nbsp;·&nbsp; 👁️ Sees occluded & off-workspace windows
+&nbsp;·&nbsp; 🦀 Rust, no XWayland &nbsp;·&nbsp; 🎨 Themeable &nbsp;·&nbsp; 🌍 13 languages
+
+Five sharp tools for **wlroots** compositors, all sharing one capture engine.
 
 | Tool | What it does | crate |
 | --- | --- | --- |
@@ -20,7 +24,15 @@ They all share **[wlr-capture](crates/wlr-capture)**, a library with the wlroots
 capture engine (`ext-image-copy-capture-v1`, full-resolution dma-buf zero-copy
 with a CPU shm fallback) and an egui/EGL rendering + dma-buf-import toolkit.
 
-![wlr-chooser overlay](docs/screenshots/overlay.png)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-draw/annotate.gif" width="49%" alt="wlr-draw — annotate live on screen">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-switcher/altab.gif" width="49%" alt="wlr-switcher — Alt-Tab with live previews">
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-shot/select.gif" width="49%" alt="wlr-shot — frozen region selector">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-peek/color.gif" width="49%" alt="wlr-peek — colour picker with loupe">
+</p>
+<p align="center"><sub>wlr-draw · wlr-switcher · wlr-shot · wlr-peek — see the <a href="https://sjourdois.github.io/wlr-utils/">showcase</a></sub></p>
 
 ## Requirements
 

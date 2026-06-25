@@ -9,12 +9,27 @@ Part of the [wlr-utils](https://github.com/sjourdois/wlr-utils) workspace.
 A graphical window & screen picker for **wlroots** screencast portals
 (`xdg-desktop-portal-wlr`) — a rofi-like overlay with **live thumbnails**.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-chooser/picker.png"
+       alt="wlr-chooser: a grid of live window and screen thumbnails to pick a screen-share source" width="820">
+</p>
+
+The same crate ships **`wlr-switcher`**, a live Alt-Tab / exposé window switcher.
+The strip cycles with Tab; the exposé **reveals windows from other workspaces**:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-switcher/altab.gif"
+       alt="wlr-switcher: a macOS-style strip of live window previews, cycling with Tab" width="410">
+  <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-switcher/expose.gif"
+       alt="wlr-switcher: the full-screen exposé grid revealing windows from every workspace" width="410">
+</p>
+
 When an application requests screen sharing (e.g. Firefox `getDisplayMedia`, a
 video call), the wlroots portal asks an external *chooser* which source to share.
 `wlr-chooser` replaces the text-only chooser with a grid of live previews — pick a
 window or a monitor with a click.
 
-![wlr-chooser overlay](docs/screenshots/overlay.png)
+<p align="center"><sub>📖 See every tool in action on the <a href="https://sjourdois.github.io/wlr-utils/">showcase</a>.</sub></p>
 
 ## Why
 
