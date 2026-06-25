@@ -24,9 +24,15 @@ whether screen capture and focus-aware sources will work.
 | `xdg-output` (`zxdg_output_manager_v1`) | accurate logical geometry (fractional scale, positions) | recommended; falls back to `wl_output` |
 | compositor IPC | "the active window" / "the current output" (`-a`, `--current-output`) | a per-compositor focus backend |
 
-`ext-image-copy-capture-v1` is the linchpin: it arrived in **wlroots 0.18** (Sway
-≥ 1.10) and is **not** implemented by GNOME's Mutter or KDE's KWin, which only offer
-screen capture through the desktop portal / PipeWire — out of scope here.
+`ext-image-capture-source-v1` is the linchpin, and it landed in two steps: the base
+protocol plus the **output** source arrived in **wlroots 0.19** (Sway ≥ 1.11), but the
+**foreign-toplevel** source (`ext_foreign_toplevel_image_capture_source_manager_v1`) —
+which window capture depends on — only arrived in **wlroots 0.20** (Sway ≥ 1.12). Since
+every tool here captures windows, the effective floor is **wlroots 0.20 / Sway ≥ 1.12**.
+On Sway 1.11 you get screen capture but `wlr-chooser` aborts with
+`ext_foreign_toplevel_image_capture_source_manager_v1 missing`. None of this is
+implemented by GNOME's Mutter or KDE's KWin, which only offer screen capture through the
+desktop portal / PipeWire — out of scope here.
 
 ## Compositors
 
@@ -34,7 +40,7 @@ Any **wlroots-based** compositor that advertises the protocols above should work
 **Sway**, **Hyprland**, **niri**, **river**, **Wayfire**, **cosmic-comp** and the like.
 Run `wlr-peek doctor` to check yours.
 
-Only **Sway** (≥ 1.10 / wlroots ≥ 0.18) is **runtime-verified** — it's the development
+Only **Sway** (≥ 1.12 / wlroots ≥ 0.20) is **runtime-verified** — it's the development
 compositor. The others are *expected* to work from their protocol support, but haven't
 been exercised end-to-end yet.
 

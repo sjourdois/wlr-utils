@@ -900,13 +900,23 @@ fn doctor() -> Result<()> {
 
     let core = version("ext_image_copy_capture_manager_v1").is_some()
         && version("ext_output_image_capture_source_manager_v1").is_some();
+    let window = version("ext_foreign_toplevel_image_capture_source_manager_v1").is_some();
     println!();
     if core {
         println!("Screen capture: supported.");
     } else {
         println!(
-            "Screen capture: UNSUPPORTED — needs ext-image-copy-capture-v1 \
-             (wlroots ≥ 0.18 / Sway ≥ 1.10; not on Mutter/KWin)."
+            "Screen capture: UNSUPPORTED — needs ext-image-copy-capture-v1 + the output \
+             source (wlroots ≥ 0.19 / Sway ≥ 1.11; not on Mutter/KWin)."
+        );
+    }
+    if window {
+        println!("Window capture: supported.");
+    } else {
+        println!(
+            "Window capture: UNSUPPORTED — needs the foreign-toplevel source \
+             (wlroots ≥ 0.20 / Sway ≥ 1.12). Most tools here, including wlr-chooser, \
+             require this."
         );
     }
 

@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 1.3.1 — 2026-06-26
 
 ### Added
 
@@ -16,6 +16,13 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **Compositor requirements** were documented wrong (`wlroots 0.18` / `Sway 1.10`). The
+  base protocol plus output capture landed in **wlroots 0.19 / Sway 1.11**, and the
+  foreign-toplevel source that *window* capture needs only in **wlroots 0.20 / Sway 1.12**
+  — the suite's real floor. `COMPATIBILITY.md` is corrected, the
+  `ext_foreign_toplevel_image_capture_source_manager_v1 missing` error now names the
+  required version and points at `wlr-peek doctor`, and `doctor` reports **screen** and
+  **window** capture as separate verdicts.
 - **`wlr-draw`** — the daemon never called `i18n::init()` (unlike every other binary), so
   the tray menu and on-screen hints stayed English regardless of `$LANG`/`$LANGUAGE`. It
   now negotiates the desktop locale at startup. The autostart entry also carries its state

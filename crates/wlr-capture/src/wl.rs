@@ -561,9 +561,13 @@ impl Client {
         let copy = globals
             .bind(&qh, 1..=1, ())
             .context("ext_image_copy_capture_manager_v1 missing")?;
-        let tl_src = globals
-            .bind(&qh, 1..=1, ())
-            .context("ext_foreign_toplevel_image_capture_source_manager_v1 missing")?;
+        let tl_src = globals.bind(&qh, 1..=1, ()).context(
+            "ext_foreign_toplevel_image_capture_source_manager_v1 missing: \
+             this compositor cannot capture individual windows. The foreign-toplevel \
+             capture source requires wlroots >= 0.20 (Sway >= 1.12); wlroots 0.19 / \
+             Sway 1.11 only expose output capture. Run `wlr-peek doctor` to see what \
+             your compositor supports.",
+        )?;
         let out_src = globals
             .bind(&qh, 1..=1, ())
             .context("ext_output_image_capture_source_manager_v1 missing")?;
