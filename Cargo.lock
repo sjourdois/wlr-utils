@@ -3097,6 +3097,7 @@ dependencies = [
  "smithay-client-toolkit",
  "toml 1.1.4+spec-1.1.0",
  "wayland-client",
+ "wayland-protocols",
  "wlr-capture",
  "wlr-i18n",
  "xkbcommon 0.9.0",
