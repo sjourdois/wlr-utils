@@ -46,6 +46,10 @@ xkbcommon.workspace = true
 # control socket and Wayland events drive one loop together.
 smithay-client-toolkit.workspace = true
 wayland-client.workspace = true
+# Raw zwp_tablet_manager_v2 bindings (stylus support): SCTK has no tablet wrapper, so
+# this crate hand-dispatches the protocol directly, the same way wlr-capture's wl.rs
+# hand-dispatches zwlr-foreign-toplevel / image-copy-capture.
+wayland-protocols.workspace = true
 # StatusNotifierItem tray icon (the `tray` feature). Links system libdbus.
 # StatusNotifierItem tray (the `tray` feature). 0.3+ is async (zbus 5); use its
 # `blocking` API over the `async-io` backend so the calloop daemon stays synchronous.
