@@ -152,6 +152,13 @@ the tray's Shortcuts menu reflect your bindings.
 The tray icon shows the **current tool** as a glyph (in the stroke colour while drawing,
 grey when idle).
 
+### Graphics tablet (stylus)
+
+A stylus tip draws exactly like the mouse — press, drag, release. The **eraser end** of
+the pen auto-switches to the Eraser tool on proximity and restores your previous tool
+when you lift the pen away (unless you picked a different tool in the meantime). No
+setup needed; a compositor without tablet support just runs with mouse/touchpad input.
+
 ## Running the daemon
 
 ### Start on login (default)

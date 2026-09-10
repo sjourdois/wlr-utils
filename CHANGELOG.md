@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **`wlr-draw`: graphics tablet (stylus) support** — tip contact and motion drive the
+  same gesture pipeline as the mouse, so a stylus draws like one. The eraser end of the
+  pen auto-switches to the Eraser tool on proximity and restores the previous tool on
+  proximity-out.
+
 ## 1.7.0 — 2026-08-19
 
 ### Fixed
