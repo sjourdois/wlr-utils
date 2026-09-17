@@ -80,9 +80,6 @@ struct State {
     armed_logo: bool,
     /// Previous "an armed modifier is held" state, to detect the release edge.
     prev_held: bool,
-    /// We've painted at least one frame with the modifier genuinely held; gates the
-    /// confirm-on-release so the launching chord's tail can't trigger it.
-    armed_rendered: bool,
     /// When the layer surface first got keyboard focus, for the fallback arming
     /// window (some compositors report the held modifier just after `enter`).
     enter_at: Option<Instant>,
@@ -176,7 +173,6 @@ pub fn run(app: App, t0: Instant) -> anyhow::Result<()> {
         armed_alt: false,
         armed_logo: false,
         prev_held: false,
-        armed_rendered: false,
         enter_at: None,
         t0,
         first_paint_logged: false,
@@ -202,11 +198,6 @@ impl State {
     }
 
     fn render(&mut self) {
-        // Record that we've shown at least one frame with the modifier held; this
-        // gates confirm-on-release (see `reconcile`).
-        if self.armed && self.any_armed_held() {
-            self.armed_rendered = true;
-        }
         let (pw, ph) = (self.width * self.scale, self.height * self.scale);
         let raw_input = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
@@ -485,10 +476,10 @@ impl State {
                 self.app.arm();
             }
         }
-        // Confirm on release — but only after we've painted a frame with the
-        // modifier genuinely held, so the launching chord's tail can't fire it.
+        // Confirm on the release edge, without waiting for a painted frame: a quick
+        // release deserves the switch it asked for.
         let held = self.any_armed_held();
-        if self.armed && self.armed_rendered && self.prev_held && !held {
+        if self.armed && self.prev_held && !held {
             self.app.confirm_release();
         }
         self.prev_held = held;

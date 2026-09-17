@@ -525,7 +525,8 @@ pub struct Options {
 
 pub struct App {
     rx: Receiver<Msg>,
-    sources: Vec<Source>,
+    /// The latest source list from the capture thread; `None` until the first arrives.
+    sources: Option<Vec<Source>>,
     textures: HashMap<String, egui::TextureHandle>,
     /// GPU dma-buf thumbnails: egui texture id + source pixel size, imported by
     /// the host. Looked up before `textures` when drawing a tile.
@@ -555,10 +556,13 @@ pub struct App {
     /// Set once the host confirms Alt was held at startup; enables Tab-cycle and
     /// confirm-on-Alt-release. Stays false (classic picker) if Alt is never seen.
     armed: bool,
-    /// On the first armed frame with sources present, jump the selection to the
-    /// next window (index 1) so releasing Alt immediately switches — like a real
-    /// Alt-Tab where the launching Tab already advanced once.
+    /// Once armed with sources present, cycle forward once so releasing Alt
+    /// immediately switches — like a real Alt-Tab where the launching Tab already
+    /// advanced once.
     pending_initial_select: bool,
+    /// A confirm that landed before the source list did — a release before the first
+    /// frame — carried out as soon as [`App::pump`] delivers the sources.
+    pending_confirm: bool,
     /// Focus the filter field on the first frame.
     focus_filter: bool,
     /// Set once a choice is made or the picker is cancelled; the host loop exits.
@@ -577,7 +581,7 @@ impl App {
     ) -> Self {
         Self {
             rx,
-            sources: Vec::new(),
+            sources: None,
             textures: HashMap::new(),
             native: HashMap::new(),
             failed: HashSet::new(),
@@ -594,6 +598,7 @@ impl App {
             live: opts.live,
             armed: false,
             pending_initial_select: false,
+            pending_confirm: false,
             focus_filter: true,
             closing: false,
             out,
@@ -626,6 +631,14 @@ impl App {
         }
     }
 
+    /// Apply the pending initial forward cycle, once sources exist.
+    fn apply_initial_select(&mut self) {
+        if self.pending_initial_select && self.sources.is_some() {
+            self.pending_initial_select = false;
+            self.cycle(true);
+        }
+    }
+
     /// Advance (or retreat) the highlighted source — Tab / Shift+Tab.
     pub fn cycle(&mut self, forward: bool) {
         let n = self.visible().len();
@@ -648,10 +661,26 @@ impl App {
         if self.closing {
             return;
         }
+        // A quick release gets here before the first frame, so the sources may not be in
+        // yet.
+        if self.sources.is_none() {
+            self.pending_confirm = true;
+            return;
+        }
+        // Arming may have happened since the last frame, leaving the jump still pending.
+        self.apply_initial_select();
         if let Some(sel) = self.visible().get(self.selected).map(|s| s.selection()) {
             self.choose(sel);
         } else {
             self.closing = true;
+        }
+    }
+
+    /// Apply the pending confirm, once sources exist.
+    fn apply_confirm(&mut self) {
+        if self.pending_confirm && self.sources.is_some() {
+            self.pending_confirm = false;
+            self.confirm_release();
         }
     }
 
@@ -668,7 +697,7 @@ impl App {
     fn pump(&mut self, ctx: &egui::Context, importer: &mut dyn DmabufImporter) {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
-                Msg::Sources(s) => self.sources = s,
+                Msg::Sources(s) => self.sources = Some(s),
                 Msg::Thumb { key, w, h, rgba } if w > 0 && h > 0 => {
                     let img = egui::ColorImage::from_rgba_unmultiplied([w, h], &rgba);
                     // Update the existing texture in place when we can (live frames
@@ -735,6 +764,7 @@ impl App {
         let f = self.filter.to_lowercase();
         self.sources
             .iter()
+            .flatten()
             .filter(|s| self.show_system || !s.is_system)
             .filter(|s| match self.mode {
                 Mode::All => true,
@@ -748,7 +778,7 @@ impl App {
     /// Whether any captured source is a system window (to decide if we show the
     /// "show system windows" toggle).
     fn has_system(&self) -> bool {
-        self.sources.iter().any(|s| s.is_system)
+        self.sources.iter().flatten().any(|s| s.is_system)
     }
 }
 
@@ -772,14 +802,10 @@ impl App {
         self.pump(&ctx, importer);
         ctx.request_repaint(); // keep draining the channel while captures stream in
 
-        // Alt-Tab: once sources exist, jump to the next window so releasing Alt
-        // switches immediately (the launching chord counts as the first Tab).
-        if self.pending_initial_select {
-            let n = self.visible().len();
-            if n > 0 {
-                self.selected = if n > 1 { 1 } else { 0 };
-                self.pending_initial_select = false;
-            }
+        self.apply_initial_select();
+        self.apply_confirm();
+        if self.closing {
+            return;
         }
 
         // Keyboard (read states first; don't call ctx methods inside ctx.input).
@@ -816,21 +842,20 @@ impl App {
             self.choose(sel);
         }
 
-        match self.view {
-            View::Grid => {
-                if let Some(sel) = self.render_expose(ui) {
-                    self.choose(sel);
-                }
-                return;
-            }
-            View::Strip => {
-                if let Some(sel) = self.render_switcher(ui) {
-                    self.choose(sel);
-                }
-                return;
-            }
-            View::Card => {}
+        let chosen = match self.view {
+            View::Grid => self.render_expose(ui),
+            View::Strip => self.render_switcher(ui),
+            View::Card => self.render_card(ui),
+        };
+        if let Some(sel) = chosen {
+            self.choose(sel);
         }
+    }
+
+    /// Rofi-like card: a centred panel with mode tabs, a filter field and a
+    /// scrolling grid of tiles. Returns the picked source, if any.
+    fn render_card(&mut self, ui: &mut egui::Ui) -> Option<Selection> {
+        let ctx = ui.ctx().clone();
         let mut chosen: Option<Selection> = None;
 
         // A centred card on the dimmed overlay backdrop. Its size is either fixed
@@ -938,9 +963,7 @@ impl App {
         if bg_click {
             self.closing = true;
         }
-        if let Some(sel) = chosen {
-            self.choose(sel);
-        }
+        chosen
     }
 }
 
@@ -1520,4 +1543,141 @@ fn draw_window_glyph(p: &egui::Painter, r: egui::Rect, col: egui::Color32) {
         ],
         egui::Stroke::new(1.4, col),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+
+    /// The tests send no dma-buf frames, so this is never asked to import one.
+    struct NoGpu;
+
+    impl DmabufImporter for NoGpu {
+        fn import(&mut self, _: &str, _: wl::DmabufFrame) -> Option<(egui::TextureId, egui::Vec2)> {
+            None
+        }
+        fn forget(&mut self, _: &str) {}
+    }
+
+    /// A window source; an empty `app_id` makes it a system window.
+    fn window(key: &str, app_id: &str) -> Source {
+        Source {
+            key: key.into(),
+            token: format!("Window: {key}"),
+            title: app_id.into(),
+            subtitle: String::new(),
+            filter: app_id.into(),
+            is_window: true,
+            is_system: app_id.is_empty(),
+            app_id: app_id.into(),
+            win_title: String::new(),
+            dup_index: 0,
+        }
+    }
+
+    /// Options for a plain window list with every optional behaviour off; tests switch
+    /// on what they exercise.
+    fn options() -> Options {
+        Options {
+            mode: Mode::Windows,
+            show_system: false,
+            grid: None,
+            view: View::Strip,
+            hold: false,
+            live: Live::All,
+        }
+    }
+
+    /// An `App` fed by hand in place of the capture thread, driven one frame at a time.
+    struct Harness {
+        app: App,
+        tx: Sender<Msg>,
+        out: Outcome,
+        ctx: egui::Context,
+    }
+
+    impl Harness {
+        fn new(opts: Options) -> Self {
+            let (tx, rx) = mpsc::channel();
+            let out: Outcome = Arc::new(Mutex::new(None));
+            let gpu_failed = Arc::new(AtomicBool::new(false));
+            let app = App::new(rx, out.clone(), opts, Theme::default(), gpu_failed);
+            Self {
+                app,
+                tx,
+                out,
+                ctx: egui::Context::default(),
+            }
+        }
+
+        fn send(&self, sources: Vec<Source>) {
+            self.tx.send(Msg::Sources(sources)).unwrap();
+        }
+
+        fn frame(&mut self) {
+            let app = &mut self.app;
+            let mut output = self
+                .ctx
+                .run_ui(egui::RawInput::default(), |ui| app.run_ui(ui, &mut NoGpu));
+            // There is no GPU to upload the font atlas to, and egui insists the delta
+            // is handled before it's dropped.
+            output.textures_delta.clear();
+        }
+
+        fn picked(&self) -> Option<String> {
+            self.out.lock().unwrap().as_ref().map(|s| s.token.clone())
+        }
+    }
+
+    #[test]
+    fn a_release_before_the_source_list_switches_once_it_arrives() {
+        let mut h = Harness::new(Options {
+            hold: true,
+            ..options()
+        });
+        h.app.arm();
+        h.app.confirm_release();
+        // Nothing to pick from yet: closing now would switch nowhere.
+        assert!(!h.app.closing());
+
+        h.send(vec![window("a", "foot"), window("b", "firefox")]);
+        h.frame();
+        assert!(h.app.closing());
+        assert_eq!(h.picked().as_deref(), Some("Window: b"));
+    }
+
+    #[test]
+    fn a_release_right_after_arming_switches_to_the_next_window() {
+        // The source list is already in when the modifier is seen held, and the modifier
+        // is released before another frame is drawn.
+        let mut h = Harness::new(Options {
+            hold: true,
+            ..options()
+        });
+        h.send(vec![window("a", "foot"), window("b", "firefox")]);
+        h.frame();
+        h.app.arm();
+        h.app.confirm_release();
+        assert!(h.app.closing());
+        assert_eq!(h.picked().as_deref(), Some("Window: b"));
+    }
+
+    #[test]
+    fn an_empty_source_list_uses_up_the_initial_advance() {
+        // Arming with nothing on offer advances past nothing; windows turning up later
+        // don't catch up on it.
+        let mut h = Harness::new(Options {
+            hold: true,
+            ..options()
+        });
+        h.app.arm();
+        h.send(vec![]);
+        h.frame();
+        h.send(vec![window("a", "foot"), window("b", "firefox")]);
+        h.frame();
+        h.app.confirm_release();
+        assert!(h.app.closing());
+        assert_eq!(h.picked().as_deref(), Some("Window: a"));
+    }
 }
