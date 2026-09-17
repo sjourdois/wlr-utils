@@ -26,7 +26,7 @@ use smithay_client_toolkit::{
         },
     },
 };
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use wayland_client::{
     Connection, Dispatch, Proxy, QueueHandle,
     globals::registry_queue_init,
@@ -80,9 +80,6 @@ struct State {
     armed_logo: bool,
     /// Previous "an armed modifier is held" state, to detect the release edge.
     prev_held: bool,
-    /// When the layer surface first got keyboard focus, for the fallback arming
-    /// window (some compositors report the held modifier just after `enter`).
-    enter_at: Option<Instant>,
 
     /// Process start, for cold-start timing.
     t0: Instant,
@@ -173,7 +170,6 @@ pub fn run(app: App, t0: Instant) -> anyhow::Result<()> {
         armed_alt: false,
         armed_logo: false,
         prev_held: false,
-        enter_at: None,
         t0,
         first_paint_logged: false,
     };
@@ -376,13 +372,13 @@ impl KeyboardHandler for State {
     ) {
         // Primary arming: the set of keys already held at focus-in. On wlroots the
         // modifier that triggered the chord (Alt or Super) is still down here.
-        self.enter_at = Some(Instant::now());
         if !self.hold {
             return;
         }
         self.alt_down = keysyms.iter().copied().any(is_alt);
         self.logo_down = keysyms.iter().copied().any(is_logo);
         self.reconcile();
+        self.infer_release();
     }
     fn leave(
         &mut self,
@@ -457,24 +453,17 @@ impl State {
         (self.armed_alt && self.alt_down) || (self.armed_logo && self.logo_down)
     }
 
-    /// Reconcile hold-to-switch state from the current Alt/Super flags: arm during
-    /// the startup window, then confirm the selection on the release edge.
+    /// Reconcile hold-to-switch state from the current Alt/Super flags: arm once one is
+    /// held, then confirm the selection on the release edge.
     fn reconcile(&mut self) {
         if !self.hold {
             return;
         }
         if !self.armed && (self.alt_down || self.logo_down) {
-            // Arm at focus-in, or shortly after (some compositors report the held
-            // modifier just after `enter` rather than in its key set).
-            let in_window = self
-                .enter_at
-                .is_none_or(|t| t.elapsed() < Duration::from_millis(300));
-            if in_window {
-                self.armed = true;
-                self.armed_alt = self.alt_down;
-                self.armed_logo = self.logo_down;
-                self.app.arm();
-            }
+            self.armed = true;
+            self.armed_alt = self.alt_down;
+            self.armed_logo = self.logo_down;
+            self.app.arm();
         }
         // Confirm on the release edge, without waiting for a painted frame: a quick
         // release deserves the switch it asked for.
@@ -483,6 +472,15 @@ impl State {
             self.app.confirm_release();
         }
         self.prev_held = held;
+    }
+
+    /// Confirm if no launch modifier is held at keyboard focus-in: it was released
+    /// before we got focus, so no release event will come.
+    fn infer_release(&mut self) {
+        if !self.armed {
+            self.app.arm();
+            self.app.confirm_release();
+        }
     }
 
     fn key(&mut self, event: KeyEvent, pressed: bool) {

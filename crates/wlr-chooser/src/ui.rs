@@ -553,8 +553,8 @@ pub struct App {
     hold: bool,
     /// Which Alt-Tab tiles show a live preview (vs. just the icon).
     live: Live,
-    /// Set once the host confirms Alt was held at startup; enables Tab-cycle and
-    /// confirm-on-Alt-release. Stays false (classic picker) if Alt is never seen.
+    /// Set once the host arms hold-to-switch; enables Tab-cycle and
+    /// confirm-on-Alt-release.
     armed: bool,
     /// Once armed with sources present, cycle forward once so releasing Alt
     /// immediately switches — like a real Alt-Tab where the launching Tab already
@@ -622,8 +622,8 @@ impl App {
         self.hold
     }
 
-    /// The host detected the launch modifier held at startup: enable Tab-cycle and
-    /// confirm-on-release, and arm the initial MRU-ish jump.
+    /// Arm hold-to-switch: enable Tab-cycle and confirm-on-release, and arm the
+    /// initial MRU-ish jump.
     pub fn arm(&mut self) {
         if !self.armed {
             self.armed = true;
