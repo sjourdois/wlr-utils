@@ -20,6 +20,25 @@ pub struct WindowRef {
     pub rect: Region,
 }
 
+/// The windows, most recently focused first, by [`crate::wl::Toplevel::identifier`].
+#[derive(Default)]
+pub struct FocusOrder {
+    /// The window with the focus right now, if any.
+    pub focused: Option<String>,
+    /// The other windows, most recently focused first.
+    pub unfocused: Vec<String>,
+}
+
+impl FocusOrder {
+    /// All windows, most recently focused first.
+    pub fn windows(&self) -> impl Iterator<Item = &str> {
+        self.focused
+            .iter()
+            .chain(&self.unfocused)
+            .map(String::as_str)
+    }
+}
+
 /// A compositor-specific source of focus information.
 pub trait FocusBackend {
     /// Name of the focused output, if any.
@@ -29,6 +48,10 @@ pub trait FocusBackend {
     /// The window under the given global logical point, if any. Used to make a region
     /// mirror follow the window beneath it. Default `None` (only Sway implements it).
     fn window_at(&self, _x: i32, _y: i32) -> Option<WindowRef> {
+        None
+    }
+    /// The compositor's window focus history.
+    fn focus_order(&self) -> Option<FocusOrder> {
         None
     }
     /// Human-readable backend name, for error messages.
@@ -95,6 +118,10 @@ impl FocusBackend for Sway {
 
     fn window_at(&self, x: i32, y: i32) -> Option<WindowRef> {
         sway_window_at(&Self::tree()?, x, y)
+    }
+
+    fn focus_order(&self) -> Option<FocusOrder> {
+        Some(sway_focus_order(&Self::tree()?))
     }
 }
 
@@ -172,6 +199,36 @@ fn find_focused(node: &Node) -> Option<&Node> {
         return Some(node);
     }
     children(node).find_map(find_focused)
+}
+
+fn sway_focus_order(root: &Node) -> FocusOrder {
+    let mut windows = Vec::new();
+    collect_mru_nodes(root, &mut windows);
+    let has_focus = windows.first().is_some_and(|w| w.focused);
+    let mut ids = windows
+        .iter()
+        .filter_map(|w| w.foreign_toplevel_identifier.clone());
+    FocusOrder {
+        focused: if has_focus { ids.next() } else { None },
+        unfocused: ids.collect(),
+    }
+}
+
+fn collect_mru_nodes<'a>(node: &'a Node, out: &mut Vec<&'a Node>) {
+    if node.foreign_toplevel_identifier.is_some() {
+        out.push(node);
+    }
+    // `focus` ranks tiled and floating children alike, most recently focused first.
+    let mut children: Vec<&Node> = children(node).collect();
+    children.sort_by_key(|c| {
+        node.focus
+            .iter()
+            .position(|&id| id == c.id)
+            .unwrap_or(usize::MAX)
+    });
+    for child in children {
+        collect_mru_nodes(child, out);
+    }
 }
 
 /// Read a sway `rect` into a logical [`Region`].
@@ -339,12 +396,23 @@ mod tests {
                     node(json!({
                         "type": "workspace", "name": "1", "visible": true,
                         "rect": screen,
-                        "nodes": [node(json!({
-                            "app_id": "firefox", "name": "Page Title", "visible": true,
-                            "rect": rect(100, 100, 800, 600),
-                            // A 20px title bar, so the content rect is not the node's.
-                            "window_rect": rect(0, 20, 800, 580),
-                        }))],
+                        // Firefox was focused more recently, against the tree's order.
+                        "focus": [11, 12],
+                        "nodes": [
+                            node(json!({
+                                "id": 12, "app_id": "foot", "name": "term", "visible": true,
+                                "foreign_toplevel_identifier": "ext-foot",
+                                "rect": rect(1000, 100, 800, 600),
+                            })),
+                            node(json!({
+                                "id": 11, "app_id": "firefox", "name": "Page Title",
+                                "visible": true, "focused": true,
+                                "foreign_toplevel_identifier": "ext-firefox",
+                                "rect": rect(100, 100, 800, 600),
+                                // A 20px title bar, so the content rect is not the node's.
+                                "window_rect": rect(0, 20, 800, 580),
+                            })),
+                        ],
                     })),
                     node(json!({
                         "type": "workspace", "name": "2", "visible": false,
@@ -353,6 +421,7 @@ mod tests {
                         // geometry of a window even while its workspace is off screen.
                         "nodes": [node(json!({
                             "app_id": "vim", "name": "editor", "visible": false,
+                            "foreign_toplevel_identifier": "ext-vim",
                             "rect": rect(100, 100, 800, 600),
                         }))],
                     })),
@@ -381,6 +450,19 @@ mod tests {
         );
         // A point on the empty desktop hits no window.
         assert!(sway_window_at(&v, 2000, 1300).is_none());
+    }
+
+    #[test]
+    fn sway_focus_order_follows_focus_arrays() {
+        let tree = sway_tree();
+        let order = sway_focus_order(&tree);
+        assert_eq!(order.focused.as_deref(), Some("ext-firefox"));
+        assert_eq!(order.unfocused, ["ext-foot", "ext-vim"]);
+
+        // Workspace 2 alone: its window is ranked, but not focused.
+        let order = sway_focus_order(&tree.nodes[0].nodes[1]);
+        assert_eq!(order.focused, None);
+        assert_eq!(order.unfocused, ["ext-vim"]);
     }
 
     #[test]

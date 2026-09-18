@@ -24,7 +24,7 @@ name = "wlr-switcher"
 path = "src/bin/wlr-switcher.rs"
 
 [dependencies]
-wlr-capture = { path = "../wlr-capture", version = "1.8.0", default-features = false, features = ["toolkit"] }
+wlr-capture = { path = "../wlr-capture", version = "1.8.0", default-features = false, features = ["toolkit", "focus"] }
 # This crate owns its localised catalog (`i18n/`); wlr-i18n is the shared loader plumbing.
 wlr-i18n = { path = "../wlr-i18n", version = "1.8.0", default-features = false }
 # For `#[derive(RustEmbed)]` over `i18n/` (the `i18n` feature).

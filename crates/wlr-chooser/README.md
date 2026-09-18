@@ -117,6 +117,9 @@ focused output. You can pass options in `chooser_cmd`, e.g.
     --both             Show both (default)
     --include-system   Include windows with no app-id (system surfaces)
     --grid COLSxROWS   Fixed grid of that many thumbnails (e.g. 4x3)
+    --window-order by-name|mru
+                       Order windows by name (default) or most recently focused
+                       first, if supported by the compositor
 -h, --help             Print help
 -V, --version          Print version
 ```
@@ -145,6 +148,9 @@ Three presentations via `--layout`:
 Each tile shows a live preview with the app icon as a badge; tune it with
 `--live none|current|all` (default `all`): `current` previews only the highlighted
 window, `none` shows app icons only.
+
+Windows are listed most recently focused first where the compositor reports it
+(Sway), by name otherwise; `--window-order by-name` always orders them by name.
 
 ### True Alt-Tab (hold-to-switch)
 

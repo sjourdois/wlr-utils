@@ -51,6 +51,9 @@ pub fn acquire_switch_lock() -> Option<std::fs::File> {
 /// and return the picked source (if any). `t0` is the process start, for
 /// cold-start timing (see [`shell::tlog`]).
 pub fn run_overlay(opts: ui::Options, t0: Instant) -> anyhow::Result<Option<ui::Selection>> {
+    // Before the overlay is up: once it holds the keyboard, no window has focus.
+    let (order, focused) = opts.order.resolve();
+
     // Start capturing first thing: the thread owns the non-Send Wayland client and
     // must connect, enumerate, and open sessions before any thumbnail appears.
     let (tx, rx) = mpsc::channel();
@@ -58,12 +61,12 @@ pub fn run_overlay(opts: ui::Options, t0: Instant) -> anyhow::Result<Option<ui::
     // reallocates in shm.
     let gpu_failed = Arc::new(AtomicBool::new(false));
     let flag = gpu_failed.clone();
-    std::thread::spawn(move || ui::capture_thread(tx, flag));
+    std::thread::spawn(move || ui::capture_thread(tx, flag, order));
     shell::tlog(t0, "capture-thread spawned");
 
     let out: ui::Outcome = Arc::new(Mutex::new(None));
     let theme = theme::Theme::load();
-    let app = ui::App::new(rx, out.clone(), opts, theme, gpu_failed);
+    let app = ui::App::new(rx, out.clone(), opts, focused, theme, gpu_failed);
     shell::tlog(t0, "ui ready, entering overlay");
     shell::run(app, t0)?;
 

@@ -7,11 +7,27 @@
 //! For an interactive window switcher / Alt-Tab / exposé, see the sibling
 //! `wlr-switcher` binary.
 
-use crate::ui::{self, Live, Mode, Options, View};
+use crate::ui::{self, Live, Mode, Options, Order, View};
 use crate::{i18n, tr};
 use crate::{parse_grid, run_overlay};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use std::time::Instant;
+
+/// Window order (CLI mirror of [`Order`]).
+#[derive(Clone, Copy, ValueEnum)]
+pub(crate) enum OrderArg {
+    ByName,
+    Mru,
+}
+
+impl From<OrderArg> for Order {
+    fn from(v: OrderArg) -> Self {
+        match v {
+            OrderArg::ByName => Order::ByName,
+            OrderArg::Mru => Order::Mru,
+        }
+    }
+}
 
 /// Graphical window & screen picker for xdg-desktop-portal-wlr.
 ///
@@ -40,6 +56,10 @@ struct Cli {
     /// Show a fixed COLSxROWS grid of thumbnails (e.g. 4x3)
     #[arg(long, value_name = "COLSxROWS", value_parser = parse_grid)]
     grid: Option<(u32, u32)>,
+    /// Order windows `by-name` (default) or `mru` (most recently focused first, if
+    /// supported by the compositor)
+    #[arg(long, value_enum, default_value_t = OrderArg::ByName)]
+    window_order: OrderArg,
     /// Headless capture benchmark: run the capture loop for SECS seconds and
     /// print per-source frame/change stats to stderr (debug; no overlay).
     #[arg(long, value_name = "SECS", hide = true)]
@@ -85,6 +105,7 @@ pub fn main() {
         view: View::Card,
         hold: false,
         live: Live::All,
+        order: cli.window_order.into(),
     };
 
     match run_overlay(opts, t0) {

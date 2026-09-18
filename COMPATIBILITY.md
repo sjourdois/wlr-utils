@@ -106,7 +106,9 @@ Two things vary by compositor:
   **Hyprland** (`hyprctl`) and **niri** (`niri msg`). Without a backend, every *other*
   source still works: `-s` interactive select, `-g` geometry, `-o NAME`, `-w ID`,
   `--pick-window`. (niri exposes no per-window global rectangle, so its `-a` is
-  unavailable — use `-g` / `--current-output`.)
+  unavailable — use `-g` / `--current-output`.) Ordering windows most recently
+  focused first (`--window-order mru`) needs one too, and so far only Sway's
+  provides it; elsewhere windows are ordered by name.
 - **Zero-copy GPU capture** (`linux-dmabuf`) is optional; the CPU `wl_shm` path is the
   universal fallback.
 

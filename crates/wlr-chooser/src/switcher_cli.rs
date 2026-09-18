@@ -7,6 +7,7 @@
 //!
 //! For the xdg-desktop-portal-wlr picker (prints to stdout), see `wlr-chooser`.
 
+use crate::chooser_cli::OrderArg;
 use crate::ui::{Live, Mode, Options, View};
 use crate::{acquire_switch_lock, run_overlay};
 use crate::{i18n, tr};
@@ -65,6 +66,10 @@ struct Cli {
     /// or `all` (default). Live capture is the differentiator.
     #[arg(long, value_enum, default_value_t = LiveArg::All)]
     live: LiveArg,
+    /// Window order: `mru` (most recently focused first, if supported by the
+    /// compositor; default) or `by-name`.
+    #[arg(long, value_enum, default_value_t = OrderArg::Mru)]
+    window_order: OrderArg,
     /// Hold-to-switch: confirm and close the moment the held launch modifier
     /// (Alt/Super) is released. Default: on for `strip`, off for `grid`/`card`.
     /// Bind it to a held modifier — e.g. `Mod1+Tab exec wlr-switcher` — for a
@@ -127,6 +132,7 @@ pub fn main() {
         view,
         hold,
         live: cli.live.into(),
+        order: cli.window_order.into(),
     };
 
     // Pre-flight: wlr-switcher switches *windows*, which need the foreign-toplevel

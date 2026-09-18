@@ -5,6 +5,7 @@
 //! first is fine.
 
 use crate::tr;
+use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
@@ -12,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use wlr_capture::render::DmabufImporter;
 use wlr_capture::theme::Theme;
-use wlr_capture::{icons, wl};
+use wlr_capture::{focus, icons, wl};
 
 /// Shared slot where the chosen source lands; read by `main` after the window closes.
 pub type Outcome = Arc<Mutex<Option<Selection>>>;
@@ -74,6 +75,63 @@ pub enum Live {
     /// Every window shows its live preview (default).
     #[default]
     All,
+}
+
+/// How windows are ordered; outputs always come first, by name.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Order {
+    /// By app-id, then title.
+    ByName,
+    /// Most recently focused first, if the compositor reports it; by name otherwise.
+    Mru,
+}
+
+impl Order {
+    /// The window order to apply, and the identifier of the window focused right now
+    /// if known. `Mru` asks the compositor, so this has to run before the overlay
+    /// takes the focus.
+    pub(crate) fn resolve(self) -> (WindowOrder, Option<String>) {
+        match self {
+            Self::Mru => {
+                let focus_order = focus::detect()
+                    .and_then(|b| b.focus_order())
+                    .unwrap_or_default();
+                (WindowOrder::mru(focus_order.windows()), focus_order.focused)
+            }
+            Self::ByName => (WindowOrder::ByName, None),
+        }
+    }
+}
+
+/// How the capture thread orders windows.
+pub(crate) enum WindowOrder {
+    ByName,
+    /// Each window identifier's rank, most recently focused first.
+    Mru(HashMap<String, usize>),
+}
+
+impl WindowOrder {
+    /// From window identifiers, most recently focused first.
+    fn mru<'a>(windows: impl Iterator<Item = &'a str>) -> Self {
+        Self::Mru(windows.map(String::from).zip(0..).collect())
+    }
+
+    /// Whether window `a` goes before, after or level with `b`.
+    fn compare(&self, a: &Source, b: &Source) -> cmp::Ordering {
+        let by_name = |s: &Source| (s.app_id.to_lowercase(), s.win_title.to_lowercase());
+        match self {
+            WindowOrder::ByName => by_name(a).cmp(&by_name(b)),
+            WindowOrder::Mru(rank) => {
+                match (rank.get(&a.key), rank.get(&b.key)) {
+                    (Some(x), Some(y)) => x.cmp(y),
+                    // Windows opened since the snapshot go after every ranked one.
+                    (Some(_), None) => cmp::Ordering::Less,
+                    (None, Some(_)) => cmp::Ordering::Greater,
+                    (None, None) => by_name(a).cmp(&by_name(b)),
+                }
+            }
+        }
+    }
 }
 
 /// One pickable source, as shown in the grid.
@@ -175,7 +233,7 @@ enum Capturable {
 // SessionId (a wayland ObjectId) is used as a map key: its interior-mutable
 // "alive" flag is not part of Hash/Eq, so it is a sound key.
 #[allow(clippy::mutable_key_type)]
-pub fn capture_thread(tx: Sender<Msg>, gpu_failed: Arc<AtomicBool>) {
+pub(crate) fn capture_thread(tx: Sender<Msg>, gpu_failed: Arc<AtomicBool>, order: WindowOrder) {
     let mut client = match wl::Client::connect() {
         Ok(c) => c,
         Err(e) => {
@@ -198,30 +256,24 @@ pub fn capture_thread(tx: Sender<Msg>, gpu_failed: Arc<AtomicBool>) {
         }
 
         // Build the current source set in a stable, predictable order:
-        // outputs first (sorted by name), then windows (by app-id, then title).
+        // outputs first (sorted by name), then windows in `order`.
         let mut outputs = client.outputs().to_vec();
         outputs.sort_by(|a, b| a.name.cmp(&b.name));
-        let mut windows = client.toplevels().to_vec();
-        windows.sort_by(|a, b| {
-            a.app_id
-                .to_lowercase()
-                .cmp(&b.app_id.to_lowercase())
-                .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
-        });
 
         let mut current: Vec<(Source, Capturable)> = Vec::new();
         for o in &outputs {
             current.push((output_source(o), Capturable::Output(o.clone())));
         }
-        // Number windows that share an (app_id, title); the stable sort keeps
-        // them in creation order, matching zwlr's enumeration for activation.
+        // Number windows that share an (app_id, title) in creation order, matching
+        // zwlr's enumeration for activation — so before sorting them for display.
         let mut dup: HashMap<(String, String), usize> = HashMap::new();
-        for w in &windows {
+        for w in client.toplevels() {
             let e = dup.entry((w.app_id.clone(), w.title.clone())).or_insert(0);
             let dup_index = *e;
             *e += 1;
             current.push((window_source(w, dup_index), Capturable::Window(w.clone())));
         }
+        current[outputs.len()..].sort_by(|(a, _), (b, _)| order.compare(a, b));
         let keys: Vec<String> = current.iter().map(|(s, _)| s.key.clone()).collect();
 
         // Announce the source list only when it actually changes (set or order).
@@ -521,6 +573,7 @@ pub struct Options {
     pub hold: bool,
     /// Which Alt-Tab tiles show a live preview (vs. just the icon).
     pub live: Live,
+    pub order: Order,
 }
 
 /// How long the tiles stay hidden in hold-to-switch mode if keyboard focus
@@ -561,13 +614,19 @@ pub struct App {
     hold: bool,
     /// Which Alt-Tab tiles show a live preview (vs. just the icon).
     live: Live,
+    /// How windows are ordered.
+    order: Order,
     /// Set once the host arms hold-to-switch; enables Tab-cycle and
     /// confirm-on-Alt-release.
     armed: bool,
     /// Once armed with sources present, cycle forward once so releasing Alt
     /// immediately switches — like a real Alt-Tab where the launching Tab already
-    /// advanced once.
+    /// advanced once. Only if windows are MRU ordered and the focused one leads the
+    /// list (see [`App::apply_initial_select`]).
     pending_initial_select: bool,
+    /// Identifier of the window focused at launch, if known: the one the initial
+    /// cycle steps away from.
+    focused: Option<String>,
     /// A confirm that landed before the source list did — a release before the first
     /// frame — carried out as soon as [`App::pump`] delivers the sources.
     pending_confirm: bool,
@@ -589,6 +648,7 @@ impl App {
         rx: Receiver<Msg>,
         out: Outcome,
         opts: Options,
+        focused: Option<String>,
         theme: Theme,
         gpu_failed: Arc<AtomicBool>,
     ) -> Self {
@@ -609,8 +669,10 @@ impl App {
             selected: 0,
             hold: opts.hold,
             live: opts.live,
+            order: opts.order,
             armed: false,
             pending_initial_select: false,
+            focused,
             pending_confirm: false,
             // Without hold-to-switch there is no tap to mistake the first frames for.
             revealed: !opts.hold,
@@ -671,11 +733,19 @@ impl App {
         }
     }
 
-    /// Apply the pending initial forward cycle, once sources exist.
+    /// Apply the pending initial forward cycle, once sources exist — if the focused
+    /// window leads the list. Otherwise the first tile is not the window the user is
+    /// on, so it is already the one to switch to.
     fn apply_initial_select(&mut self) {
         if self.pending_initial_select && self.sources.is_some() {
             self.pending_initial_select = false;
-            self.cycle(true);
+            let leads = self
+                .focused
+                .as_ref()
+                .is_some_and(|f| self.visible().first().is_some_and(|s| &s.key == f));
+            if self.order == Order::Mru && leads {
+                self.cycle(true);
+            }
         }
     }
 
@@ -1634,6 +1704,7 @@ mod tests {
             view: View::Strip,
             hold: false,
             live: Live::All,
+            order: Order::ByName,
         }
     }
 
@@ -1647,10 +1718,16 @@ mod tests {
 
     impl Harness {
         fn new(opts: Options) -> Self {
+            Self::focused_on(opts, None)
+        }
+
+        /// With `focused` as the window that had the focus at launch.
+        fn focused_on(opts: Options, focused: Option<&str>) -> Self {
             let (tx, rx) = mpsc::channel();
             let out: Outcome = Arc::new(Mutex::new(None));
             let gpu_failed = Arc::new(AtomicBool::new(false));
-            let app = App::new(rx, out.clone(), opts, Theme::default(), gpu_failed);
+            let focused = focused.map(String::from);
+            let app = App::new(rx, out.clone(), opts, focused, Theme::default(), gpu_failed);
             Self {
                 app,
                 tx,
@@ -1680,10 +1757,12 @@ mod tests {
 
     #[test]
     fn a_release_before_the_source_list_switches_once_it_arrives() {
-        let mut h = Harness::new(Options {
+        let hold = Options {
             hold: true,
+            order: Order::Mru,
             ..options()
-        });
+        };
+        let mut h = Harness::focused_on(hold, Some("a"));
         h.app.arm();
         h.app.confirm_release();
         // Nothing to pick from yet: closing now would switch nowhere.
@@ -1699,10 +1778,12 @@ mod tests {
     fn a_release_right_after_arming_switches_to_the_next_window() {
         // The source list is already in when the modifier is seen held, and the modifier
         // is released before another frame is drawn.
-        let mut h = Harness::new(Options {
+        let hold = Options {
             hold: true,
+            order: Order::Mru,
             ..options()
-        });
+        };
+        let mut h = Harness::focused_on(hold, Some("a"));
         h.send(vec![window("a", "foot"), window("b", "firefox")]);
         h.frame();
         h.app.arm();
@@ -1715,10 +1796,12 @@ mod tests {
     fn an_empty_source_list_uses_up_the_initial_advance() {
         // Arming with nothing on offer advances past nothing; windows turning up later
         // don't catch up on it.
-        let mut h = Harness::new(Options {
+        let hold = Options {
             hold: true,
+            order: Order::Mru,
             ..options()
-        });
+        };
+        let mut h = Harness::focused_on(hold, Some("a"));
         h.app.arm();
         h.send(vec![]);
         h.frame();
@@ -1727,6 +1810,32 @@ mod tests {
         h.app.confirm_release();
         assert!(h.app.closing());
         assert_eq!(h.picked().as_deref(), Some("Window: a"));
+    }
+
+    #[test]
+    fn without_the_focused_window_leading_the_first_one_is_switched_to() {
+        // No window had the focus, or the focused one is hidden (a system window): the
+        // first tile is not the window the user is on, so it is the one to switch to.
+        for focused in [None, Some("s")] {
+            let hold = Options {
+                hold: true,
+                ..options()
+            };
+            let mut h = Harness::focused_on(hold, focused);
+            h.send(vec![
+                window("s", ""),
+                window("a", "foot"),
+                window("b", "firefox"),
+            ]);
+            h.frame();
+            h.app.arm();
+            h.app.confirm_release();
+            assert_eq!(
+                h.picked().as_deref(),
+                Some("Window: a"),
+                "focused: {focused:?}"
+            );
+        }
     }
 
     #[test]
