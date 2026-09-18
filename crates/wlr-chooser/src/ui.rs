@@ -523,6 +523,14 @@ pub struct Options {
     pub live: Live,
 }
 
+/// How long the tiles stay hidden in hold-to-switch mode if keyboard focus
+/// never arrives (e.g. no keyboard on the seat, another exclusive layer
+/// surface outranking us).
+///
+/// Safety net to avoid leaving a screen-sized fully transparent overlay which,
+/// still swallowing every click, could render the desktop unusable.
+const REVEAL_BACKSTOP_SECS: f64 = 0.15;
+
 pub struct App {
     rx: Receiver<Msg>,
     /// The latest source list from the capture thread; `None` until the first arrives.
@@ -563,6 +571,11 @@ pub struct App {
     /// A confirm that landed before the source list did — a release before the first
     /// frame — carried out as soon as [`App::pump`] delivers the sources.
     pending_confirm: bool,
+    /// Whether the tiles are drawn yet; held back under hold-to-switch until the tap
+    /// question is settled (see [`App::reveal`]).
+    revealed: bool,
+    /// First frame on egui's clock.
+    first_frame_at_secs: Option<f64>,
     /// Focus the filter field on the first frame.
     focus_filter: bool,
     /// Set once a choice is made or the picker is cancelled; the host loop exits.
@@ -599,6 +612,9 @@ impl App {
             armed: false,
             pending_initial_select: false,
             pending_confirm: false,
+            // Without hold-to-switch there is no tap to mistake the first frames for.
+            revealed: !opts.hold,
+            first_frame_at_secs: None,
             focus_filter: true,
             closing: false,
             out,
@@ -628,6 +644,30 @@ impl App {
         if !self.armed {
             self.armed = true;
             self.pending_initial_select = true;
+        }
+    }
+
+    /// Draw the tiles from now on.
+    ///
+    /// Under hold-to-switch the first frames are blank on purpose. The surface has to be
+    /// mapped — and so a frame committed — before the compositor hands over keyboard
+    /// focus, and only with focus can we tell a held modifier from one released before
+    /// we were listening. Until then the overlay is present but shows nothing, so a
+    /// quick tap can resolve without flickering.
+    pub fn reveal(&mut self) {
+        self.revealed = true;
+    }
+
+    fn apply_reveal_backstop(&mut self, ctx: &egui::Context) {
+        if !self.revealed {
+            let now = ctx.input(|i| i.time);
+            match self.first_frame_at_secs {
+                None => {
+                    self.first_frame_at_secs = Some(now);
+                }
+                Some(first) if now - first >= REVEAL_BACKSTOP_SECS => self.reveal(),
+                _ => {}
+            }
         }
     }
 
@@ -785,6 +825,9 @@ impl App {
 impl App {
     /// GL clear colour: the transparent, dimmed backdrop behind the card (rofi-like).
     pub fn backdrop(&self) -> [f32; 4] {
+        if !self.revealed {
+            return [0.0; 4];
+        }
         let mut c = self.theme.backdrop.to_normalized_gamma_f32();
         // Exposé covers the whole screen: dim almost to opaque so the real windows
         // behind are hidden (a client can't move them; this hides them instead).
@@ -840,6 +883,11 @@ impl App {
         }
         if enter && let Some(sel) = self.visible().get(self.selected).map(|s| s.selection()) {
             self.choose(sel);
+        }
+
+        self.apply_reveal_backstop(&ctx);
+        if !self.revealed {
+            return;
         }
 
         let chosen = match self.view {
@@ -1679,5 +1727,39 @@ mod tests {
         h.app.confirm_release();
         assert!(h.app.closing());
         assert_eq!(h.picked().as_deref(), Some("Window: a"));
+    }
+
+    #[test]
+    fn hold_to_switch_shows_nothing_until_revealed() {
+        // Sources in and a frame painted, and still not a pixel: until a held modifier
+        // settles it, a quick tap may yet be on its way past.
+        let mut h = Harness::new(Options {
+            hold: true,
+            ..options()
+        });
+        h.send(vec![window("a", "foot"), window("b", "firefox")]);
+        h.frame();
+        assert_eq!(
+            h.app.backdrop(),
+            [0.0; 4],
+            "the dim would give the overlay away as surely as the tiles"
+        );
+    }
+
+    #[test]
+    fn revealing_brings_back_the_dimmed_backdrop() {
+        let mut h = Harness::new(Options {
+            hold: true,
+            ..options()
+        });
+        h.app.reveal();
+        assert_ne!(h.app.backdrop(), [0.0; 4]);
+    }
+
+    #[test]
+    fn without_hold_to_switch_the_picker_is_drawn_straight_away() {
+        // No tap to mistake the first frames for, so nothing is held back.
+        let h = Harness::new(options());
+        assert_ne!(h.app.backdrop(), [0.0; 4]);
     }
 }

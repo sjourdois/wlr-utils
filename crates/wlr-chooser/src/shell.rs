@@ -221,6 +221,11 @@ impl State {
     }
 
     fn draw_frame(&mut self, conn: &Connection, qh: &QueueHandle<Self>) {
+        // Once closing, don't paint: a frame now would flash the overlay a quick tap
+        // kept blank.
+        if self.app.closing() {
+            return;
+        }
         self.ensure_gpu(conn);
         // ask for the next frame so we keep draining the capture channel.
         let surface = self.layer.wl_surface().clone();
@@ -464,6 +469,9 @@ impl State {
             self.armed_alt = self.alt_down;
             self.armed_logo = self.logo_down;
             self.app.arm();
+            // A held modifier means a switch the user is steering, not a tap passing
+            // through.
+            self.app.reveal();
         }
         // Confirm on the release edge, without waiting for a painted frame: a quick
         // release deserves the switch it asked for.
