@@ -198,7 +198,7 @@ doctor` prints exactly what your compositor advertises; see
   data pack must be installed at runtime (default `eng`). `--no-default-features` builds an
   OCR-free binary with none of these.
 - **Focus IPC** — `--active-window` / `--current-output` query the compositor (e.g.
-  `swaymsg` on Sway); without a supported compositor, use an explicit source instead.
+  sway's IPC socket on Sway); without a supported compositor, use an explicit source instead.
 
 ## Install
 

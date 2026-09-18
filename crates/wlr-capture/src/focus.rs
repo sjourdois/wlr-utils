@@ -3,10 +3,11 @@
 //! Wayland deliberately gives a regular client no way to query the global pointer
 //! position or which surface/output has the focus — so, like `grimshot`, we rely
 //! on the compositor's own IPC. This is a small trait with per-compositor backends
-//! selected from the environment: Sway (`swaymsg`), Hyprland (`hyprctl`) and niri
+//! selected from the environment: Sway (`$SWAYSOCK`), Hyprland (`hyprctl`) and niri
 //! (`niri msg`).
 
 use crate::wl::Region;
+use swayipc::{Connection, Fallible, Node, NodeType};
 
 /// A window's identity + content geometry, for binding a region mirror to the window
 /// under it (`app_id` + `title` match a `wl::Toplevel`; `rect` is its content area).
@@ -49,17 +50,19 @@ pub fn detect() -> Option<Box<dyn FocusBackend>> {
     None
 }
 
-/// Sway / wlroots `swaymsg` backend.
+/// Sway / wlroots backend, over sway's own IPC socket.
 struct Sway;
 
 impl Sway {
-    fn query(kind: &str) -> Option<serde_json::Value> {
-        let out = std::process::Command::new("swaymsg")
-            .args(["-t", kind, "-r"])
-            .output()
-            .ok()?;
-        out.status.success().then_some(())?;
-        serde_json::from_slice(&out.stdout).ok()
+    fn with_connection<T>(f: impl FnOnce(&mut Connection) -> Fallible<T>) -> Option<T> {
+        Connection::new()
+            .and_then(|mut c| f(&mut c))
+            .inspect_err(|e| eprintln!("wlr-capture: sway IPC failed: {e}"))
+            .ok()
+    }
+
+    fn tree() -> Option<Node> {
+        Self::with_connection(|c| c.get_tree())
     }
 }
 
@@ -69,92 +72,90 @@ impl FocusBackend for Sway {
     }
 
     fn focused_output(&self) -> Option<String> {
-        let outputs = Self::query("get_outputs")?;
-        outputs
-            .as_array()?
-            .iter()
-            .find(|o| o["focused"].as_bool() == Some(true))?["name"]
-            .as_str()
-            .map(String::from)
+        Self::with_connection(|c| c.get_outputs())?
+            .into_iter()
+            .find(|o| o.focused)
+            .map(|o| o.name)
     }
 
     fn active_window_rect(&self) -> Option<Region> {
-        let tree = Self::query("get_tree")?;
+        let tree = Self::tree()?;
         let node = find_focused(&tree)?;
         // Only windows have an app_id / window properties; a focused empty
         // workspace is not an "active window".
-        let is_window = node.get("app_id").is_some_and(|a| !a.is_null())
-            || node.get("window_properties").is_some()
-            || (matches!(
-                node.get("type").and_then(|t| t.as_str()),
-                Some("con") | Some("floating_con")
-            ) && node.get("name").is_some_and(|n| !n.is_null()));
+        let is_window = node.app_id.is_some()
+            || node.window_properties.is_some()
+            || (matches!(node.node_type, NodeType::Con | NodeType::FloatingCon)
+                && node.name.is_some());
         if !is_window {
             return None;
         }
-        rect_of(node)
+        Some(rect_of(node))
     }
 
     fn window_at(&self, x: i32, y: i32) -> Option<WindowRef> {
-        sway_window_at(&Self::query("get_tree")?, x, y)
+        sway_window_at(&Self::tree()?, x, y)
     }
 }
 
+fn children(node: &Node) -> impl Iterator<Item = &Node> {
+    node.nodes.iter().chain(node.floating_nodes.iter())
+}
+
 /// Whether a sway node is a window (vs a container/workspace/output).
-fn sway_is_window(node: &serde_json::Value) -> bool {
-    node.get("app_id").is_some_and(|a| !a.is_null()) || node.get("window_properties").is_some()
+fn sway_is_window(node: &Node) -> bool {
+    node.app_id.is_some() || node.window_properties.is_some()
 }
 
 /// A node's content rectangle in global logical coordinates: its `rect` shifted by the
 /// `window_rect` (content offset within the node), so the crop lines up with what the
 /// foreign-toplevel capture actually contains (no server-side borders).
-fn sway_content_rect(node: &serde_json::Value) -> Option<Region> {
-    let rect = rect_of(node)?;
-    if let Some(wr) = node.get("window_rect")
-        && let (Some(w), Some(h)) = (wr["width"].as_u64(), wr["height"].as_u64())
-        && w > 0
-        && h > 0
-    {
-        return Some(Region {
-            x: rect.x + wr["x"].as_i64().unwrap_or(0) as i32,
-            y: rect.y + wr["y"].as_i64().unwrap_or(0) as i32,
-            w: w as u32,
-            h: h as u32,
-        });
+fn sway_content_rect(node: &Node) -> Region {
+    let rect = rect_of(node);
+    // Sway sends a zeroed `window_rect` for nodes with no content offset.
+    let wr = &node.window_rect;
+    if wr.width > 0 && wr.height > 0 {
+        return Region {
+            x: rect.x + wr.x,
+            y: rect.y + wr.y,
+            w: wr.width as u32,
+            h: wr.height as u32,
+        };
     }
-    Some(rect)
+    rect
 }
 
 /// The deepest window node whose `rect` contains the global logical point `(x, y)`.
-fn sway_window_at(node: &serde_json::Value, x: i32, y: i32) -> Option<WindowRef> {
+fn sway_window_at(node: &Node, x: i32, y: i32) -> Option<WindowRef> {
     // Skip anything not actually on screen — sway keeps the geometry of windows on
     // hidden workspaces (and tabbed/stacked-behind windows) in the tree, so without
     // this we'd match a window the point only "contains" on a workspace you can't see.
-    if node.get("visible").and_then(|v| v.as_bool()) == Some(false) {
+    if node.visible == Some(false) {
         return None;
     }
     // Descend into children first so the innermost (leaf) window wins.
-    for key in ["floating_nodes", "nodes"] {
-        if let Some(children) = node.get(key).and_then(|c| c.as_array()) {
-            for child in children {
-                if rect_of(child).is_some_and(|r| contains(&r, x, y))
-                    && let Some(found) = sway_window_at(child, x, y)
-                {
-                    return Some(found);
-                }
-            }
+    for child in node.floating_nodes.iter().chain(node.nodes.iter()) {
+        if contains(&rect_of(child), x, y)
+            && let Some(found) = sway_window_at(child, x, y)
+        {
+            return Some(found);
         }
     }
-    if sway_is_window(node) && rect_of(node).is_some_and(|r| contains(&r, x, y)) {
-        let app_id = node["app_id"]
-            .as_str()
-            .or_else(|| node["window_properties"]["class"].as_str())
+    if sway_is_window(node) && contains(&rect_of(node), x, y) {
+        let app_id = node
+            .app_id
+            .as_deref()
+            .or_else(|| {
+                node.window_properties
+                    .as_ref()
+                    .and_then(|w| w.class.as_deref())
+            })
             .unwrap_or_default()
             .to_string();
         return Some(WindowRef {
             app_id,
-            title: node["name"].as_str().unwrap_or_default().to_string(),
-            rect: sway_content_rect(node)?,
+            title: node.name.clone().unwrap_or_default(),
+            rect: sway_content_rect(node),
         });
     }
     None
@@ -165,32 +166,22 @@ fn contains(r: &Region, x: i32, y: i32) -> bool {
     x >= r.x && x < r.x + r.w as i32 && y >= r.y && y < r.y + r.h as i32
 }
 
-/// The single node with `"focused": true` in a sway tree (the active container).
-fn find_focused(node: &serde_json::Value) -> Option<&serde_json::Value> {
-    if node.get("focused").and_then(|f| f.as_bool()) == Some(true) {
+/// The single node with `focused: true` in a sway tree (the active container).
+fn find_focused(node: &Node) -> Option<&Node> {
+    if node.focused {
         return Some(node);
     }
-    for key in ["nodes", "floating_nodes"] {
-        if let Some(children) = node.get(key).and_then(|c| c.as_array()) {
-            for child in children {
-                if let Some(found) = find_focused(child) {
-                    return Some(found);
-                }
-            }
-        }
-    }
-    None
+    children(node).find_map(find_focused)
 }
 
-/// Read a sway `rect` object into a logical [`Region`].
-fn rect_of(node: &serde_json::Value) -> Option<Region> {
-    let r = node.get("rect")?;
-    Some(Region {
-        x: r["x"].as_i64()? as i32,
-        y: r["y"].as_i64()? as i32,
-        w: r["width"].as_u64()? as u32,
-        h: r["height"].as_u64()? as u32,
-    })
+/// Read a sway `rect` into a logical [`Region`].
+fn rect_of(node: &Node) -> Region {
+    Region {
+        x: node.rect.x,
+        y: node.rect.y,
+        w: node.rect.width.max(0) as u32,
+        h: node.rect.height.max(0) as u32,
+    }
 }
 
 /// Hyprland `hyprctl -j` backend.
@@ -288,6 +279,11 @@ fn niri_focused_output(o: &serde_json::Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::{Value, json};
+
+    fn rect(x: i64, y: i64, width: i64, height: i64) -> Value {
+        json!({"x": x, "y": y, "width": width, "height": height})
+    }
 
     // A trimmed but faithful `hyprctl -j monitors` sample (two monitors, the second
     // focused) — locks the field names (`focused`, `name`) the parser relies on.
@@ -302,38 +298,73 @@ mod tests {
     const HYPR_ACTIVEWINDOW: &str =
         r#"{"address":"0x55","class":"foot","title":"foot","at":[120,340],"size":[800,600]}"#;
 
-    // A trimmed sway `get_tree`: an output with a visible workspace (firefox, with a
-    // 20px title-bar `window_rect`) and a *hidden* workspace whose window (vim) covers
-    // the same coordinates — sway keeps its geometry even though it's off screen.
-    const SWAY_TREE: &str = r#"{
-      "type":"root","rect":{"x":0,"y":0,"width":3840,"height":1440},
-      "nodes":[{
-        "type":"output","name":"DP-4","rect":{"x":0,"y":0,"width":3840,"height":1440},
-        "nodes":[
-          {
-            "type":"workspace","name":"1","visible":true,
-            "rect":{"x":0,"y":0,"width":3840,"height":1440},
-            "nodes":[{
-              "type":"con","app_id":"firefox","name":"Page Title","visible":true,
-              "rect":{"x":100,"y":100,"width":800,"height":600},
-              "window_rect":{"x":0,"y":20,"width":800,"height":580}
-            }]
-          },
-          {
-            "type":"workspace","name":"2","visible":false,
-            "rect":{"x":0,"y":0,"width":3840,"height":1440},
-            "nodes":[{
-              "type":"con","app_id":"vim","name":"editor","visible":false,
-              "rect":{"x":100,"y":100,"width":800,"height":600}
-            }]
-          }
-        ]
-      }]
-    }"#;
+    /// A trimmed sway `get_tree`: one output with a visible workspace and a hidden one.
+    fn sway_tree() -> Node {
+        /// A sway tree node: `fields` over the ones sway always sends but no test here
+        /// is about, so the fixture carries only what it is testing.
+        fn node(fields: Value) -> Value {
+            let zero = rect(0, 0, 0, 0);
+            let mut v = json!({
+                "id": 0,
+                "type": "con",
+                "border": "none",
+                "current_border_width": 0,
+                "layout": "none",
+                "orientation": "none",
+                "rect": zero,
+                "window_rect": zero,
+                "deco_rect": zero,
+                "geometry": zero,
+                "urgent": false,
+                "focused": false,
+                "focus": [],
+                "sticky": false,
+                "floating_nodes": [],
+            });
+            let obj = v.as_object_mut().expect("a node is a JSON object");
+            for (key, value) in fields.as_object().expect("a node is a JSON object") {
+                obj.insert(key.clone(), value.clone());
+            }
+            v
+        }
+
+        let screen = rect(0, 0, 3840, 1440);
+        let v = node(json!({
+            "type": "root",
+            "rect": screen,
+            "nodes": [node(json!({
+                "type": "output", "name": "DP-4",
+                "rect": screen,
+                "nodes": [
+                    node(json!({
+                        "type": "workspace", "name": "1", "visible": true,
+                        "rect": screen,
+                        "nodes": [node(json!({
+                            "app_id": "firefox", "name": "Page Title", "visible": true,
+                            "rect": rect(100, 100, 800, 600),
+                            // A 20px title bar, so the content rect is not the node's.
+                            "window_rect": rect(0, 20, 800, 580),
+                        }))],
+                    })),
+                    node(json!({
+                        "type": "workspace", "name": "2", "visible": false,
+                        "rect": screen,
+                        // Covers the same coordinates as firefox — sway keeps the
+                        // geometry of a window even while its workspace is off screen.
+                        "nodes": [node(json!({
+                            "app_id": "vim", "name": "editor", "visible": false,
+                            "rect": rect(100, 100, 800, 600),
+                        }))],
+                    })),
+                ],
+            }))],
+        }));
+        serde_json::from_value(v).expect("fixture should be a valid sway node")
+    }
 
     #[test]
     fn sway_window_at_finds_visible_window_and_content_rect() {
-        let v: serde_json::Value = serde_json::from_str(SWAY_TREE).unwrap();
+        let v = sway_tree();
         let w = sway_window_at(&v, 200, 200).expect("window under the point");
         // The visible window wins, never the one on the hidden workspace.
         assert_eq!(w.app_id, "firefox");

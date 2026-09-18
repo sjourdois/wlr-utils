@@ -52,7 +52,7 @@ Source (pick one; defaults to the sole output):
 - `--current-output` — the focused output.
 
 The last two need the compositor's focus info. Wayland exposes no portable way to
-query focus, so these use compositor IPC: **Sway** (`swaymsg`) is supported today;
+query focus, so these use compositor IPC: **Sway** (`$SWAYSOCK`) is supported today;
 Hyprland / niri are natural future additions. Without a supported compositor they
 error with a hint (use `--pick-window` / `-o NAME` instead).
 

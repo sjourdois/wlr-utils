@@ -71,7 +71,7 @@ backend (for `-a` / `--current-output`). Run `wlr-peek doctor` to check your own
 
 | Compositor | Screen capture | Window capture | Overlays (layer-shell) | Focus IPC |
 | --- | --- | --- | --- | --- |
-| **Sway** | ✅ ≥ 1.11 (wlroots 0.19) | ✅ ≥ 1.12 (wlroots 0.20) | ✅ | ✅ `swaymsg` |
+| **Sway** | ✅ ≥ 1.11 (wlroots 0.19) | ✅ ≥ 1.12 (wlroots 0.20) | ✅ | ✅ `$SWAYSOCK` |
 | **Hyprland** | ✅ ≥ v0.54 | ✅ ≥ v0.54 | ✅ | ✅ `hyprctl` |
 | **labwc** | ✅ ≥ 0.9 (wlroots 0.19) | 🟡 ≥ 0.20 (partial) | ✅ | ❌ |
 | **cosmic-comp** | ✅ | ✅ | ✅ | ❌ |
@@ -102,7 +102,7 @@ Two caveats:
 Two things vary by compositor:
 
 - **Focus-aware sources** — `-a` (active window) and `--current-output` need a
-  per-compositor IPC backend (see below). Backends ship for **Sway** (`swaymsg`),
+  per-compositor IPC backend (see below). Backends ship for **Sway** (its IPC socket),
   **Hyprland** (`hyprctl`) and **niri** (`niri msg`). Without a backend, every *other*
   source still works: `-s` interactive select, `-g` geometry, `-o NAME`, `-w ID`,
   `--pick-window`. (niri exposes no per-window global rectangle, so its `-a` is

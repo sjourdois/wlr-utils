@@ -41,6 +41,7 @@ rustix.workspace = true
 gbm = { workspace = true, optional = true }
 # Compositor IPC for focus-aware capture (the `focus` feature).
 serde_json = { workspace = true, optional = true }
+swayipc = { workspace = true, optional = true }
 # Windowing host for the shared frozen overlay (the `overlay` feature).
 smithay-client-toolkit = { workspace = true, optional = true }
 # Native FFmpeg bindings for video encoding (the `video` feature).
@@ -75,8 +76,8 @@ gpu = ["dep:gbm"]
 # that only streams frames through `sink` doesn't need it.
 compose = ["dep:image"]
 # Focus-aware capture (`focus`): query the compositor's IPC for the active window /
-# current output. Pulls `serde_json` to parse it.
-focus = ["dep:serde_json"]
+# current output. Pulls `serde_json` to parse `hyprctl` and `niri msg` outputs.
+focus = ["dep:serde_json", "dep:swayipc"]
 # The shared frozen-screen overlay (`overlay`): a layer-shell surface per output
 # rendering a frozen capture for interactive region/point selection. Needs the
 # toolkit (egui rendering), compose (OutputCapture) and a windowing host (sctk).
