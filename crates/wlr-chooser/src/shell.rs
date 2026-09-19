@@ -80,6 +80,9 @@ struct State {
     armed_logo: bool,
     /// Previous "an armed modifier is held" state, to detect the release edge.
     prev_held: bool,
+    /// Keyboard focus came in and the modifier state that must follow it hasn't yet:
+    /// only then can a launch modifier released before focus be told apart.
+    awaiting_enter_modifiers: bool,
 
     /// Process start, for cold-start timing.
     t0: Instant,
@@ -170,6 +173,7 @@ pub fn run(app: App, t0: Instant) -> anyhow::Result<()> {
         armed_alt: false,
         armed_logo: false,
         prev_held: false,
+        awaiting_enter_modifiers: false,
         t0,
         first_paint_logged: false,
     };
@@ -383,7 +387,9 @@ impl KeyboardHandler for State {
         self.alt_down = keysyms.iter().copied().any(is_alt);
         self.logo_down = keysyms.iter().copied().any(is_logo);
         self.reconcile();
-        self.infer_release();
+        // Some compositors report the held modifier in the `modifiers` event that
+        // follows `enter` rather than in its key set; decide once it's in.
+        self.awaiting_enter_modifiers = true;
     }
     fn leave(
         &mut self,
@@ -449,6 +455,9 @@ impl KeyboardHandler for State {
         self.alt_down = modifiers.alt;
         self.logo_down = modifiers.logo;
         self.reconcile();
+        if std::mem::take(&mut self.awaiting_enter_modifiers) {
+            self.infer_release();
+        }
     }
 }
 
@@ -482,8 +491,8 @@ impl State {
         self.prev_held = held;
     }
 
-    /// Confirm if no launch modifier is held at keyboard focus-in: it was released
-    /// before we got focus, so no release event will come.
+    /// Confirm if no launch modifier is held once focus-in's modifier state is known:
+    /// it was released before we got focus, so no release event will come.
     fn infer_release(&mut self) {
         if !self.armed {
             self.app.arm();
