@@ -198,7 +198,9 @@ Bug reports, translations and patches welcome — see
 - [Jadi Mirmirani](https://github.com/jadijadi) — graphics tablet (stylus) support in
   wlr-draw ([#9](https://github.com/sjourdois/wlr-utils/pull/9))
 - [Ben Reinhold](https://github.com/bR3iN) — faster overlay startup through fontconfig's
-  cache ([#10](https://github.com/sjourdois/wlr-utils/pull/10))
+  cache ([#10](https://github.com/sjourdois/wlr-utils/pull/10)); most recently used
+  window order and reliable quick Alt-Tab in wlr-switcher
+  ([#14](https://github.com/sjourdois/wlr-utils/pull/14))
 
 ## License
 
