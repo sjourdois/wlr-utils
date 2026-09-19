@@ -7,7 +7,7 @@
 //!
 //! For the xdg-desktop-portal-wlr picker (prints to stdout), see `wlr-chooser`.
 
-use crate::chooser_cli::OrderArg;
+use crate::OrderArg;
 use crate::ui::{Live, Mode, Options, View};
 use crate::{acquire_switch_lock, run_overlay};
 use crate::{i18n, tr};

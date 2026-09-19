@@ -7,27 +7,11 @@
 //! For an interactive window switcher / Alt-Tab / exposé, see the sibling
 //! `wlr-switcher` binary.
 
-use crate::ui::{self, Live, Mode, Options, Order, View};
+use crate::ui::{self, Live, Mode, Options, View};
+use crate::{OrderArg, parse_grid, run_overlay};
 use crate::{i18n, tr};
-use crate::{parse_grid, run_overlay};
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use std::time::Instant;
-
-/// Window order (CLI mirror of [`Order`]).
-#[derive(Clone, Copy, ValueEnum)]
-pub(crate) enum OrderArg {
-    ByName,
-    Mru,
-}
-
-impl From<OrderArg> for Order {
-    fn from(v: OrderArg) -> Self {
-        match v {
-            OrderArg::ByName => Order::ByName,
-            OrderArg::Mru => Order::Mru,
-        }
-    }
-}
 
 /// Graphical window & screen picker for xdg-desktop-portal-wlr.
 ///

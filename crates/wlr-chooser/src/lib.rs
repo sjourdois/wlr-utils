@@ -15,6 +15,22 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::Instant;
 use wlr_capture::theme;
 
+/// Window order (CLI mirror of [`ui::Order`]), shared by both front-ends.
+#[derive(Clone, Copy, clap::ValueEnum)]
+pub(crate) enum OrderArg {
+    ByName,
+    Mru,
+}
+
+impl From<OrderArg> for ui::Order {
+    fn from(v: OrderArg) -> Self {
+        match v {
+            OrderArg::ByName => ui::Order::ByName,
+            OrderArg::Mru => ui::Order::Mru,
+        }
+    }
+}
+
 /// Parse a `COLSxROWS` grid spec (e.g. `4x3`).
 pub fn parse_grid(s: &str) -> Result<(u32, u32), String> {
     let (c, r) = s
