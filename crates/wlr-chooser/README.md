@@ -171,6 +171,11 @@ force it either way with `--hold` / `--no-hold`. With it off, the overlay stays
 open after release — confirm with Enter or a click. Only one switcher opens at a
 time (re-pressing the keybind is a no-op).
 
+With hold-to-switch on, a modifier that is no longer held when the overlay gets the
+keyboard counts as released: a quick tap switches straight away, without showing
+the overlay. Bind a strip to a key with no modifier (or run it from a terminal) with
+`--no-hold`, or it switches as soon as it opens.
+
 > **Tip:** set `WLR_CHOOSER_TIMING=1` to print cold-start timing milestones to
 > stderr if you want to profile how fast the overlay appears.
 

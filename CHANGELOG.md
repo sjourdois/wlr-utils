@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Added
+
+- **Most recently used window order**
+  ([#14](https://github.com/sjourdois/wlr-utils/pull/14), by
+  [@bR3iN](https://github.com/bR3iN)) — `--window-order mru|by-name` on
+  `wlr-switcher` and `wlr-chooser`. `mru` lists the window you were just on first, so
+  a quick Alt-Tab goes back to the previous one; it's the switcher's new default,
+  while the chooser keeps `by-name`. Sway only for now; other compositors fall back to
+  `by-name`. Sway reports focus history per container, so windows on different
+  workspaces aren't interleaved: the current workspace's windows come first.
+
 ### Changed
 
 - **Font lookup now goes through fontconfig**
@@ -23,6 +34,24 @@ All notable changes to this project are documented here. The format is based on
 
   `libfontconfig1` is now a runtime dependency (added to the `.deb`s). Without it,
   the overlays fall back to egui's embedded fonts, which don't cover CJK.
+
+- **`wlr-switcher` hold-to-switch no longer falls back to a classic picker**
+  ([#14](https://github.com/sjourdois/wlr-utils/pull/14), by
+  [@bR3iN](https://github.com/bR3iN)) — if the launch modifier is already released
+  when the overlay gets the keyboard, the switch happens straight away. A strip bound
+  to a key with no modifier now needs `--no-hold`. The highlight only skips ahead to
+  the second window when the first is the one you're on (MRU order); with `by-name`
+  it starts on the first.
+- The Sway focus backend talks to sway's IPC socket directly instead of running
+  `swaymsg`.
+
+### Fixed
+
+- **Quick Alt-Tabs in `wlr-switcher` switch reliably**
+  ([#14](https://github.com/sjourdois/wlr-utils/pull/14), by
+  [@bR3iN](https://github.com/bR3iN)) — releasing Alt before the first frame, or
+  before the overlay had the keyboard, used to leave the overlay open. The overlay no
+  longer flashes on screen during a quick tap either.
 
 ## 1.8.0 — 2026-09-11
 
