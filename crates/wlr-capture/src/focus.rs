@@ -78,10 +78,7 @@ struct Sway;
 
 impl Sway {
     fn with_connection<T>(f: impl FnOnce(&mut Connection) -> Fallible<T>) -> Option<T> {
-        Connection::new()
-            .and_then(|mut c| f(&mut c))
-            .inspect_err(|e| eprintln!("wlr-capture: sway IPC failed: {e}"))
-            .ok()
+        Connection::new().and_then(|mut c| f(&mut c)).ok()
     }
 
     fn tree() -> Option<Node> {
