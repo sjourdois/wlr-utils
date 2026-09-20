@@ -152,6 +152,12 @@ window, `none` shows app icons only.
 Windows are listed most recently focused first where the compositor reports it
 (Sway), by name otherwise; `--window-order by-name` always orders them by name.
 
+Whatever the order, the overlay opens with the **first window that is not the one
+you are on** highlighted, so releasing the modifier straight away always switches
+somewhere. Which window that is comes from `zwlr-foreign-toplevel-management-v1`
+(the `activated` state) — the protocol that focuses the picked window — not from a
+compositor IPC, so it behaves the same wherever `wlr-switcher` runs at all.
+
 ### True Alt-Tab (hold-to-switch)
 
 Bind `wlr-switcher` to a **held** modifier and it behaves like a classic Alt-Tab:

@@ -87,19 +87,24 @@ pub enum Order {
 }
 
 impl Order {
-    /// The window order to apply, and the identifier of the window focused right now
-    /// if known. `Mru` asks the compositor, so this has to run before the overlay
-    /// takes the focus.
-    pub(crate) fn resolve(self) -> (WindowOrder, Option<String>) {
-        match self {
-            Self::Mru => {
-                let focus_order = focus::detect()
+    /// The window order to apply, and the window that holds the focus right now if
+    /// it could be read. Both describe the state the overlay is about to replace, so
+    /// this has to run before it takes the keyboard.
+    pub(crate) fn resolve(self) -> (WindowOrder, Option<wl::WindowIdentity>) {
+        // The active window comes from the foreign-toplevel protocol rather than a
+        // compositor IPC, so the switcher opens on the same tile everywhere — MRU
+        // history, below, is the part only some compositors can answer.
+        let focused = wl::active_window().ok().flatten();
+        let order = match self {
+            Self::Mru => WindowOrder::mru(
+                focus::detect()
                     .and_then(|b| b.focus_order())
-                    .unwrap_or_default();
-                (WindowOrder::mru(focus_order.windows()), focus_order.focused)
-            }
-            Self::ByName => (WindowOrder::ByName, None),
-        }
+                    .unwrap_or_default()
+                    .windows(),
+            ),
+            Self::ByName => WindowOrder::ByName,
+        };
+        (order, focused)
     }
 }
 
@@ -152,6 +157,17 @@ pub struct Source {
 }
 
 impl Source {
+    /// Whether this source is the window `w` denotes. Windows are matched the way
+    /// they are activated — (app_id, title, creation-order index) — with the same
+    /// blind spot: an XWayland window whose app-id the two foreign-toplevel
+    /// protocols spell differently matches nothing.
+    fn is(&self, w: &wl::WindowIdentity) -> bool {
+        self.is_window
+            && self.app_id == w.app_id
+            && self.win_title == w.title
+            && self.dup_index == w.dup_index
+    }
+
     /// The identity to hand back to `main` when this source is picked.
     fn selection(&self) -> Selection {
         Selection {
@@ -614,19 +630,16 @@ pub struct App {
     hold: bool,
     /// Which Alt-Tab tiles show a live preview (vs. just the icon).
     live: Live,
-    /// How windows are ordered.
-    order: Order,
     /// Set once the host arms hold-to-switch; enables Tab-cycle and
     /// confirm-on-Alt-release.
     armed: bool,
-    /// Once armed with sources present, cycle forward once so releasing Alt
-    /// immediately switches — like a real Alt-Tab where the launching Tab already
-    /// advanced once. Only if windows are MRU ordered and the focused one leads the
-    /// list (see [`App::apply_initial_select`]).
+    /// Once armed with sources present, place the initial selection so that
+    /// releasing Alt immediately switches — like a real Alt-Tab where the launching
+    /// Tab already advanced once (see [`App::apply_initial_select`]).
     pending_initial_select: bool,
-    /// Identifier of the window focused at launch, if known: the one the initial
-    /// cycle steps away from.
-    focused: Option<String>,
+    /// The window that had the focus at launch, if it could be read: the one the
+    /// initial selection steps away from.
+    focused: Option<wl::WindowIdentity>,
     /// A confirm that landed before the source list did — a release before the first
     /// frame — carried out as soon as [`App::pump`] delivers the sources.
     pending_confirm: bool,
@@ -648,7 +661,7 @@ impl App {
         rx: Receiver<Msg>,
         out: Outcome,
         opts: Options,
-        focused: Option<String>,
+        focused: Option<wl::WindowIdentity>,
         theme: Theme,
         gpu_failed: Arc<AtomicBool>,
     ) -> Self {
@@ -669,7 +682,6 @@ impl App {
             selected: 0,
             hold: opts.hold,
             live: opts.live,
-            order: opts.order,
             armed: false,
             pending_initial_select: false,
             focused,
@@ -701,7 +713,7 @@ impl App {
     }
 
     /// Arm hold-to-switch: enable Tab-cycle and confirm-on-release, and arm the
-    /// initial MRU-ish jump.
+    /// initial selection (see [`App::apply_initial_select`]).
     pub fn arm(&mut self) {
         if !self.armed {
             self.armed = true;
@@ -733,19 +745,25 @@ impl App {
         }
     }
 
-    /// Apply the pending initial forward cycle, once sources exist — if the focused
-    /// window leads the list. Otherwise the first tile is not the window the user is
-    /// on, so it is already the one to switch to.
+    /// Place the initial selection, once sources exist: on the first visible window
+    /// that is *not* the one the user is on, whatever the order. A switcher exists to
+    /// leave the current window, so releasing the modifier straight away must land
+    /// somewhere else — the way a real Alt-Tab's launching Tab has already moved on.
+    ///
+    /// The current window being unknown (no focus, or an identity the tiles don't
+    /// carry) or absent from the list falls back to the first tile, which is then not
+    /// the one the user is on either.
     fn apply_initial_select(&mut self) {
         if self.pending_initial_select && self.sources.is_some() {
             self.pending_initial_select = false;
-            let leads = self
-                .focused
-                .as_ref()
-                .is_some_and(|f| self.visible().first().is_some_and(|s| &s.key == f));
-            if self.order == Order::Mru && leads {
-                self.cycle(true);
-            }
+            self.selected = match &self.focused {
+                Some(f) => self
+                    .visible()
+                    .iter()
+                    .position(|s| !s.is(f))
+                    .unwrap_or_default(),
+                None => 0,
+            };
         }
     }
 
@@ -755,7 +773,7 @@ impl App {
         if n == 0 {
             return; // nothing to cycle yet; keep the pending initial jump
         }
-        // The initial MRU jump (if still pending) represents the launching chord;
+        // The initial placement (if still pending) represents the launching chord;
         // a real Tab press supersedes it.
         self.pending_initial_select = false;
         self.selected = if forward {
@@ -1694,6 +1712,23 @@ mod tests {
         }
     }
 
+    /// One of several identical windows, told apart by its creation-order ordinal.
+    fn duplicate(key: &str, app_id: &str, dup_index: usize) -> Source {
+        Source {
+            dup_index,
+            ..window(key, app_id)
+        }
+    }
+
+    /// The compositor's view of `window(_, app_id)`, as the window holding the focus.
+    fn focus(app_id: &str) -> wl::WindowIdentity {
+        wl::WindowIdentity {
+            app_id: app_id.into(),
+            title: String::new(),
+            dup_index: 0,
+        }
+    }
+
     /// Options for a plain window list with every optional behaviour off; tests switch
     /// on what they exercise.
     fn options() -> Options {
@@ -1722,11 +1757,10 @@ mod tests {
         }
 
         /// With `focused` as the window that had the focus at launch.
-        fn focused_on(opts: Options, focused: Option<&str>) -> Self {
+        fn focused_on(opts: Options, focused: Option<wl::WindowIdentity>) -> Self {
             let (tx, rx) = mpsc::channel();
             let out: Outcome = Arc::new(Mutex::new(None));
             let gpu_failed = Arc::new(AtomicBool::new(false));
-            let focused = focused.map(String::from);
             let app = App::new(rx, out.clone(), opts, focused, Theme::default(), gpu_failed);
             Self {
                 app,
@@ -1762,7 +1796,7 @@ mod tests {
             order: Order::Mru,
             ..options()
         };
-        let mut h = Harness::focused_on(hold, Some("a"));
+        let mut h = Harness::focused_on(hold, Some(focus("foot")));
         h.app.arm();
         h.app.confirm_release();
         // Nothing to pick from yet: closing now would switch nowhere.
@@ -1783,7 +1817,7 @@ mod tests {
             order: Order::Mru,
             ..options()
         };
-        let mut h = Harness::focused_on(hold, Some("a"));
+        let mut h = Harness::focused_on(hold, Some(focus("foot")));
         h.send(vec![window("a", "foot"), window("b", "firefox")]);
         h.frame();
         h.app.arm();
@@ -1801,7 +1835,7 @@ mod tests {
             order: Order::Mru,
             ..options()
         };
-        let mut h = Harness::focused_on(hold, Some("a"));
+        let mut h = Harness::focused_on(hold, Some(focus("foot")));
         h.app.arm();
         h.send(vec![]);
         h.frame();
@@ -1813,15 +1847,17 @@ mod tests {
     }
 
     #[test]
-    fn without_the_focused_window_leading_the_first_one_is_switched_to() {
-        // No window had the focus, or the focused one is hidden (a system window): the
-        // first tile is not the window the user is on, so it is the one to switch to.
-        for focused in [None, Some("s")] {
+    fn an_unknown_current_window_starts_on_the_first_tile() {
+        // Nothing had the focus; the focused window is hidden from the tiles (a system
+        // window); or its identity matches no tile at all (the XWayland app-id blind
+        // spot). Either way the first tile is not the window the user is on, so it is
+        // the one to switch to.
+        for focused in [None, Some(focus("")), Some(focus("steam"))] {
             let hold = Options {
                 hold: true,
                 ..options()
             };
-            let mut h = Harness::focused_on(hold, focused);
+            let mut h = Harness::focused_on(hold, focused.clone());
             h.send(vec![
                 window("s", ""),
                 window("a", "foot"),
@@ -1836,6 +1872,76 @@ mod tests {
                 "focused: {focused:?}"
             );
         }
+    }
+
+    #[test]
+    fn the_current_window_is_stepped_over_whatever_the_order() {
+        // It leads the list here — as MRU always puts it, and as by-name may: a
+        // switcher that offered the window you are already on would switch nowhere.
+        for (order, name) in [(Order::ByName, "by-name"), (Order::Mru, "mru")] {
+            let hold = Options {
+                hold: true,
+                order,
+                ..options()
+            };
+            let mut h = Harness::focused_on(hold, Some(focus("foot")));
+            h.send(vec![window("a", "foot"), window("b", "firefox")]);
+            h.frame();
+            h.app.arm();
+            h.app.confirm_release();
+            assert_eq!(h.picked().as_deref(), Some("Window: b"), "order: {name}");
+        }
+    }
+
+    #[test]
+    fn a_current_window_further_down_leaves_the_first_tile_selected() {
+        // By name, the window the user is on is second: the first tile is already
+        // somewhere else to go, and stepping over would skip it for nothing.
+        let hold = Options {
+            hold: true,
+            ..options()
+        };
+        let mut h = Harness::focused_on(hold, Some(focus("firefox")));
+        h.send(vec![window("a", "foot"), window("b", "firefox")]);
+        h.frame();
+        h.app.arm();
+        h.app.confirm_release();
+        assert_eq!(h.picked().as_deref(), Some("Window: a"));
+    }
+
+    #[test]
+    fn the_only_window_is_selected_even_when_it_is_the_current_one() {
+        // There is nowhere else to go: switching to itself beats switching to nothing.
+        let hold = Options {
+            hold: true,
+            ..options()
+        };
+        let mut h = Harness::focused_on(hold, Some(focus("foot")));
+        h.send(vec![window("a", "foot")]);
+        h.frame();
+        h.app.arm();
+        h.app.confirm_release();
+        assert_eq!(h.picked().as_deref(), Some("Window: a"));
+    }
+
+    #[test]
+    fn identical_windows_are_told_apart_by_their_creation_order() {
+        // Two windows of the same app with the same title: only the ordinal says which
+        // one the user is on, and the other one is where the switch goes.
+        let hold = Options {
+            hold: true,
+            ..options()
+        };
+        let second = wl::WindowIdentity {
+            dup_index: 1,
+            ..focus("foot")
+        };
+        let mut h = Harness::focused_on(hold, Some(second));
+        h.send(vec![duplicate("a", "foot", 0), duplicate("b", "foot", 1)]);
+        h.frame();
+        h.app.arm();
+        h.app.confirm_release();
+        assert_eq!(h.picked().as_deref(), Some("Window: a"));
     }
 
     #[test]

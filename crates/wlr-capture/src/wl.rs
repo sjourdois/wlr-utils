@@ -19,7 +19,7 @@ use wayland_client::{
     Connection, Dispatch, EventQueue, Proxy, QueueHandle, WEnum,
     backend::ObjectId,
     delegate_noop, event_created_child,
-    globals::{GlobalListContents, registry_queue_init},
+    globals::{GlobalList, GlobalListContents, registry_queue_init},
     protocol::{
         wl_buffer::WlBuffer,
         wl_output::{self, Transform, WlOutput},
@@ -1311,54 +1311,157 @@ fn convert(raw: &[u8], w: u32, h: u32, stride: usize, layout: &PixelLayout) -> C
     }
 }
 
-// --- Window activation (zwlr-foreign-toplevel-management) ---
+// --- Window activation and focus (zwlr-foreign-toplevel-management) ---
 //
-// Capture uses ext-foreign-toplevel-list (stable `identifier`), but activation
-// needs zwlr handles, a separate object namespace. We correlate the two by
-// app_id + title — the only key both expose. This is a self-contained, one-shot
-// path on its own connection, run after the picker closes (so our overlay's
-// keyboard grab is already gone and focus can move to the target).
+// Capture uses ext-foreign-toplevel-list (stable `identifier`), but activation and
+// the "which window is active right now" question need zwlr handles, a separate
+// object namespace. We correlate the two by app_id + title — the only key both
+// expose — plus a creation-order index among identical windows. Each is a
+// self-contained, one-shot path on its own connection.
 
-/// Enumeration state for [`activate_window`].
+/// A toplevel as zwlr-foreign-toplevel-management advertises it.
+struct ZwlrToplevel {
+    handle: ZwlrForeignToplevelHandleV1,
+    app_id: String,
+    title: String,
+    /// Whether the compositor reports this window as `activated` (focused).
+    activated: bool,
+}
+
+/// The identity of a window, in the terms both foreign-toplevel protocols share.
+/// Correlates a zwlr handle to a capture [`Toplevel`] (and to a chooser tile).
+///
+/// The correlation is not airtight: for an XWayland window the two protocols can
+/// disagree — on Sway, `ext-foreign-toplevel-list` reports an empty `app_id` where
+/// zwlr reports the X11 class — and such a window matches nothing. Callers treat a
+/// failed match as "unknown", never as an error.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WindowIdentity {
+    /// The application id.
+    pub app_id: String,
+    /// The window title.
+    pub title: String,
+    /// Ordinal among the windows sharing this (app_id, title), in creation order.
+    pub dup_index: usize,
+}
+
+/// Enumeration state for [`activate_window`] and [`active_window`].
 #[derive(Default)]
 struct ActState {
-    /// (handle, app_id, title) for every advertised toplevel.
-    toplevels: Vec<(ZwlrForeignToplevelHandleV1, String, String)>,
+    toplevels: Vec<ZwlrToplevel>,
+}
+
+impl ActState {
+    /// The ordinal of the toplevel at `i` among those sharing its (app_id, title),
+    /// in the order the compositor advertised them — which is creation order on
+    /// wlroots, for both foreign-toplevel protocols.
+    fn dup_index(&self, i: usize) -> usize {
+        let t = &self.toplevels[i];
+        dup_index(
+            self.toplevels[..i]
+                .iter()
+                .map(|o| (o.app_id.as_str(), o.title.as_str())),
+            &t.app_id,
+            &t.title,
+        )
+    }
+}
+
+/// How many of the windows advertised before this one share its identity. Free
+/// function so the rule is unit-testable without a live compositor.
+fn dup_index<'a>(
+    prior: impl Iterator<Item = (&'a str, &'a str)>,
+    app_id: &str,
+    title: &str,
+) -> usize {
+    prior.filter(|&(a, t)| a == app_id && t == title).count()
+}
+
+/// A live zwlr-foreign-toplevel-management connection, with the toplevels the
+/// compositor advertised on bind. Kept as a whole so the handles stay usable.
+struct ToplevelEnumeration {
+    globals: GlobalList,
+    queue: EventQueue<ActState>,
+    state: ActState,
+    /// The manager and its connection outlive every handle taken from them.
+    _manager: ZwlrForeignToplevelManagerV1,
+    _conn: Connection,
+}
+
+/// Connect, bind zwlr-foreign-toplevel-management and collect the toplevels it
+/// advertises, with their app-id, title and activation state.
+fn enumerate_toplevels() -> Result<ToplevelEnumeration> {
+    let conn = Connection::connect_to_env().context("Wayland connection")?;
+    let (globals, mut queue) =
+        registry_queue_init::<ActState>(&conn).context("Wayland registry")?;
+    let qh = queue.handle();
+    let manager: ZwlrForeignToplevelManagerV1 = globals
+        .bind(&qh, 1..=3, ())
+        .context("zwlr_foreign_toplevel_manager_v1 missing (unsupported compositor)")?;
+
+    // Binding the manager makes the compositor advertise current toplevels: the
+    // first roundtrip brings the handles, the second the events describing them.
+    let mut state = ActState::default();
+    queue.roundtrip(&mut state).context("Wayland roundtrip")?;
+    queue.roundtrip(&mut state).context("Wayland roundtrip")?;
+    Ok(ToplevelEnumeration {
+        globals,
+        queue,
+        state,
+        _manager: manager,
+        _conn: conn,
+    })
+}
+
+/// The window that holds the focus right now, or `None` if no window does.
+///
+/// Portable across wlroots compositors: it reads zwlr's `activated` state rather
+/// than a compositor-specific IPC. It must run *before* the caller maps a layer
+/// surface that takes the keyboard — under an exclusive keyboard grab no toplevel
+/// is activated any more, and the answer becomes `None`.
+pub fn active_window() -> Result<Option<WindowIdentity>> {
+    let e = enumerate_toplevels()?;
+    // A multi-seat compositor can activate one window per seat; the first is as
+    // good a choice as any, since a client cannot tell which seat is "ours".
+    let Some(i) = e.state.toplevels.iter().position(|t| t.activated) else {
+        return Ok(None);
+    };
+    let t = &e.state.toplevels[i];
+    Ok(Some(WindowIdentity {
+        app_id: t.app_id.clone(),
+        title: t.title.clone(),
+        dup_index: e.state.dup_index(i),
+    }))
 }
 
 /// Focus the window matching `app_id` + `title` via zwlr-foreign-toplevel-manager.
 /// `dup_index` selects among identical (app_id, title) windows by creation order
 /// (both ext-foreign-toplevel-list and zwlr enumerate in that order on wlroots),
 /// so the right one is focused even with duplicates.
+///
+/// Run it after the picker closes, so our overlay's keyboard grab is already gone
+/// and focus can move to the target.
 pub fn activate_window(app_id: &str, title: &str, dup_index: usize) -> Result<()> {
-    let conn = Connection::connect_to_env().context("Wayland connection")?;
-    let (globals, mut queue) =
-        registry_queue_init::<ActState>(&conn).context("Wayland registry")?;
-    let qh = queue.handle();
-    let _mgr: ZwlrForeignToplevelManagerV1 = globals
-        .bind(&qh, 1..=3, ())
-        .context("zwlr_foreign_toplevel_manager_v1 missing (unsupported compositor)")?;
-    let seat: WlSeat = globals.bind(&qh, 1..=8, ()).context("wl_seat missing")?;
+    let mut e = enumerate_toplevels()?;
+    let seat: WlSeat = e
+        .globals
+        .bind(&e.queue.handle(), 1..=8, ())
+        .context("wl_seat missing")?;
 
-    // Binding the manager makes the compositor advertise current toplevels.
-    let mut st = ActState::default();
-    queue.roundtrip(&mut st).context("Wayland roundtrip")?;
-    queue.roundtrip(&mut st).context("Wayland roundtrip")?;
-
-    let handle = st
+    let matching = |t: &&ZwlrToplevel| t.app_id == app_id && t.title == title;
+    let handle = e
+        .state
         .toplevels
         .iter()
-        .filter(|(_, a, t)| a == app_id && t == title)
+        .filter(matching)
         .nth(dup_index)
-        .or_else(|| {
-            st.toplevels
-                .iter()
-                .find(|(_, a, t)| a == app_id && t == title)
-        })
-        .map(|(h, _, _)| h.clone())
+        .or_else(|| e.state.toplevels.iter().find(matching))
+        .map(|t| t.handle.clone())
         .with_context(|| format!("window to activate not found: {app_id} / {title}"))?;
     handle.activate(&seat);
-    queue.roundtrip(&mut st).context("Wayland roundtrip")?; // flush the activate request
+    e.queue
+        .roundtrip(&mut e.state)
+        .context("Wayland roundtrip")?; // flush the activate request
     Ok(())
 }
 
@@ -1399,9 +1502,12 @@ impl Dispatch<ZwlrForeignToplevelManagerV1, ()> for ActState {
         _: &QueueHandle<Self>,
     ) {
         if let zwlr_foreign_toplevel_manager_v1::Event::Toplevel { toplevel } = event {
-            state
-                .toplevels
-                .push((toplevel, String::new(), String::new()));
+            state.toplevels.push(ZwlrToplevel {
+                handle: toplevel,
+                app_id: String::new(),
+                title: String::new(),
+                activated: false,
+            });
         }
     }
 
@@ -1420,15 +1526,31 @@ impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for ActState {
         _: &QueueHandle<Self>,
     ) {
         use zwlr_foreign_toplevel_handle_v1::Event;
-        let Some(e) = state.toplevels.iter_mut().find(|(h, _, _)| h == handle) else {
+        if matches!(event, Event::Closed) {
+            state.toplevels.retain(|t| &t.handle != handle);
+            return;
+        }
+        let Some(t) = state.toplevels.iter_mut().find(|t| &t.handle == handle) else {
             return;
         };
         match event {
-            Event::AppId { app_id } => e.1 = app_id,
-            Event::Title { title } => e.2 = title,
+            Event::AppId { app_id } => t.app_id = app_id,
+            Event::Title { title } => t.title = title,
+            Event::State { state } => t.activated = has_activated(&state),
             _ => {}
         }
     }
+}
+
+/// Whether a zwlr `state` event carries the `activated` flag. The payload is a
+/// `wl_array` of `zwlr_foreign_toplevel_handle_v1::state` values, i.e. `u32`s in
+/// the host byte order.
+fn has_activated(state: &[u8]) -> bool {
+    let (values, _) = state.as_chunks::<4>();
+    values
+        .iter()
+        .map(|&v| u32::from_ne_bytes(v))
+        .any(|v| v == zwlr_foreign_toplevel_handle_v1::State::Activated as u32)
 }
 
 delegate_noop!(ActState: ignore WlSeat);
@@ -1704,6 +1826,28 @@ mod tests {
         assert!(PixelLayout::of(Format::Xrgb8888).unwrap().a.is_none());
         assert_eq!(PixelLayout::of(Format::Argb8888).unwrap().a, Some(3));
         assert_eq!(PixelLayout::of(Format::Abgr8888).unwrap().a, Some(3));
+    }
+
+    #[test]
+    fn activated_is_read_from_the_state_array() {
+        let flags = |v: &[u32]| -> Vec<u8> { v.iter().flat_map(|s| s.to_ne_bytes()).collect() };
+        let activated = zwlr_foreign_toplevel_handle_v1::State::Activated as u32;
+        let maximized = zwlr_foreign_toplevel_handle_v1::State::Maximized as u32;
+
+        assert!(has_activated(&flags(&[maximized, activated])));
+        assert!(!has_activated(&flags(&[maximized])));
+        // No state at all: the window is not focused (and sends this on unfocus).
+        assert!(!has_activated(&[]));
+    }
+
+    #[test]
+    fn dup_index_counts_identical_windows_before_this_one() {
+        let windows = [("foot", "a"), ("firefox", "b"), ("foot", "a")];
+        let prior = |n: usize| windows[..n].iter().copied();
+        assert_eq!(dup_index(prior(0), "foot", "a"), 0);
+        assert_eq!(dup_index(prior(2), "foot", "a"), 1);
+        // A different title is a different window, however alike the app.
+        assert_eq!(dup_index(prior(3), "foot", "z"), 0);
     }
 
     #[test]

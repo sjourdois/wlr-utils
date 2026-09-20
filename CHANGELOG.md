@@ -19,6 +19,13 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- **`wlr-switcher` always starts on a window other than the one you're on** — the
+  highlight now opens on the first listed window that isn't the current one,
+  whatever the window order and whatever the compositor; `Tab` / `Shift+Tab` are
+  unchanged. The current window is read from `zwlr-foreign-toplevel-management-v1`
+  (the `activated` state) rather than from a compositor IPC, so a quick Alt-Tab
+  switches away from it everywhere — where it previously could open on the window
+  you were already using, outside Sway or with `--window-order by-name`.
 - **Font lookup now goes through fontconfig**
   ([#10](https://github.com/sjourdois/wlr-utils/pull/10), by
   [@bR3iN](https://github.com/bR3iN)) — the overlays start noticeably faster, since
@@ -39,9 +46,7 @@ All notable changes to this project are documented here. The format is based on
   ([#14](https://github.com/sjourdois/wlr-utils/pull/14), by
   [@bR3iN](https://github.com/bR3iN)) — if the launch modifier is already released
   when the overlay gets the keyboard, the switch happens straight away. A strip bound
-  to a key with no modifier now needs `--no-hold`. The highlight only skips ahead to
-  the second window when the first is the one you're on (MRU order); with `by-name`
-  it starts on the first.
+  to a key with no modifier now needs `--no-hold`.
 - The Sway focus backend talks to sway's IPC socket directly instead of running
   `swaymsg`.
 - Dependency refresh: edgefirst-egl 0.32.1, rustix 1.1.5, toml 1.1.6, clap 4.6.7.
