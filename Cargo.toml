@@ -39,24 +39,24 @@ egui = "0.36"
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["staging", "client"] }
 wayland-protocols-wlr = { version = "0.3.12", features = ["client"] }
-rustix = { version = "1.1.4", features = ["fs", "mm", "event", "process"] }
+rustix = { version = "1.1.5", features = ["fs", "mm", "event", "process"] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 i18n-embed = { version = "0.16.0", features = ["fluent-system", "desktop-requester"] }
 rust-embed = "8.12.0"
 unic-langid = "0.9.6"
 resvg = { version = "0.48.1", default-features = false }
-toml = { version = "1.1.5", default-features = false, features = ["parse", "serde"] }
+toml = { version = "1.1.6", default-features = false, features = ["parse", "serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1"
 swayipc = "4.0.0"
 smithay-client-toolkit = "0.21.1"
 wayland-egl = "0.32.11"
 # Maintained fork of the unmaintained khronos-egl; same dynamic API, tracks libloading 0.9.
-edgefirst-egl = { version = "0.30.0", features = ["dynamic"] }
+edgefirst-egl = { version = "0.32.1", features = ["dynamic"] }
 glow = "0.17" # must match the glow version egui_glow uses (0.36 is still on 0.17)
 egui_glow = "0.36"
 libloading = "0.9.0"
-clap = { version = "4.6.6", features = ["derive"] }
+clap = { version = "4.6.7", features = ["derive"] }
 fontconfig = { version = "0.11.0", default-features = false, features = ["dlopen"] }
 gbm = { version = "0.18.0", default-features = false }
 # Native FFmpeg bindings for hardware/software video encoding (the `video` feature).

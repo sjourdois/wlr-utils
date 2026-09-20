@@ -44,6 +44,7 @@ All notable changes to this project are documented here. The format is based on
   it starts on the first.
 - The Sway focus backend talks to sway's IPC socket directly instead of running
   `swaymsg`.
+- Dependency refresh: edgefirst-egl 0.32.1, rustix 1.1.5, toml 1.1.6, clap 4.6.7.
 
 ### Fixed
 
