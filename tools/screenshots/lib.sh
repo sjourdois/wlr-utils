@@ -8,7 +8,8 @@
 #   * The nested compositor uses WLR_BACKENDS=headless -> virtual in-memory
 #     outputs, no DRM master. It is SAFE to run next to a live session.
 #   * It gets its OWN WAYLAND_DISPLAY (discovered via an exec_always that writes
-#     the value to a file) and its OWN SWAYSOCK. We never touch the real ones.
+#     the value to a file) and its OWN SWAYSOCK -- I3SOCK too, which swayipc reads
+#     first, so a tool under test never answers from the live session.
 #   * Teardown kills the nested sway by PID. We never `pkill -f` a pattern that
 #     could also match this script's own command line (that self-kills).
 #
@@ -78,9 +79,9 @@ shots_start() {
   shots_kill_stray
   rm -f "$SHOTS_DISPFILE"
 
-  env -u DISPLAY -u WAYLAND_DISPLAY -u SWAYSOCK \
+  env -u DISPLAY -u WAYLAND_DISPLAY -u SWAYSOCK -u I3SOCK \
       WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
-      SWAYSOCK="$SHOTS_IPC" \
+      SWAYSOCK="$SHOTS_IPC" I3SOCK="$SHOTS_IPC" \
       sway -c "$SHOTS_CONF" > "$SHOTS_LOG" 2>&1 &
   SHOTS_SWAY_PID=$!
 
@@ -97,7 +98,7 @@ shots_start() {
 
   # From here on, every command in THIS process targets the nested instance.
   export WAYLAND_DISPLAY="$NESTED_WAYLAND_DISPLAY"
-  export SWAYSOCK="$SHOTS_IPC"
+  export SWAYSOCK="$SHOTS_IPC" I3SOCK="$SHOTS_IPC"
   export LANG="$SHOTS_LANG" LC_ALL="$SHOTS_LANG"
   unset DISPLAY
 
