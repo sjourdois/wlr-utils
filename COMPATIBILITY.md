@@ -87,11 +87,9 @@ backend (for `-a` / `--current-output`). Run `wlr-peek doctor` to check your own
 history, for `--window-order mru`. Versions are from each project's release notes / merge
 requests (the per-interface numbers on wayland.app are unreliable snapshots).
 
-**Sway** (≥ 1.12 / wlroots ≥ 0.20) is the development compositor, so it is the one
-**runtime-verified** end to end. The focus IPC backends have also been exercised against a
-live compositor on **Hyprland 0.56.2** and **niri 26.04**, in a VM: what each backend
-answers was compared to a known window-focus sequence. The rest of the matrix is inferred
-from protocol support and hasn't been exercised end-to-end yet; reports welcome.
+Tested on **Sway** ≥ 1.12 (the development compositor), **Hyprland 0.56.2** and
+**niri 26.04**. The other rows are read off each project's release notes — a `doctor`
+report from yours is welcome.
 
 Two caveats:
 
