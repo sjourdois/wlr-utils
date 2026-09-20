@@ -41,10 +41,16 @@ shots_out() { mkdir -p "$SHOTS_ASSETS/$1"; printf '%s/%s' "$SHOTS_ASSETS/$1" "$2
 # Locale the nested apps & wlr-utils overlays render in. Default English so the
 # showcase suits the wider Wayland community; set SHOTS_LANG=fr_FR.UTF-8 for French.
 : "${SHOTS_LANG:=en_US.UTF-8}"
-# Where the demo video starts: far enough in to show real picture rather than an
-# intro fade or a black first frame. It keeps playing unless a scene asks for a
-# frozen desktop with SHOTS_MPV_PAUSE=1.
-: "${SHOTS_MPV_START:=40}"
+# The demo desktop plays a clip so the live previews have something moving in
+# them. Big Buck Bunny's trailer: CC-BY 3.0, served as a direct file by the
+# Blender Foundation. Fetched once, trimmed to a few seconds and cached in
+# vendor/ (git-ignored) — nothing binary enters the repository.
+: "${SHOTS_CLIP_URL:=https://download.blender.org/peach/trailer/trailer_720p.mov}"
+: "${SHOTS_CLIP_SHA256:=cb7be60feb4fd4ff5b006e35e824201a48361b7ebc2f2bbcaf3351912035561a}"
+# Trim window: a stretch of bright footage, clear of the trailer's title cards.
+: "${SHOTS_CLIP_START:=13.3}"
+: "${SHOTS_CLIP_SECONDS:=3.2}"
+# A scene that only takes a still can freeze the clip.
 : "${SHOTS_MPV_PAUSE:=0}"
 # How many pixels must change for shots_expect_change to call an effect visible.
 : "${SHOTS_CHANGE_MIN:=200}"
@@ -52,6 +58,7 @@ SHOTS_FOOT_INI="$SHOTS_DIR/foot.ini"
 # uBlock Origin Lite (unpacked, MV3) loaded into the demo browsers to keep ads
 # out of the captures. Fetched into vendor/ubol by capture.sh if missing.
 SHOTS_UBO="${SHOTS_UBO:-$SHOTS_DIR/vendor/ubol}"
+SHOTS_CLIP="${SHOTS_CLIP:-$SHOTS_DIR/vendor/clip.mp4}"
 
 SHOTS_SWAY_PID=""
 NESTED_WAYLAND_DISPLAY=""
@@ -209,25 +216,47 @@ shots_consent() { python3 "$SHOTS_DIR/cdp.py" "${1:-$SHOTS_LAST_PORT}" accept >/
 # Switch the nested compositor to workspace N.
 shots_ws() { swaymsg "workspace $1" >/dev/null 2>&1; }
 
-# Play a YouTube (or any) URL in a clean mpv window (no browser chrome / cookie
-# wall). The video keeps PLAYING: it is the only moving thing on the demo
-# desktop, and a still picture would prove nothing about live previews.
-#
-# YouTube serves no progressive (muxed) rendition any more, so a `best[...]`
-# selector resolves to nothing there; accept a video-only stream instead, which
-# is all we need with audio off. AVC before AV1: the AV1 renditions decode with
-# parser warnings here. No --force-window: the window must appear only once the
-# stream really plays, otherwise a placeholder would satisfy the check below.
+# Path to the cached demo clip, fetching and trimming it on first use. The
+# download is checked against a pinned digest before anything is cut from it.
+# When it cannot be had, the scene keeps a moving window: a generated test
+# pattern, cached under its own name so the real clip is retried next run.
+shots_clip() {
+  [ -s "$SHOTS_CLIP" ] && { printf '%s\n' "$SHOTS_CLIP"; return 0; }
+  local src fallback="${SHOTS_CLIP%.mp4}-testpattern.mp4"
+  mkdir -p "$(dirname "$SHOTS_CLIP")"
+  src="$(mktemp --suffix=.mov)"
+  if curl -fsSL --max-time 300 "$SHOTS_CLIP_URL" -o "$src" \
+     && printf '%s  %s\n' "$SHOTS_CLIP_SHA256" "$src" | sha256sum --check --status \
+     && ffmpeg -v error -y -ss "$SHOTS_CLIP_START" -t "$SHOTS_CLIP_SECONDS" -i "$src" \
+          -an -c:v libx264 -crf 20 -preset slow -pix_fmt yuv420p "$SHOTS_CLIP"; then
+    rm -f "$src"
+    printf '%s\n' "$SHOTS_CLIP"
+    return 0
+  fi
+  rm -f "$src" "$SHOTS_CLIP"
+  shots_msg "CLIP UNAVAILABLE: could not fetch or verify $SHOTS_CLIP_URL — the demo desktop falls back to a test pattern"
+  [ -s "$fallback" ] || ffmpeg -v error -y -f lavfi \
+    -i "testsrc2=size=1280x720:rate=25:duration=$SHOTS_CLIP_SECONDS" \
+    -c:v libx264 -crf 20 -preset slow -pix_fmt yuv420p "$fallback" || return 1
+  printf '%s\n' "$fallback"
+}
+
+# Play the cached clip in a clean mpv window, looping so the window keeps moving
+# for the whole scene. It is the only moving thing on the demo desktop, and a
+# still picture would prove nothing about live previews. No --force-window: the
+# window appears only once playback starts, so the check below means what it
+# says. Args: title
 shots_mpv() {
-  local pause=(); [ "$SHOTS_MPV_PAUSE" = 1 ] && pause=(--pause)
-  shots_spawn mpv --no-audio --start="$SHOTS_MPV_START" "${pause[@]}" \
-    --ytdl-format='bv*[height<=720][vcodec^=avc1]/bv*[height<=720]/bv*' \
-    --no-terminal --title="$2" "$1"
-  shots_wait_window '^mpv ' 1 40
+  local clip pause=()
+  clip="$(shots_clip)" || { shots_msg "MISSING WINDOW: no demo clip, the video window is skipped"; return 1; }
+  [ "$SHOTS_MPV_PAUSE" = 1 ] && pause=(--pause)
+  shots_spawn mpv --no-audio --loop-file=inf "${pause[@]}" \
+    --no-terminal --title="$1" "$clip"
+  shots_wait_window '^mpv ' 1 20
 }
 
 # A realistic desktop for the switcher / chooser / exposé scenes: real GUI apps
-# (browsers, a video, a file manager, a system monitor) spread across THREE
+# (three browsers, a video, a calculator, two system monitors) spread across SIX
 # workspaces, so the exposé/switcher reveal windows from the other workspaces.
 # Browsers/video are slow to paint, so this settles generously. Leaves the
 # session on workspace 1.
@@ -241,8 +270,16 @@ shots_rich_desktop() {
   shots_settle 1.5
   # ws4: the video, in a clean mpv window.
   shots_ws 4
-  shots_mpv "https://www.youtube.com/watch?v=LfGOywTuFnk" "Nilaus"
+  shots_mpv "Big Buck Bunny"
   shots_settle 1.0
+  # ws5/ws6: two terminals that redraw on their own, so several previews move and
+  # not just the video. btop runs off our own config, which drops its process
+  # list — a published capture has no business showing the machine's command
+  # lines. cmatrix carries no data at all.
+  shots_ws 5
+  shots_term "btop" "btop -c '$SHOTS_DIR/btop.conf'"
+  shots_ws 6
+  shots_term "cmatrix" "cmatrix -ab"
   # ws3: a second light page + a calculator (non-browser variety, also light).
   # The API docs rather than the crates.io page: the latter embeds the README's
   # demo video, whose loop made the live thumbnail of that window flicker.
@@ -273,7 +310,7 @@ shots_visible_desktop() {
   shots_consent
   shots_settle 1.0
   swaymsg "focus left" >/dev/null 2>&1   # back to github
-  shots_mpv "https://www.youtube.com/watch?v=LfGOywTuFnk" "Nilaus"
+  shots_mpv "Big Buck Bunny"
   shots_settle 3.0                        # video maps between github and phoronix
   swaymsg "splitv" >/dev/null 2>&1        # the calculator goes BELOW the video
   shots_spawn galculator

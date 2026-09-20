@@ -23,19 +23,30 @@ Output lands in `../../docs/assets/<tool>/` as `*.png` (still) plus `*.mp4` and
 
 To render the overlays in French (or any locale): `SHOTS_LANG=fr_FR.UTF-8 ./capture.sh`.
 
-The demo desktop plays a video, so the live previews have something moving in
-them. `SHOTS_MPV_START` sets where it starts, `SHOTS_MPV_PAUSE=1` freezes it.
-
 ## Requirements
 
-System tools: `sway`, `grim`, `wtype`, `foot`, `ffmpeg`, `jq`, ImageMagick, plus
-`batcat`/`tree` for the demo windows. The scenes that show a desktop also need
-`chromium`, `galculator`, `mpv` and `yt-dlp`. The first run also builds a tiny
-virtual-pointer injector:
+System tools: `sway`, `grim`, `wtype`, `foot`, `ffmpeg`, `jq`, `curl`,
+ImageMagick, plus `batcat`/`tree` for the demo windows. The scenes that show a
+desktop also need `chromium`, `galculator`, `mpv`, `btop` and `cmatrix`. The
+first run also builds a tiny virtual-pointer injector:
 
 ```sh
 ( cd pointer && cargo build --release )
 ```
+
+## Demo clip
+
+Three windows on the demo desktop move on their own, so the live previews show
+as live: a video, a system monitor and a terminal animation.
+
+The video is a few seconds of the Big Buck Bunny trailer, fetched from
+`download.blender.org` on first run, checked against a pinned digest, trimmed and
+cached in `vendor/` (git-ignored, never committed). `SHOTS_CLIP_START` and
+`SHOTS_CLIP_SECONDS` set the excerpt, `SHOTS_MPV_PAUSE=1` freezes it. Without the
+download the desktop falls back to a generated test pattern and says so.
+
+> (c) copyright 2008, Blender Foundation / www.bigbuckbunny.org — Creative
+> Commons Attribution 3.0.
 
 ## Layout
 
@@ -44,6 +55,7 @@ virtual-pointer injector:
 | `lib.sh` | nested-compositor lifecycle, input injection, capture helpers |
 | `nested-sway.conf` | the isolated compositor's config (one virtual output) |
 | `foot.ini` | dark theme for the demo terminals |
+| `btop.conf` | btop settings for the demo desktop (graph boxes, no process list) |
 | `pointer/` | `shots-pointer`, a `zwlr_virtual_pointer_v1` injector (standalone crate, **not** in the workspace) |
 | `scenes/*.sh` | one scene per tool |
 | `capture.sh` | orchestrator: build + run every scene |

@@ -27,6 +27,10 @@ if [ ! -f "$SHOTS_UBO/manifest.json" ] && command -v gh >/dev/null 2>&1; then
   fi
 fi
 
+# Cache the demo clip before any scene runs, so a slow first download does not
+# land in the middle of a capture.
+shots_clip >/dev/null
+
 # Build every tool in one workspace invocation. This used to be one cargo call per
 # crate, to stop feature-unification from enabling wlr-capture/gpu: an overlay tool
 # would then open a second EGL connection for its dma-buf readback and die with
