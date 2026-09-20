@@ -18,15 +18,19 @@ cd tools/screenshots
 SKIP_BUILD=1 ./capture.sh # reuse target/release binaries
 ```
 
-Output lands in `../../docs/assets/<tool>/` as `*.png` (still) plus `*.apng`,
-`*.webp` and `*.gif` (animations) where the scene is dynamic.
+Output lands in `../../docs/assets/<tool>/` as `*.png` (still) plus `*.mp4` and
+`*.gif` (animations) where the scene is dynamic.
 
 To render the overlays in French (or any locale): `SHOTS_LANG=fr_FR.UTF-8 ./capture.sh`.
 
+The demo desktop plays a video, so the live previews have something moving in
+them. `SHOTS_MPV_START` sets where it starts, `SHOTS_MPV_PAUSE=1` freezes it.
+
 ## Requirements
 
-System tools: `sway`, `grim`, `wtype`, `foot`, `ffmpeg`, ImageMagick, plus
-`batcat`/`tree` for the demo windows. The first run also builds a tiny
+System tools: `sway`, `grim`, `wtype`, `foot`, `ffmpeg`, `jq`, ImageMagick, plus
+`batcat`/`tree` for the demo windows. The scenes that show a desktop also need
+`chromium`, `galculator`, `mpv` and `yt-dlp`. The first run also builds a tiny
 virtual-pointer injector:
 
 ```sh
@@ -54,5 +58,9 @@ virtual-pointer injector:
   would open a second EGL connection for its dma-buf readback and hit
   `eglCreateWindowSurface: BadAlloc`. Single captures allocate shm directly since
   1.6.0, so that second connection is gone.
+- **Scene checks.** The helpers that open a demo window wait for it in the nested
+  tree and log `MISSING WINDOW: …` otherwise. `shots_expect_change` brackets an
+  action with two cursor-free grabs and logs `NO VISIBLE CHANGE: …` when fewer
+  than `SHOTS_CHANGE_MIN` pixels move.
 - Run scenes one at a time — they share a fixed nested IPC socket path and must
   not overlap. `capture.sh` already serialises them.

@@ -52,6 +52,6 @@ for s in "${SCENES[@]}"; do
 done
 
 shots_msg "assets:"
-find "$SHOTS_ASSETS" -type f \( -name '*.png' -o -name '*.gif' -o -name '*.webp' -o -name '*.apng' \) \
+find "$SHOTS_ASSETS" -type f \( -name '*.png' -o -name '*.gif' -o -name '*.mp4' \) \
   -printf '  %p (%k KB)\n' 2>/dev/null | sort
 shots_msg "done."

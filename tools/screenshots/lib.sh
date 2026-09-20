@@ -41,6 +41,13 @@ shots_out() { mkdir -p "$SHOTS_ASSETS/$1"; printf '%s/%s' "$SHOTS_ASSETS/$1" "$2
 # Locale the nested apps & wlr-utils overlays render in. Default English so the
 # showcase suits the wider Wayland community; set SHOTS_LANG=fr_FR.UTF-8 for French.
 : "${SHOTS_LANG:=en_US.UTF-8}"
+# Where the demo video starts: far enough in to show real picture rather than an
+# intro fade or a black first frame. It keeps playing unless a scene asks for a
+# frozen desktop with SHOTS_MPV_PAUSE=1.
+: "${SHOTS_MPV_START:=40}"
+: "${SHOTS_MPV_PAUSE:=0}"
+# How many pixels must change for shots_expect_change to call an effect visible.
+: "${SHOTS_CHANGE_MIN:=200}"
 SHOTS_FOOT_INI="$SHOTS_DIR/foot.ini"
 # uBlock Origin Lite (unpacked, MV3) loaded into the demo browsers to keep ads
 # out of the captures. Fetched into vendor/ubol by capture.sh if missing.
@@ -133,12 +140,37 @@ shots_stop() {
 # Launch a client detached in the nested session. Args: cmd...
 shots_spawn() { ( setsid "$@" >/dev/null 2>&1 < /dev/null & ) ; }
 
+# Number of mapped windows in the nested tree whose "app_id name" matches an
+# extended regex. Args: regex
+shots_count_windows() {
+  swaymsg -t get_tree 2>/dev/null | jq --arg p "$1" '
+    [ .. | objects | select(.pid != null and .pid != 0)
+      | ((.app_id // .window_properties.class // "?") + " " + (.name // ""))
+      | select(test($p)) ] | length' 2>/dev/null
+}
+
+# Wait until at least N windows matching a regex are mapped, like shots_start
+# waits for its WAYLAND_DISPLAY. A scene app that dies on startup otherwise goes
+# unnoticed and the capture simply comes out one window short, so say so loudly
+# instead of shooting a half-built set. Args: regex [count] [seconds]
+shots_wait_window() {
+  local pat="$1" want="${2:-1}" secs="${3:-20}" i n=0
+  for i in $(seq 1 $((secs * 10))); do
+    n="$(shots_count_windows "$pat")"
+    [ "${n:-0}" -ge "$want" ] && return 0
+    sleep 0.1
+  done
+  shots_msg "MISSING WINDOW: expected $want matching /$pat/, found ${n:-0} after ${secs}s"
+  return 1
+}
+
 # Open a styled foot terminal running a command (kept alive afterwards).
 # Args: title cmd
 shots_term() {
   local title="$1"; shift
   shots_spawn foot --config "$SHOTS_FOOT_INI" --title "$title" \
     -- bash -lc "$*; exec sleep 100000"
+  shots_wait_window "^foot $title\$"
 }
 
 shots_settle() { sleep "${1:-0.6}"; }
@@ -164,6 +196,9 @@ shots_chromium() {
     --remote-debugging-port="$SHOTS_LAST_PORT" --remote-allow-origins='*' \
     "${ext[@]}" \
     --user-data-dir="$prof" --new-window "$url"
+  # Each call opens exactly one window, so the profile count is how many
+  # chromium windows the tree must hold by now.
+  shots_wait_window '^chromium ' "${#SHOTS_CHROMIUM_PROFILES[@]}" 30
 }
 
 # Dismiss a cookie-consent dialog on the most recently launched Chromium (or the
@@ -175,10 +210,20 @@ shots_consent() { python3 "$SHOTS_DIR/cdp.py" "${1:-$SHOTS_LAST_PORT}" accept >/
 shots_ws() { swaymsg "workspace $1" >/dev/null 2>&1; }
 
 # Play a YouTube (or any) URL in a clean mpv window (no browser chrome / cookie
-# wall), paused on the first frame.
+# wall). The video keeps PLAYING: it is the only moving thing on the demo
+# desktop, and a still picture would prove nothing about live previews.
+#
+# YouTube serves no progressive (muxed) rendition any more, so a `best[...]`
+# selector resolves to nothing there; accept a video-only stream instead, which
+# is all we need with audio off. AVC before AV1: the AV1 renditions decode with
+# parser warnings here. No --force-window: the window must appear only once the
+# stream really plays, otherwise a placeholder would satisfy the check below.
 shots_mpv() {
-  shots_spawn mpv --no-audio --pause --force-window=immediate \
-    --ytdl-format='best[height<=720]' --no-terminal --title="$2" "$1"
+  local pause=(); [ "$SHOTS_MPV_PAUSE" = 1 ] && pause=(--pause)
+  shots_spawn mpv --no-audio --start="$SHOTS_MPV_START" "${pause[@]}" \
+    --ytdl-format='bv*[height<=720][vcodec^=avc1]/bv*[height<=720]/bv*' \
+    --no-terminal --title="$2" "$1"
+  shots_wait_window '^mpv ' 1 40
 }
 
 # A realistic desktop for the switcher / chooser / exposé scenes: real GUI apps
@@ -199,10 +244,13 @@ shots_rich_desktop() {
   shots_mpv "https://www.youtube.com/watch?v=LfGOywTuFnk" "Nilaus"
   shots_settle 1.0
   # ws3: a second light page + a calculator (non-browser variety, also light).
+  # The API docs rather than the crates.io page: the latter embeds the README's
+  # demo video, whose loop made the live thumbnail of that window flicker.
   shots_ws 3
-  shots_chromium "https://crates.io/crates/wlr-shot"
+  shots_chromium "https://docs.rs/wlr-capture/latest/wlr_capture/"
   shots_settle 0.8
   shots_spawn galculator
+  shots_wait_window '^galculator '
   shots_settle 0.6
   # ws1 (the visible one): the repo on GitHub.
   shots_ws 1
@@ -229,6 +277,7 @@ shots_visible_desktop() {
   shots_settle 3.0                        # video maps between github and phoronix
   swaymsg "splitv" >/dev/null 2>&1        # the calculator goes BELOW the video
   shots_spawn galculator
+  shots_wait_window '^galculator '
   shots_settle 1.0
   shots_park
 }
@@ -324,9 +373,31 @@ shots_key()  { wtype -k Shift_L -k "$1" 2>/dev/null; }
 # Grab the virtual output to a PNG, including the cursor (-c). Args: outfile [output]
 shots_grab() { grim -c -o "${2:-HEADLESS-1}" "$1" 2>/dev/null; }
 
+# Run an action between two grabs and warn when the screen barely moved. For the
+# effects no IPC can confirm -- a pointer hover, whose coordinate is tied to a
+# layout sway cannot report, so a redesigned tool would quietly yield a still
+# with nothing highlighted. The grabs leave the cursor OUT: moving it is itself a
+# patch of changed pixels and would satisfy any threshold on its own. What is
+# left is the effect (a tile highlight is a border hundreds of pixels long)
+# against the desktop's own churn (a blinking caret, a live video thumbnail), so
+# the verdict is a threshold, not equality. Args: label cmd...
+shots_expect_change() {
+  local label="$1"; shift
+  local before after changed
+  before="$(mktemp --suffix=.png)"; after="$(mktemp --suffix=.png)"
+  grim -o HEADLESS-1 "$before" 2>/dev/null
+  "$@"
+  grim -o HEADLESS-1 "$after" 2>/dev/null
+  changed="$(magick compare -metric AE "$before" "$after" null: 2>&1 | awk '{printf "%d", $1}')"
+  rm -f "$before" "$after"
+  [ "${changed:-0}" -ge "$SHOTS_CHANGE_MIN" ] && return 0
+  shots_msg "NO VISIBLE CHANGE: $label moved ${changed:-0} px (< $SHOTS_CHANGE_MIN)"
+  return 1
+}
+
 # Capture a sequence of frames while a driver function runs, then assemble a
-# looping animation in three formats: APNG (lossless, crispest text), WebP
-# (light) and GIF (maximum compatibility). Args: basename fps driver_fn
+# looping animation in two formats: MP4 (the primary one) and GIF (maximum
+# compatibility, embedded in the READMEs). Args: basename fps driver_fn
 # The driver function is invoked with the frame directory as $1 and should
 # return after issuing all its input; frames are grabbed in parallel.
 shots_record() {
