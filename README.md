@@ -9,7 +9,7 @@
 ⚡ Zero-copy GPU capture &nbsp;·&nbsp; 👁️ Sees occluded & off-workspace windows
 &nbsp;·&nbsp; 🦀 Rust, no XWayland &nbsp;·&nbsp; 🎨 Themeable &nbsp;·&nbsp; 🌍 13 languages
 
-Five sharp tools for **wlroots** compositors, all sharing one capture engine.
+Five sharp tools for **wlroots and derivatives**, all sharing one capture engine.
 
 | Tool | What it does | crate |
 | --- | --- | --- |
@@ -44,7 +44,9 @@ its own message catalog on.
 
 ## Requirements
 
-A wlroots compositor. What you get depends on which capture protocols it exposes:
+A compositor that speaks the wlroots protocols — wlroots-based or not, since Hyprland,
+niri and cosmic-comp implement them on their own stacks. What you get depends on which
+capture protocols it exposes:
 
 | Capability | Compositor floor | Wayland protocol |
 | --- | --- | --- |
