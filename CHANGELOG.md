@@ -55,6 +55,9 @@ All notable changes to this project are documented here. The format is based on
   [@bR3iN](https://github.com/bR3iN)) — if the launch modifier is already released
   when the overlay gets the keyboard, the switch happens straight away. A strip bound
   to a key with no modifier now needs `--no-hold`.
+- `wlr-draw` runs on KDE Plasma (KWin implements `wlr-layer-shell`), minus its freeze
+  and save, which need a capture protocol KWin doesn't expose. The compatibility matrix
+  is corrected accordingly: neither KWin nor Mutter offers one.
 - The Sway focus backend talks to sway's IPC socket directly instead of running
   `swaymsg`.
 - Dependency refresh: edgefirst-egl 0.32.1, rustix 1.1.5, toml 1.1.6, clap 4.6.7.

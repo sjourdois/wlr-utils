@@ -80,28 +80,23 @@ backend (for `-a` / `--current-output`). Run `wlr-peek doctor` to check your own
 | **river** | ✅ ≥ 0.3 (wlroots 0.19) | ❌ | ✅ | ❌ |
 | **niri** | ❌ (`wlr-screencopy` only) | ❌ | ✅ | 🟡 `niri msg` (MRU, `-a` n/a) |
 | **dwl** | ❌ (`wlr-screencopy` only) | ❌ | ✅ | ❌ |
-| **Mutter** (GNOME) | ✅ (≥ 49) | ❌ | ❌ | ❌ |
-| **KWin** (KDE) | ✅ (≥ 6.6) | ❌ | ❌ | ❌ |
+| **Mutter** (GNOME) | ❌ | ❌ | ❌ | ❌ |
+| **KWin** (KDE) | ❌ | ❌ | ✅ | ❌ |
 
 ✅ full · 🟡 partial · ❌ none. "MRU" marks a backend that also reports the window focus
 history, for `--window-order mru`. Versions are from each project's release notes / merge
 requests (the per-interface numbers on wayland.app are unreliable snapshots).
 
-Tested on **Sway** ≥ 1.12 (the development compositor), **Hyprland 0.56.2** and
-**niri 26.04**. The other rows are read off each project's release notes — a `doctor`
-report from yours is welcome.
+Tested on **Sway** ≥ 1.12 (the development compositor), **Hyprland 0.56.2**,
+**niri 26.04**, **KWin 6.7.5** and **Mutter 50.5**. The other rows are untested.
 
 Two caveats:
 
-- **Mutter / KWin** now implement `ext-image-copy-capture-v1` (screen capture), but **not
-  `wlr-layer-shell`** — so the overlay tools (switcher, region select, loupe, wlr-draw) can't
-  run there, and only non-interactive whole-output capture could work. They remain largely
-  out of scope; their first-class path is the desktop portal / PipeWire, which this suite
-  deliberately doesn't use.
+- **Mutter / KWin** — unsupported: neither exposes a capture protocol. `wlr-draw` does run
+  on KWin, without its freeze and save.
 - **niri / dwl** expose only the older `wlr-screencopy-v1`, which this suite doesn't use, so
-  they don't work yet (an `ext-image-copy-capture` fallback would be needed). Confirmed
-  again on **niri 26.04**: it advertises no `ext-image-copy-capture-manager-v1`, so no tool
-  in the suite gets past connecting — only its focus backend can be exercised there.
+  they don't work yet (an `ext-image-copy-capture` fallback would be needed). Their focus
+  backend is the only part that can run.
 
 Two things vary by compositor:
 
@@ -115,11 +110,10 @@ Two things vary by compositor:
   from its tree's `focus` arrays, Hyprland from `focusHistoryID`, niri from
   `focus_timestamp`. Elsewhere windows are ordered by name.
 
-  What no longer depends on it: **which tile `wlr-switcher` starts on**. The window
-  you are on is read from `wlr-foreign-toplevel-management`'s `activated` state —
-  the protocol `wlr-switcher` already needs to focus the window it picks, so a quick
-  `Alt+Tab` switches away from it wherever the switcher runs at all, with or without
-  a focus IPC backend, and in either window order.
+  **Which tile `wlr-switcher` starts on** needs no backend: the window you are on comes
+  from `wlr-foreign-toplevel-management`'s `activated` state, the protocol the switcher
+  already needs to focus what it picks. A quick `Alt+Tab` therefore switches away from
+  that window wherever the switcher runs, in either window order.
 - **Zero-copy GPU capture** (`linux-dmabuf`) is optional; the CPU `wl_shm` path is the
   universal fallback.
 
