@@ -39,6 +39,10 @@ skip and expensive to miss:
 - [ ] **[`CONTRIBUTING.md`](CONTRIBUTING.md)** — the workspace crate table, the
       feature-combo list, the Translations and Themes sections.
 - [ ] **[`COMPATIBILITY.md`](COMPATIBILITY.md)** — compositor floors / capability matrix.
+      Revisit **every row**, not just the ones the release touched: compositors ship
+      protocols between our releases, so a `❌` goes stale on its own. Check each
+      project's current release notes, say which rows were verified at runtime and on
+      which version, and leave the rest marked as inferred.
 - [ ] **`docs/`** — `wlr-draw-keys.toml`, `themes/`, `index.md` (the showcase site).
 
 Quick sanity greps (adjust to the change):
