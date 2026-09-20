@@ -246,9 +246,6 @@ enum Capturable {
 /// Toplevels with an empty app-id are captured but marked `is_system`, so the UI
 /// can hide them by default and reveal them on demand. The loop exits when the UI
 /// drops the channel.
-// SessionId (a wayland ObjectId) is used as a map key: its interior-mutable
-// "alive" flag is not part of Hash/Eq, so it is a sound key.
-#[allow(clippy::mutable_key_type)]
 pub(crate) fn capture_thread(tx: Sender<Msg>, gpu_failed: Arc<AtomicBool>, order: WindowOrder) {
     let mut client = match wl::Client::connect() {
         Ok(c) => c,
@@ -329,7 +326,7 @@ pub(crate) fn capture_thread(tx: Sender<Msg>, gpu_failed: Arc<AtomicBool>, order
                 Capturable::Window(w) => client.open_toplevel_session(w),
             };
             if let Ok(id) = opened {
-                sessions.insert(s.key.clone(), id.clone());
+                sessions.insert(s.key.clone(), id);
                 by_id.insert(id, s.key.clone());
             }
 
@@ -423,7 +420,6 @@ fn quick_hash(rgba: &[u8]) -> u64 {
 /// Headless capture benchmark (debug): no overlay, no keyboard grab. Runs the
 /// capture loop for `secs` seconds and reports, per source, how many frames were
 /// captured and how many actually changed content (proof of "live").
-#[allow(clippy::mutable_key_type)] // see capture_thread: ObjectId is a sound map key
 pub fn bench_capture(secs: u64) {
     let mut client = match wl::Client::connect() {
         Ok(c) => c,
@@ -470,7 +466,7 @@ pub fn bench_capture(secs: u64) {
             };
             match opened {
                 Ok(id) => {
-                    sessions.insert(key.clone(), id.clone());
+                    sessions.insert(key.clone(), id);
                     by_id.insert(id, key.clone());
                 }
                 Err(e) => eprintln!("bench: open {key}: {e:#}"),

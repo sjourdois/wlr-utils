@@ -73,6 +73,10 @@ const CHECKS: &[(&str, &str)] = &[
         "ext_foreign_toplevel_list_v1",
         "enumerate windows (chooser, -w)",
     ),
+    (
+        "zwlr_screencopy_manager_v1",
+        "capture an output, older protocol (fallback)",
+    ),
     ("zxdg_output_manager_v1", "accurate output geometry"),
     (
         "zwlr_layer_shell_v1",
@@ -87,15 +91,17 @@ const CHECKS: &[(&str, &str)] = &[
     ("zwp_tablet_manager_v2", "stylus input (wlr-draw)"),
 ];
 
-/// Whether the compositor advertises the screen- and window-capture sources.
-/// Returns `(screen, window)` as independent booleans — screen capture can work
-/// while window capture doesn't, and `doctor` reports them separately.
-pub fn capture_verdict(globals: &[(String, u32)]) -> (bool, bool) {
-    let has = |iface: &str| globals.iter().any(|(n, _)| n == iface);
-    let screen = has("ext_image_copy_capture_manager_v1")
-        && has("ext_output_image_capture_source_manager_v1");
-    let window = has("ext_foreign_toplevel_image_capture_source_manager_v1");
-    (screen, window)
+/// What the compositor's globals allow: the capture protocol the engine would
+/// drive (`None` if neither is advertised), and whether window capture works.
+///
+/// The two are independent — screen capture can work while window capture doesn't,
+/// and `doctor` reports them separately. Window capture is an
+/// `ext-image-copy-capture` feature only: `zwlr-screencopy` addresses outputs.
+pub fn capture_verdict(globals: &[(String, u32)]) -> (Option<wl::Protocol>, bool) {
+    let window = globals
+        .iter()
+        .any(|(n, _)| n == "ext_foreign_toplevel_image_capture_source_manager_v1");
+    (wl::select_protocol(globals), window)
 }
 
 /// Print the compositor capability report to stdout. Backs every tool's `doctor`
@@ -127,31 +133,34 @@ pub fn report(tool: &str, version: &str) -> Result<()> {
         }
     }
 
-    let (core, window) = capture_verdict(&globals);
+    let (protocol, window) = capture_verdict(&globals);
     println!();
-    if core {
-        println!(
-            "Screen capture: supported (screenshots, recording, loupe, colour picker, wlr-draw)."
-        );
-    } else {
-        println!(
+    match protocol {
+        Some(p) => println!(
+            "Screen capture: supported via {} (screenshots, recording, loupe, colour \
+             picker, wlr-draw).",
+            p.interface()
+        ),
+        None => println!(
             "Screen capture: UNSUPPORTED — needs ext-image-copy-capture-v1 + the output \
-             source (wlroots ≥ 0.19 / Sway ≥ 1.11; not on Mutter/KWin via this path)."
-        );
+             source (wlroots ≥ 0.19 / Sway ≥ 1.11), or zwlr-screencopy-v1; neither is \
+             advertised (Mutter/KWin expose no capture protocol)."
+        ),
     }
-    if window {
+    if window && protocol == Some(wl::Protocol::ImageCopyCapture) {
         println!(
             "Window capture: supported (wlr-switcher, -w/--pick-window, window mirror/record)."
         );
     } else {
         println!(
             "Window capture: UNSUPPORTED — needs the foreign-toplevel source \
-             (wlroots ≥ 0.20 / Sway ≥ 1.12). Screen capture still works; only window-only \
+             (wlroots ≥ 0.20 / Sway ≥ 1.12) and ext-image-copy-capture-v1; zwlr-screencopy-v1 \
+             captures outputs only. Screen capture still works; only window-only \
              features are unavailable (wlr-switcher exits with a notice)."
         );
     }
 
-    if core {
+    if protocol.is_some() {
         println!("GPU capture: {}", gpu_probe());
     }
 
@@ -291,23 +300,36 @@ mod tests {
 
     #[test]
     fn capture_verdict_reads_screen_and_window_floors() {
+        use crate::wl::Protocol;
         const CORE: [&str; 2] = [
             "ext_image_copy_capture_manager_v1",
             "ext_output_image_capture_source_manager_v1",
         ];
         const FOREIGN: &str = "ext_foreign_toplevel_image_capture_source_manager_v1";
+        const SCREENCOPY: &str = "zwlr_screencopy_manager_v1";
 
         // Nothing advertised → neither capture path works.
-        assert_eq!(capture_verdict(&globals(&[])), (false, false));
+        assert_eq!(capture_verdict(&globals(&[])), (None, false));
         // Core copy-capture + output source → screen only (wlroots 0.19 / Sway 1.11).
-        assert_eq!(capture_verdict(&globals(&CORE)), (true, false));
+        assert_eq!(
+            capture_verdict(&globals(&CORE)),
+            (Some(Protocol::ImageCopyCapture), false)
+        );
         // Add the foreign-toplevel source → window capture too (0.20 / 1.12).
         let mut all = CORE.to_vec();
         all.push(FOREIGN);
-        assert_eq!(capture_verdict(&globals(&all)), (true, true));
-        // Only one of the two core managers → screen still unsupported.
-        assert_eq!(capture_verdict(&globals(&CORE[..1])), (false, false));
-        // The screen and window verdicts are independent booleans, as report() prints them.
-        assert_eq!(capture_verdict(&globals(&[FOREIGN])), (false, true));
+        assert_eq!(
+            capture_verdict(&globals(&all)),
+            (Some(Protocol::ImageCopyCapture), true)
+        );
+        // Only one of the two core managers → no ext path.
+        assert_eq!(capture_verdict(&globals(&CORE[..1])), (None, false));
+        // The screen and window verdicts are independent, as report() prints them.
+        assert_eq!(capture_verdict(&globals(&[FOREIGN])), (None, true));
+        // Screencopy alone → screen capture through the older protocol.
+        assert_eq!(
+            capture_verdict(&globals(&[SCREENCOPY])),
+            (Some(Protocol::Screencopy), false)
+        );
     }
 }

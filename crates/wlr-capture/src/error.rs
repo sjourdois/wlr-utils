@@ -15,9 +15,11 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum CaptureError {
     /// The compositor can't capture individual windows: no foreign-toplevel image-capture
-    /// source (wlroots < 0.20 / Sway < 1.12). Screen capture may still work.
+    /// source (wlroots < 0.20 / Sway < 1.12), or the only capture protocol it offers is
+    /// `zwlr-screencopy`, which addresses outputs. Screen capture may still work.
     #[error(
-        "this compositor cannot capture individual windows (needs wlroots >= 0.20 / Sway >= 1.12)"
+        "this compositor cannot capture individual windows (needs ext-image-copy-capture-v1 \
+         with the foreign-toplevel source: wlroots >= 0.20 / Sway >= 1.12)"
     )]
     WindowsUnsupported,
 

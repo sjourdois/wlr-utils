@@ -1,9 +1,15 @@
 //! Native Wayland client: enumerate foreign toplevels and outputs, and capture
-//! them via `ext-image-copy-capture-v1`.
+//! them via `ext-image-copy-capture-v1`, or via `zwlr-screencopy-v1` where that is
+//! the only capture protocol the compositor offers.
 //!
 //! The whole point of doing this natively (instead of shelling out to `grim -T`)
 //! is to create the shm buffer with the *correct* stride (`width * 4`), which is
 //! where grim 1.5 trips up ("Invalid stride") on some toplevels (Firefox, …).
+//!
+//! Both protocols are driven behind one [`Client`] API: open a session on a source,
+//! [`Client::poll`] it for frames, close it. [`Protocol`] says which one is in use.
+//! `zwlr-screencopy` only addresses a `wl_output`, so window capture is unavailable
+//! under it and window paths return [`CaptureError::WindowsUnsupported`].
 
 use crate::error::{CaptureError, Context, Result};
 #[cfg(feature = "gpu")]
@@ -16,9 +22,8 @@ use std::fs::File;
 use std::os::fd::{AsFd, OwnedFd};
 use std::time::{Duration, Instant};
 use wayland_client::{
-    Connection, Dispatch, EventQueue, Proxy, QueueHandle, WEnum,
-    backend::ObjectId,
-    delegate_noop, event_created_child,
+    Connection, Dispatch, EventQueue, Proxy, QueueHandle, WEnum, delegate_noop,
+    event_created_child,
     globals::{GlobalList, GlobalListContents, registry_queue_init},
     protocol::{
         wl_buffer::WlBuffer,
@@ -32,11 +37,16 @@ use wayland_client::{
 #[cfg(feature = "gpu")]
 use wayland_protocols::wp::linux_dmabuf::zv1::client::{
     zwp_linux_buffer_params_v1::{self, ZwpLinuxBufferParamsV1},
+    zwp_linux_dmabuf_feedback_v1::{self, ZwpLinuxDmabufFeedbackV1},
     zwp_linux_dmabuf_v1::ZwpLinuxDmabufV1,
 };
 use wayland_protocols_wlr::foreign_toplevel::v1::client::{
     zwlr_foreign_toplevel_handle_v1::{self, ZwlrForeignToplevelHandleV1},
     zwlr_foreign_toplevel_manager_v1::{self, ZwlrForeignToplevelManagerV1},
+};
+use wayland_protocols_wlr::screencopy::v1::client::{
+    zwlr_screencopy_frame_v1::{self, ZwlrScreencopyFrameV1},
+    zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1,
 };
 
 /// DRM "invalid"/"let the driver choose" modifier sentinel — not a real layout.
@@ -54,9 +64,66 @@ pub fn disable_gpu_globally() {
     GPU_DISABLED.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// Whether `WLR_FORCE_SCREENCOPY` asks for the `zwlr-screencopy` path even where
+/// `ext-image-copy-capture` is available. A debug knob, so it lives in the
+/// environment only: it exists to exercise the fallback on a compositor that
+/// offers both protocols.
+fn screencopy_forced() -> bool {
+    std::env::var_os("WLR_FORCE_SCREENCOPY").is_some()
+}
+
+/// The capture protocol a [`Client`] drives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Protocol {
+    /// `ext-image-copy-capture-v1` + `ext-image-capture-source-v1`: outputs and
+    /// windows, persistent sessions.
+    ImageCopyCapture,
+    /// `zwlr-screencopy-v1`: outputs only, one protocol object per frame.
+    Screencopy,
+}
+
+impl Protocol {
+    /// The protocol's interface name, for diagnostics.
+    pub fn interface(self) -> &'static str {
+        match self {
+            Protocol::ImageCopyCapture => "ext-image-copy-capture-v1",
+            Protocol::Screencopy => "zwlr-screencopy-v1",
+        }
+    }
+}
+
+/// Names of the globals each protocol needs, so [`select_protocol`] and `doctor`
+/// apply one rule instead of two.
+const IMAGE_COPY_GLOBALS: [&str; 2] = [
+    "ext_image_copy_capture_manager_v1",
+    "ext_output_image_capture_source_manager_v1",
+];
+const SCREENCOPY_GLOBAL: &str = "zwlr_screencopy_manager_v1";
+
+/// Which capture protocol to drive, given the globals a compositor advertises.
+/// `ext-image-copy-capture` wins when both are there — it captures windows too and
+/// is the protocol `zwlr-screencopy` was deprecated in favour of — unless
+/// `WLR_FORCE_SCREENCOPY` asks otherwise. `None` means neither is available.
+pub fn select_protocol(globals: &[(String, u32)]) -> Option<Protocol> {
+    let has = |iface: &str| globals.iter().any(|(n, _)| n == iface);
+    let image_copy = IMAGE_COPY_GLOBALS.iter().all(|i| has(i));
+    let screencopy = has(SCREENCOPY_GLOBAL);
+    match (image_copy, screencopy) {
+        (true, true) if screencopy_forced() => Some(Protocol::Screencopy),
+        (true, _) => Some(Protocol::ImageCopyCapture),
+        (false, true) => Some(Protocol::Screencopy),
+        (false, false) => None,
+    }
+}
+
 /// Most planes `EGL_EXT_image_dma_buf_import(_modifiers)` can describe.
 #[cfg(feature = "gpu")]
 const MAX_DMABUF_PLANES: u32 = 4;
+
+/// `zwlr_screencopy_manager_v1.capture_output`'s `overlay_cursor`, off. The
+/// `ext-image-copy-capture` sessions are opened with `Options::empty()` (no
+/// `paint_cursors`), so both protocols capture the same thing.
+const CURSOR_OFF: i32 = 0;
 use wayland_protocols::ext::{
     foreign_toplevel_list::v1::client::{
         ext_foreign_toplevel_handle_v1::{self, ExtForeignToplevelHandleV1},
@@ -372,8 +439,20 @@ struct PendingToplevel {
     app_id: String,
 }
 
-/// Opaque handle to a persistent capture session (the session object's id).
-pub type SessionId = ObjectId;
+/// Opaque handle to a capture session, valid until [`Client::close_session`].
+///
+/// A plain counter rather than a protocol object id: a `zwlr-screencopy` session
+/// owns no long-lived object (its frame object is recreated for every capture), so
+/// there is nothing durable to name it after.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct SessionId(u64);
+
+impl SessionId {
+    fn next() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        SessionId(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+    }
+}
 
 /// Per-session bookkeeping, updated by the session/frame Dispatch impls and keyed
 /// by the session object id so multiple live sessions never clobber each other.
@@ -383,14 +462,28 @@ struct SessionData {
     width: u32,
     height: u32,
     format: Option<wl_shm::Format>,
+    /// Row stride the compositor dictates, when it dictates one. `zwlr-screencopy`
+    /// names the stride it will write with; `ext-image-copy-capture` leaves it to us.
+    stride: Option<u32>,
     /// dma-buf device the compositor wants buffers allocated on (raw dev_t).
     #[cfg(feature = "gpu")]
     dmabuf_dev: Option<u64>,
-    /// dma-buf formats advertised: (drm fourcc, supported modifiers).
+    /// dma-buf formats advertised: (drm fourcc, supported modifiers). An empty
+    /// modifier list means the compositor named a format but no layout, so the
+    /// driver picks one (`zwlr-screencopy`'s `linux_dmabuf` event).
     #[cfg(feature = "gpu")]
     dmabuf_formats: Vec<(u32, Vec<u64>)>,
     /// Set once a constraints group (`done`) has been received.
     constraints_done: bool,
+    /// `zwlr-screencopy`: the in-flight frame has announced its buffer types and is
+    /// waiting for a `copy` request.
+    awaiting_copy: bool,
+    /// Whether this session has delivered a frame yet. The first `zwlr-screencopy`
+    /// capture of a session is an unconditional `copy` (so a static source still
+    /// shows something at once); later ones wait for damage.
+    delivered: bool,
+    /// The compositor reports the captured contents bottom-up (`y_invert`).
+    y_invert: bool,
     /// Constraints changed since the buffer was last (re)allocated (e.g. resize).
     dirty: bool,
     /// Set when the current in-flight frame is ready to read.
@@ -423,6 +516,14 @@ impl Buf {
             Buf::Shm(b) => &b.buffer,
             #[cfg(feature = "gpu")]
             Buf::Dmabuf(b) => &b.buffer,
+        }
+    }
+    /// Whether this is a GPU dma-buf rather than CPU shared memory.
+    fn is_dmabuf(&self) -> bool {
+        match self {
+            Buf::Shm(_) => false,
+            #[cfg(feature = "gpu")]
+            Buf::Dmabuf(_) => true,
         }
     }
     /// Did the advertised constraints (size) change vs this buffer?
@@ -529,25 +630,72 @@ pub struct DmabufFrame {
     pub modifier: u64,
 }
 
-/// A persistent capture session: source + session objects plus the reusable
-/// buffer. Re-armed each frame instead of being torn down (the one-shot model).
-/// `frame` holds the in-flight capture (a frame object captures exactly one
-/// frame), pending until the source produces new content (damage).
-struct OpenSession {
-    frame: Option<ExtImageCopyCaptureFrameV1>, // in-flight capture, if armed
-    buf: Option<Buf>,                          // dropped after the frame, before the session
-    session: ExtImageCopyCaptureSessionV1,
-    src: ExtImageCaptureSourceV1,
+/// The protocol objects behind one open session.
+///
+/// `ext-image-copy-capture` has a session object that outlives the frames taken
+/// from it, and announces its buffer constraints once. `zwlr-screencopy` has no
+/// session object at all: each capture is a fresh frame created from the output,
+/// which re-announces the constraints before it will accept a buffer. Both keep at
+/// most one in-flight frame, since a frame object captures exactly one frame.
+enum SessionObjects {
+    ImageCopy {
+        frame: Option<ExtImageCopyCaptureFrameV1>,
+        session: ExtImageCopyCaptureSessionV1,
+        src: ExtImageCaptureSourceV1,
+    },
+    Screencopy {
+        frame: Option<ZwlrScreencopyFrameV1>,
+        output: WlOutput,
+    },
 }
 
-impl Drop for OpenSession {
-    fn drop(&mut self) {
-        if let Some(frame) = &self.frame {
-            frame.destroy();
+impl SessionObjects {
+    /// Whether a frame is currently in flight.
+    fn armed(&self) -> bool {
+        match self {
+            SessionObjects::ImageCopy { frame, .. } => frame.is_some(),
+            SessionObjects::Screencopy { frame, .. } => frame.is_some(),
         }
-        self.session.destroy();
-        self.src.destroy();
     }
+
+    /// Destroy the in-flight frame, if any.
+    fn drop_frame(&mut self) {
+        match self {
+            SessionObjects::ImageCopy { frame, .. } => {
+                if let Some(f) = frame.take() {
+                    f.destroy();
+                }
+            }
+            SessionObjects::Screencopy { frame, .. } => {
+                if let Some(f) = frame.take() {
+                    f.destroy();
+                }
+            }
+        }
+    }
+}
+
+impl Drop for SessionObjects {
+    fn drop(&mut self) {
+        self.drop_frame();
+        match self {
+            SessionObjects::ImageCopy { session, src, .. } => {
+                session.destroy();
+                src.destroy();
+            }
+            // The wl_output is the registry's, not the session's.
+            SessionObjects::Screencopy { .. } => {}
+        }
+    }
+}
+
+/// An open capture session: its protocol objects plus the reusable buffer, re-armed
+/// each round rather than torn down.
+struct OpenSession {
+    /// Declared first so it drops first: the buffer is released before the objects
+    /// that referenced it.
+    buf: Option<Buf>,
+    objects: SessionObjects,
 }
 
 #[derive(Default)]
@@ -559,24 +707,33 @@ struct State {
     tl_src: Option<ExtForeignToplevelImageCaptureSourceManagerV1>,
     out_src: Option<ExtOutputImageCaptureSourceManagerV1>,
     copy: Option<ExtImageCopyCaptureManagerV1>,
+    /// The `zwlr-screencopy` manager, bound only when that is the protocol in use.
+    screencopy: Option<ZwlrScreencopyManagerV1>,
     /// The foreign-toplevel list, kept alive so the compositor keeps emitting
     /// toplevel events. `None` on compositors without window capture (wlroots < 0.20).
     list: Option<ExtForeignToplevelListV1>,
     /// linux-dmabuf manager, if the compositor exposes it (enables the GPU path).
     #[cfg(feature = "gpu")]
     dmabuf: Option<ZwpLinuxDmabufV1>,
-    /// Event bookkeeping for every live session, keyed by session object id.
-    sessions: HashMap<ObjectId, SessionData>,
+    /// The GPU the compositor renders on (raw dev_t), read from linux-dmabuf's
+    /// default feedback. `zwlr-screencopy` names no device of its own, and on a
+    /// multi-GPU machine allocating on the wrong one makes every copy fail.
+    #[cfg(feature = "gpu")]
+    dmabuf_main_device: Option<u64>,
+    /// Event bookkeeping for every live session.
+    sessions: HashMap<SessionId, SessionData>,
 }
 
 /// A Wayland client that enumerates capturable toplevels and outputs and drives
-/// their capture sessions over `ext-image-copy-capture`.
+/// their capture sessions, over `ext-image-copy-capture` or `zwlr-screencopy`.
 pub struct Client {
     queue: EventQueue<State>,
     qh: QueueHandle<State>,
     state: State,
-    /// Session-owned Wayland objects + buffers, keyed by session object id.
-    open: HashMap<ObjectId, OpenSession>,
+    /// The protocol this client drives; see [`select_protocol`].
+    protocol: Protocol,
+    /// Session-owned Wayland objects + buffers.
+    open: HashMap<SessionId, OpenSession>,
     /// gbm device for dma-buf allocation, opened lazily on the first dma-buf
     /// session (matching the compositor's advertised device). `None` until then,
     /// or if the GPU path is unavailable (we then fall back to shm).
@@ -597,18 +754,53 @@ impl Client {
         let qh = queue.handle();
 
         let shm = globals.bind(&qh, 1..=1, ()).context("wl_shm")?;
-        let copy = globals
-            .bind(&qh, 1..=1, ())
-            .context("ext_image_copy_capture_manager_v1 missing")?;
+
+        let mut advertised = Vec::new();
+        globals.contents().with_list(|list| {
+            for g in list {
+                advertised.push((g.interface.clone(), g.version));
+            }
+        });
+        let protocol = select_protocol(&advertised).ok_or_else(|| {
+            CaptureError::msg(format!(
+                "no capture protocol: neither {} nor {SCREENCOPY_GLOBAL}",
+                IMAGE_COPY_GLOBALS.join(" + ")
+            ))
+        })?;
+
         // Window capture (the foreign-toplevel source + list) only landed in
-        // wlroots >= 0.20 / Sway >= 1.12. Bind them optionally so screen-only capture
-        // still works on wlroots 0.19 / Sway 1.11; window-specific paths then fail with
-        // a clear, localised error (see `open_toplevel_session`). Screen capture
-        // (`copy` + `out_src`) stays mandatory — it is the minimum every tool needs.
-        let tl_src = globals.bind(&qh, 1..=1, ()).ok();
-        let out_src = globals
-            .bind(&qh, 1..=1, ())
-            .context("ext_output_image_capture_source_manager_v1 missing")?;
+        // wlroots >= 0.20 / Sway >= 1.12, and `zwlr-screencopy` never captures a
+        // window at all. Bind them optionally so screen-only capture still works;
+        // window-specific paths then fail with a clear error (see
+        // `open_toplevel_session`).
+        let (copy, tl_src, out_src, screencopy) = match protocol {
+            Protocol::ImageCopyCapture => (
+                Some(
+                    globals
+                        .bind(&qh, 1..=1, ())
+                        .context("ext_image_copy_capture_manager_v1")?,
+                ),
+                globals.bind(&qh, 1..=1, ()).ok(),
+                Some(
+                    globals
+                        .bind(&qh, 1..=1, ())
+                        .context("ext_output_image_capture_source_manager_v1")?,
+                ),
+                None,
+            ),
+            // v3 is the floor: `linux_dmabuf` and `buffer_done` arrived with it, and
+            // wlroots has shipped it since 0.11.
+            Protocol::Screencopy => (
+                None,
+                None,
+                None,
+                Some(
+                    globals
+                        .bind(&qh, 3..=3, ())
+                        .context("zwlr_screencopy_manager_v1 v3")?,
+                ),
+            ),
+        };
         let list: Option<ExtForeignToplevelListV1> = globals.bind(&qh, 1..=1, ()).ok();
 
         // Optional: authoritative logical geometry (multi-monitor positions,
@@ -631,24 +823,40 @@ impl Client {
 
         let mut state = State {
             shm: Some(shm),
-            copy: Some(copy),
+            copy,
             tl_src,
-            out_src: Some(out_src),
+            out_src,
+            screencopy,
             list,
             ..Default::default()
         };
         // Optional: enables the GPU dma-buf path. Absence just means shm-only.
         #[cfg(feature = "gpu")]
-        {
+        let feedback = {
             state.dmabuf = globals.bind(&qh, 3..=4, ()).ok();
+            // An ext-image-copy-capture session names the device it wants buffers
+            // on; a screencopy frame doesn't, so ask linux-dmabuf's default
+            // feedback which GPU the compositor renders on. `get_default_feedback`
+            // needs version 4.
+            match (&state.dmabuf, protocol) {
+                (Some(mgr), Protocol::Screencopy) if mgr.version() >= 4 => {
+                    Some(mgr.get_default_feedback(&qh, ()))
+                }
+                _ => None,
+            }
+        };
+        queue.roundtrip(&mut state).context("Wayland roundtrip")?;
+        queue.roundtrip(&mut state).context("Wayland roundtrip")?;
+        #[cfg(feature = "gpu")]
+        if let Some(fb) = feedback {
+            fb.destroy();
         }
-        queue.roundtrip(&mut state).context("Wayland roundtrip")?;
-        queue.roundtrip(&mut state).context("Wayland roundtrip")?;
 
         Ok(Self {
             queue,
             qh,
             state,
+            protocol,
             open: HashMap::new(),
             #[cfg(feature = "gpu")]
             gbm: None,
@@ -688,8 +896,15 @@ impl Client {
     /// Whether this compositor can capture individual windows (the foreign-toplevel
     /// image-capture source *and* list — wlroots >= 0.20 / Sway >= 1.12). When `false`,
     /// only screen (output) capture works; window paths return a clear error.
+    ///
+    /// Always `false` under [`Protocol::Screencopy`], which only addresses outputs.
     pub fn can_capture_windows(&self) -> bool {
         self.state.tl_src.is_some() && self.state.list.is_some()
+    }
+
+    /// The capture protocol this client drives.
+    pub fn protocol(&self) -> Protocol {
+        self.protocol
     }
 
     /// Drain pending Wayland events (new/closed toplevels, etc.) without blocking
@@ -705,66 +920,96 @@ impl Client {
     /// live until [`Client::close_session`] (or the source disappears); re-arm a
     /// frame each cycle with [`Client::capture`].
     pub fn open_toplevel_session(&mut self, t: &Toplevel) -> Result<SessionId, CaptureError> {
-        let src = self
-            .state
-            .tl_src
-            .as_ref()
-            .ok_or(CaptureError::WindowsUnsupported)?
-            .create_source(&t.handle, &self.qh, ());
-        self.open_session(src)
+        let (Some(tl_src), Some(copy)) = (self.state.tl_src.clone(), self.state.copy.clone())
+        else {
+            return Err(CaptureError::WindowsUnsupported);
+        };
+        let id = self.new_session();
+        let src = tl_src.create_source(&t.handle, &self.qh, ());
+        let session = copy.create_session(&src, Options::empty(), &self.qh, id);
+        self.await_constraints(
+            id,
+            SessionObjects::ImageCopy {
+                frame: None,
+                session,
+                src,
+            },
+        )
     }
 
     /// Open a persistent capture session for an output. See [`Client::open_toplevel_session`].
     pub fn open_output_session(&mut self, o: &Output) -> Result<SessionId> {
-        let src = self
-            .state
-            .out_src
-            .as_ref()
-            .unwrap()
-            .create_source(&o.wl_output, &self.qh, ());
-        self.open_session(src)
+        let id = self.new_session();
+        let objects = match self.protocol {
+            Protocol::ImageCopyCapture => {
+                let out_src = self
+                    .state
+                    .out_src
+                    .clone()
+                    .context("ext_output_image_capture_source_manager_v1 missing")?;
+                let copy = self
+                    .state
+                    .copy
+                    .clone()
+                    .context("ext_image_copy_capture_manager_v1 missing")?;
+                let src = out_src.create_source(&o.wl_output, &self.qh, ());
+                let session = copy.create_session(&src, Options::empty(), &self.qh, id);
+                SessionObjects::ImageCopy {
+                    frame: None,
+                    session,
+                    src,
+                }
+            }
+            Protocol::Screencopy => {
+                let mgr = self
+                    .state
+                    .screencopy
+                    .clone()
+                    .context("zwlr_screencopy_manager_v1 missing")?;
+                // The first frame doubles as the constraints probe: screencopy only
+                // announces them from a frame, and the frame we learn them from is
+                // the one `poll` then copies into.
+                let frame = mgr.capture_output(CURSOR_OFF, &o.wl_output, &self.qh, id);
+                SessionObjects::Screencopy {
+                    frame: Some(frame),
+                    output: o.wl_output.clone(),
+                }
+            }
+        };
+        self.await_constraints(id, objects)
     }
 
-    fn open_session(&mut self, src: ExtImageCaptureSourceV1) -> Result<SessionId> {
-        let session =
-            self.state
-                .copy
-                .as_ref()
-                .unwrap()
-                .create_session(&src, Options::empty(), &self.qh, ());
-        let id = session.id();
-        self.state
-            .sessions
-            .insert(id.clone(), SessionData::default());
+    /// Allocate a session id and its bookkeeping slot, before any protocol object
+    /// is created with it as user data.
+    fn new_session(&mut self) -> SessionId {
+        let id = SessionId::next();
+        self.state.sessions.insert(id, SessionData::default());
+        id
+    }
 
-        // Wait for the first buffer-constraints group (buffer_size + shm_format + done).
+    /// Block until the compositor has described the buffer it wants, then register
+    /// the session. `ext-image-copy-capture` announces that once per session
+    /// (`buffer_size` + `shm_format` + `done`); `zwlr-screencopy` announces it per
+    /// frame (`buffer` + `linux_dmabuf` + `buffer_done`).
+    fn await_constraints(&mut self, id: SessionId, objects: SessionObjects) -> Result<SessionId> {
         loop {
             self.queue
                 .blocking_dispatch(&mut self.state)
                 .context("Wayland dispatch")?;
-            let d = self.state.sessions.get(&id).unwrap();
+            let d = self.state.sessions.get(&id).context("session gone")?;
             if d.constraints_done || d.stopped {
                 break;
             }
         }
-        if self.state.sessions.get(&id).unwrap().stopped {
+        if self.state.sessions.get(&id).is_none_or(|d| d.stopped) {
             self.state.sessions.remove(&id);
-            session.destroy();
-            src.destroy();
+            // `objects` drops here, releasing whatever was created.
             return Err(CaptureError::msg(
                 "capture session stopped before first frame",
             ));
         }
 
-        self.open.insert(
-            id.clone(),
-            OpenSession {
-                frame: None,
-                buf: None,
-                session,
-                src,
-            },
-        );
+        self.open.insert(id, OpenSession { buf: None, objects });
         Ok(id)
     }
 
@@ -860,63 +1105,153 @@ impl Client {
     /// Also returns the ids of sessions the compositor stopped (e.g. their window
     /// closed), so the caller can drop and (if still listed) reopen them.
     pub fn poll(&mut self, budget: Duration) -> (Vec<(SessionId, Frame)>, Vec<SessionId>) {
-        // 1. Arm every session that has no frame in flight.
-        let ids: Vec<ObjectId> = self.open.keys().cloned().collect();
-        for id in &ids {
-            let armed = self.open.get(id).is_some_and(|o| o.frame.is_some());
-            let dead = self.state.sessions.get(id).is_some_and(|d| d.stopped);
-            if armed || dead {
-                continue;
+        let deadline = Instant::now() + budget;
+        loop {
+            self.arm_sessions();
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            let _ = self.dispatch_timeout(remaining);
+            // A screencopy capture is armed in two steps — create the frame, then
+            // copy into it once the compositor has described the buffer it wants —
+            // so go round again and let both happen inside one `poll` rather than
+            // one per call. `ext-image-copy-capture` never waits like this and
+            // leaves after a single pass.
+            let pending_copy = self
+                .state
+                .sessions
+                .values()
+                .any(|d| d.awaiting_copy && !d.stopped);
+            if !pending_copy || remaining.is_zero() {
+                break;
             }
-            if self.ensure_buffer(id).is_err() {
-                continue;
-            }
-            if let Some(d) = self.state.sessions.get_mut(id) {
-                d.ready = false;
-            }
-            let os = self.open.get_mut(id).unwrap();
-            let wl_buffer = os.buf.as_ref().unwrap().wl_buffer().clone();
-            let frame = os.session.create_frame(&self.qh, id.clone());
-            frame.attach_buffer(&wl_buffer);
-            frame.capture();
-            os.frame = Some(frame);
         }
+        self.harvest_sessions()
+    }
 
-        // 2. Wait for frame events, but never longer than the budget.
-        let _ = self.dispatch_timeout(budget);
+    /// Arm every idle session, and hand a buffer to every screencopy frame that has
+    /// announced its constraints. Idempotent: a session with a capture already in
+    /// flight is left alone.
+    fn arm_sessions(&mut self) {
+        let qh = self.qh.clone();
+        let screencopy = self.state.screencopy.clone();
+        for id in self.open.keys().copied().collect::<Vec<_>>() {
+            let awaiting_copy = match self.state.sessions.get(&id) {
+                Some(d) if !d.stopped => d.awaiting_copy,
+                _ => continue,
+            };
+            let armed = match self.open.get(&id) {
+                Some(os) => os.objects.armed(),
+                None => continue,
+            };
+            // The screencopy frame that carried the constraints is already in
+            // flight; what it still needs is the buffer.
+            if armed && !awaiting_copy {
+                continue;
+            }
 
-        // 3. Harvest ready frames; retry transient frame failures; surface stops.
+            // A screencopy session with nothing in flight starts a frame and stops
+            // there: the buffer can only be handed over once that frame has said
+            // which one it wants, and it says so afresh every time.
+            let is_screencopy = matches!(
+                self.open.get(&id).map(|os| &os.objects),
+                Some(SessionObjects::Screencopy { .. })
+            );
+            if !armed && is_screencopy {
+                let Some(mgr) = screencopy.as_ref() else {
+                    continue;
+                };
+                if let Some(d) = self.state.sessions.get_mut(&id) {
+                    d.ready = false;
+                    d.constraints_done = false;
+                }
+                if let Some(os) = self.open.get_mut(&id)
+                    && let SessionObjects::Screencopy { frame, output } = &mut os.objects
+                {
+                    *frame = Some(mgr.capture_output(CURSOR_OFF, output, &qh, id));
+                }
+                continue;
+            }
+
+            if self.ensure_buffer(&id).is_err() {
+                continue;
+            }
+            let Some(wl_buffer) = self
+                .open
+                .get(&id)
+                .and_then(|os| os.buf.as_ref())
+                .map(|b| b.wl_buffer().clone())
+            else {
+                continue;
+            };
+            // The first capture of a session must land whatever the source is doing,
+            // so the caller sees something at once; only afterwards does waiting for
+            // damage keep a static source quiet.
+            let delivered = self.state.sessions.get(&id).is_some_and(|d| d.delivered);
+            if let Some(d) = self.state.sessions.get_mut(&id) {
+                d.ready = false;
+                d.awaiting_copy = false;
+            }
+            let Some(os) = self.open.get_mut(&id) else {
+                continue;
+            };
+            match &mut os.objects {
+                SessionObjects::ImageCopy { frame, session, .. } => {
+                    let f = session.create_frame(&qh, id);
+                    f.attach_buffer(&wl_buffer);
+                    f.capture();
+                    *frame = Some(f);
+                }
+                SessionObjects::Screencopy { frame, .. } => {
+                    let Some(f) = frame.as_ref() else { continue };
+                    if delivered {
+                        f.copy_with_damage(&wl_buffer);
+                    } else {
+                        f.copy(&wl_buffer);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Collect the frames that became ready, retry transient failures, and report
+    /// the sessions the compositor stopped.
+    fn harvest_sessions(&mut self) -> (Vec<(SessionId, Frame)>, Vec<SessionId>) {
         let mut frames = Vec::new();
         let mut stopped = Vec::new();
-        for id in self.open.keys().cloned().collect::<Vec<_>>() {
-            let (ready, is_stopped, frame_failed) = self
+        for id in self.open.keys().copied().collect::<Vec<_>>() {
+            let (ready, is_stopped, frame_failed, y_invert) = self
                 .state
                 .sessions
                 .get(&id)
-                .map(|d| (d.ready, d.stopped, d.frame_failed))
-                .unwrap_or((false, false, None));
+                .map(|d| (d.ready, d.stopped, d.frame_failed, d.y_invert))
+                .unwrap_or((false, false, None, false));
 
             // Terminal: source gone. Drop the in-flight frame and report it.
             if is_stopped {
-                if let Some(os) = self.open.get_mut(&id)
-                    && let Some(frame) = os.frame.take()
-                {
-                    frame.destroy();
+                if let Some(os) = self.open.get_mut(&id) {
+                    os.objects.drop_frame();
                 }
                 stopped.push(id);
                 continue;
             }
 
             if ready {
-                let frame = harvest(self.open[&id].buf.as_ref().unwrap());
-                if let Some(os) = self.open.get_mut(&id)
-                    && let Some(f) = os.frame.take()
-                {
-                    f.destroy();
+                // A bottom-up dma-buf cannot be handed on as it is (see `harvest`):
+                // discard it and reallocate, so the next round comes through shm.
+                let gpu_inverted =
+                    y_invert && self.open[&id].buf.as_ref().is_some_and(Buf::is_dmabuf);
+                let frame = self.open[&id]
+                    .buf
+                    .as_ref()
+                    .filter(|_| !gpu_inverted)
+                    .and_then(|b| harvest(b, y_invert));
+                if let Some(os) = self.open.get_mut(&id) {
+                    os.objects.drop_frame();
                 }
                 if let Some(d) = self.state.sessions.get_mut(&id) {
                     d.ready = false;
                     d.frame_failed = None;
+                    d.dirty |= gpu_inverted;
+                    d.delivered |= frame.is_some();
                 }
                 if let Some(frame) = frame {
                     frames.push((id, frame));
@@ -924,13 +1259,12 @@ impl Client {
             } else if let Some(reason) = frame_failed {
                 // Transient: drop the failed frame and re-arm next round. A
                 // buffer_constraints failure also means our buffer is stale.
-                if let Some(os) = self.open.get_mut(&id)
-                    && let Some(f) = os.frame.take()
-                {
-                    f.destroy();
+                if let Some(os) = self.open.get_mut(&id) {
+                    os.objects.drop_frame();
                 }
                 if let Some(d) = self.state.sessions.get_mut(&id) {
                     d.frame_failed = None;
+                    d.awaiting_copy = false;
                     if matches!(reason, FailureReason::BufferConstraints) {
                         d.dirty = true; // size/format changed → reallocate
                     }
@@ -992,7 +1326,7 @@ impl Client {
     /// and falls back to shm. The buffer is reused across frames otherwise.
     fn ensure_buffer(&mut self, id: &SessionId) -> Result<()> {
         let (w, h, dirty) = {
-            let d = self.state.sessions.get(id).context("session inconnue")?;
+            let d = self.state.sessions.get(id).context("unknown session")?;
             (d.width, d.height, d.dirty)
         };
         let fits = self
@@ -1025,15 +1359,18 @@ impl Client {
 
     /// Allocate a CPU shm buffer with the format-correct stride.
     fn alloc_shm(&mut self, id: &SessionId, w: u32, h: u32) -> Result<Buf> {
-        let format = self
+        let (format, wanted_stride) = self
             .state
             .sessions
             .get(id)
-            .and_then(|d| d.format)
+            .and_then(|d| Some((d.format?, d.stride)))
             .context("compositor offered no shm format")?;
         let layout = PixelLayout::of(format)
             .with_context(|| format!("unsupported shm format: {format:?}"))?;
-        let stride = w as usize * layout.bpp; // stride from the format's actual bpp
+        // The format's own bytes-per-pixel is the floor; honour a wider stride when
+        // the compositor names one, since it will write rows at that pitch.
+        let packed = w as usize * layout.bpp;
+        let stride = wanted_stride.map_or(packed, |s| (s as usize).max(packed));
         let size = stride * h as usize;
 
         let fd = rustix::fs::memfd_create("wlr-chooser-shm", rustix::fs::MemfdFlags::CLOEXEC)
@@ -1075,13 +1412,25 @@ impl Client {
     /// gbm/allocation failure) so the caller falls back to shm.
     #[cfg(feature = "gpu")]
     fn alloc_dmabuf(&mut self, id: &SessionId, w: u32, h: u32) -> Option<Buf> {
-        if self.gpu_disabled || self.state.sessions.get(id).is_some_and(|d| d.one_shot) {
+        // `y_invert`: the compositor writes this source bottom-up, and the engine's
+        // contract is top-down frames. Flipping shm pixels is a memcpy; flipping a
+        // dma-buf would mean a blit in every consumer, so such a session stays on shm.
+        if self.gpu_disabled
+            || self
+                .state
+                .sessions
+                .get(id)
+                .is_some_and(|d| d.one_shot || d.y_invert)
+        {
             return None;
         }
         let dmabuf_mgr = self.state.dmabuf.as_ref().cloned()?;
         let (formats, dev) = {
             let d = self.state.sessions.get(id)?;
-            (d.dmabuf_formats.clone(), d.dmabuf_dev)
+            (
+                d.dmabuf_formats.clone(),
+                d.dmabuf_dev.or(self.state.dmabuf_main_device),
+            )
         };
         let Some((fourcc, mods)) = pick_dmabuf_format(&formats) else {
             if debug() {
@@ -1096,15 +1445,22 @@ impl Client {
 
         // Allocate one swapchain slot: a gbm bo wrapped as a dma-buf wl_buffer.
         let alloc_slot = || -> Option<DmaBuf> {
-            let bo = gbm
-                .create_buffer_object_with_modifiers2::<()>(
+            // No modifier list means the compositor named a format but no layout
+            // (`zwlr-screencopy`), so the driver picks one and we report what it
+            // chose; otherwise it must come from the advertised set.
+            let bo = if mods.is_empty() {
+                gbm.create_buffer_object::<()>(w, h, gfmt, BufferObjectFlags::RENDERING)
+                    .ok()?
+            } else {
+                gbm.create_buffer_object_with_modifiers2::<()>(
                     w,
                     h,
                     gfmt,
                     mods.iter().map(|&m| Modifier::from(m)),
                     BufferObjectFlags::RENDERING,
                 )
-                .ok()?;
+                .ok()?
+            };
             let modifier: u64 = bo.modifier().into();
             let plane_count = bo.plane_count();
             if plane_count == 0 || plane_count > MAX_DMABUF_PLANES {
@@ -1188,6 +1544,10 @@ const fn fourcc(a: u8, b: u8, c: u8, d: u8) -> u32 {
 
 /// Pick a dma-buf format we can both allocate and decode, plus its usable
 /// modifiers (dropping `INVALID`). Prefers the common 32-bit RGB layouts.
+///
+/// An empty modifier list on the way in means the compositor named the format
+/// without naming a layout, and an empty list on the way out says the same to the
+/// allocator: let the driver choose.
 #[cfg(feature = "gpu")]
 fn pick_dmabuf_format(formats: &[(u32, Vec<u64>)]) -> Option<(u32, Vec<u64>)> {
     let preferred = [
@@ -1206,7 +1566,7 @@ fn pick_dmabuf_format(formats: &[(u32, Vec<u64>)]) -> Option<(u32, Vec<u64>)> {
                 .copied()
                 .filter(|&m| m != DRM_MOD_INVALID)
                 .collect();
-            if !usable.is_empty() {
+            if !usable.is_empty() || mods.is_empty() {
                 return Some((want, usable));
             }
         }
@@ -1214,8 +1574,27 @@ fn pick_dmabuf_format(formats: &[(u32, Vec<u64>)]) -> Option<(u32, Vec<u64>)> {
     None
 }
 
+/// The render node of the DRM device with this `dev_t`, through sysfs. A
+/// compositor may name its *primary* node (`card0`), whose render node is its
+/// sibling in `/sys/dev/char/<major>:<minor>/device/drm/`.
+#[cfg(feature = "gpu")]
+fn sysfs_render_node(dev: u64) -> Option<std::path::PathBuf> {
+    let dir = format!(
+        "/sys/dev/char/{}:{}/device/drm",
+        rustix::fs::major(dev),
+        rustix::fs::minor(dev)
+    );
+    std::fs::read_dir(dir).ok()?.flatten().find_map(|e| {
+        let name = e.file_name();
+        let name = name.to_str()?;
+        name.starts_with("renderD")
+            .then(|| std::path::Path::new("/dev/dri").join(name))
+    })
+}
+
 /// Resolve the DRM render node to allocate on. Best effort: match the advertised
-/// dev_t against `/dev/dri/renderD*`, else the first render node, else renderD128.
+/// dev_t against `/dev/dri/renderD*`, then through sysfs, else the first render
+/// node, else renderD128.
 #[cfg(feature = "gpu")]
 fn render_node_for(dev: Option<u64>) -> std::path::PathBuf {
     use std::path::PathBuf;
@@ -1241,6 +1620,9 @@ fn render_node_for(dev: Option<u64>) -> std::path::PathBuf {
                 return p.clone();
             }
         }
+        if let Some(p) = sysfs_render_node(dev) {
+            return p;
+        }
     }
     nodes
         .into_iter()
@@ -1249,7 +1631,6 @@ fn render_node_for(dev: Option<u64>) -> std::path::PathBuf {
 }
 
 /// Whether verbose capture diagnostics are enabled (`WLR_UTILS_DEBUG`).
-#[cfg(feature = "gpu")]
 fn debug() -> bool {
     std::env::var_os("WLR_UTILS_DEBUG").is_some()
 }
@@ -1257,14 +1638,21 @@ fn debug() -> bool {
 /// Turn a ready capture into a [`Frame`] for the UI. shm is read back + converted
 /// to RGBA on the CPU; dma-buf is handed off zero-copy as an fd to import as a GL
 /// texture (re-exporting an fd for the buffer the compositor just wrote).
-fn harvest(buf: &Buf) -> Option<Frame> {
+///
+/// `y_invert` means the compositor wrote the rows bottom-up; every [`Frame`] this
+/// crate hands out is top-down, so the shm path flips here. A dma-buf never reaches
+/// this point inverted: [`Client::ensure_buffer`] keeps an inverted session on shm,
+/// since flipping a GPU buffer would cost a blit at every consumer.
+fn harvest(buf: &Buf, y_invert: bool) -> Option<Frame> {
     match buf {
         Buf::Shm(b) => {
             let layout = PixelLayout::of(b.format).expect("format validated at alloc time");
             let raw = unsafe { std::slice::from_raw_parts(b.map as *const u8, b.size) };
-            Some(Frame::Shm(convert(
-                raw, b.width, b.height, b.stride, &layout,
-            )))
+            let mut img = convert(raw, b.width, b.height, b.stride, &layout);
+            if y_invert {
+                flip_vertically(&mut img);
+            }
+            Some(Frame::Shm(img))
         }
         #[cfg(feature = "gpu")]
         Buf::Dmabuf(b) => {
@@ -1284,6 +1672,22 @@ fn harvest(buf: &Buf) -> Option<Frame> {
                 modifier: b.modifier,
             }))
         }
+    }
+}
+
+/// Reverse the row order of an RGBA8 image, in place.
+fn flip_vertically(img: &mut CapturedImage) {
+    let row = img.width as usize * 4;
+    if row == 0 {
+        return;
+    }
+    let rows = img.rgba.len() / row;
+    let (top, bottom) = img.rgba.split_at_mut(rows / 2 * row);
+    for (t, b) in top
+        .chunks_exact_mut(row)
+        .zip(bottom.chunks_exact_mut(row).rev())
+    {
+        t.swap_with_slice(b);
     }
 }
 
@@ -1726,17 +2130,17 @@ impl Dispatch<ZxdgOutputV1, WlOutput> for State {
     }
 }
 
-impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for State {
+impl Dispatch<ExtImageCopyCaptureSessionV1, SessionId> for State {
     fn event(
         state: &mut Self,
-        session: &ExtImageCopyCaptureSessionV1,
+        _: &ExtImageCopyCaptureSessionV1,
         event: ext_image_copy_capture_session_v1::Event,
-        _: &(),
+        id: &SessionId,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
         use ext_image_copy_capture_session_v1::Event;
-        let Some(d) = state.sessions.get_mut(&session.id()) else {
+        let Some(d) = state.sessions.get_mut(id) else {
             return;
         };
         match event {
@@ -1775,12 +2179,12 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, ()> for State {
     }
 }
 
-impl Dispatch<ExtImageCopyCaptureFrameV1, ObjectId> for State {
+impl Dispatch<ExtImageCopyCaptureFrameV1, SessionId> for State {
     fn event(
         state: &mut Self,
         _: &ExtImageCopyCaptureFrameV1,
         event: ext_image_copy_capture_frame_v1::Event,
-        session_id: &ObjectId,
+        session_id: &SessionId,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
@@ -1803,6 +2207,76 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, ObjectId> for State {
                     d.frame_failed = Some(reason);
                 }
             }
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch<ZwlrScreencopyFrameV1, SessionId> for State {
+    fn event(
+        state: &mut Self,
+        _: &ZwlrScreencopyFrameV1,
+        event: zwlr_screencopy_frame_v1::Event,
+        session_id: &SessionId,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        use zwlr_screencopy_frame_v1::Event;
+        let Some(d) = state.sessions.get_mut(session_id) else {
+            return;
+        };
+        match event {
+            // The shm constraints, including the stride the compositor will write
+            // with — it dictates the pitch here, unlike ext-image-copy-capture.
+            Event::Buffer {
+                format: WEnum::Value(f),
+                width,
+                height,
+                stride,
+            } => {
+                d.dirty |= (d.width, d.height, d.format, d.stride)
+                    != (width, height, Some(f), Some(stride));
+                d.width = width;
+                d.height = height;
+                d.format = Some(f);
+                d.stride = Some(stride);
+            }
+            // A bare fourcc: no modifier list, so the allocator lets the driver
+            // pick the layout (see `pick_dmabuf_format`).
+            #[cfg(feature = "gpu")]
+            Event::LinuxDmabuf {
+                format,
+                width,
+                height,
+            } => {
+                let announced = vec![(format, Vec::new())];
+                d.dirty |= d.dmabuf_formats != announced || (d.width, d.height) != (width, height);
+                d.width = width;
+                d.height = height;
+                d.dmabuf_formats = announced;
+            }
+            // Every buffer type has been announced; the frame now wants a `copy`.
+            // The constraints come round again with each frame, so the buffer is
+            // only reallocated when they actually changed.
+            Event::BufferDone => {
+                d.constraints_done = true;
+                d.awaiting_copy = true;
+            }
+            Event::Flags {
+                flags: WEnum::Value(f),
+            } => {
+                let inverted = f.contains(zwlr_screencopy_frame_v1::Flags::YInvert);
+                if debug() {
+                    eprintln!("wlr-capture: screencopy frame flags {f:?}");
+                }
+                // The orientation belongs to the source, so a change means the
+                // buffer has to be reallocated on the path that can handle it.
+                d.dirty |= d.y_invert != inverted;
+                d.y_invert = inverted;
+            }
+            Event::Ready { .. } => d.ready = true,
+            // A screencopy frame has no transient failure: the whole capture is off.
+            Event::Failed => d.stopped = true,
             _ => {}
         }
     }
@@ -1960,6 +2434,94 @@ mod tests {
         assert_eq!(&dst[16..20], &[3, 3, 3, 255]); // (1,1) = img (0,1)
     }
 
+    fn globals(names: &[&str]) -> Vec<(String, u32)> {
+        names.iter().map(|n| ((*n).to_string(), 1)).collect()
+    }
+
+    #[test]
+    fn protocol_selection_prefers_image_copy_capture() {
+        let ext = [IMAGE_COPY_GLOBALS[0], IMAGE_COPY_GLOBALS[1]];
+        assert_eq!(
+            select_protocol(&globals(&ext)),
+            Some(Protocol::ImageCopyCapture)
+        );
+        // Only the older protocol: that is what the engine drives.
+        assert_eq!(
+            select_protocol(&globals(&[SCREENCOPY_GLOBAL])),
+            Some(Protocol::Screencopy)
+        );
+        // Both: ext wins (it captures windows too).
+        let both = [ext[0], ext[1], SCREENCOPY_GLOBAL];
+        assert_eq!(
+            select_protocol(&globals(&both)),
+            Some(Protocol::ImageCopyCapture)
+        );
+        // A half-advertised ext (manager without the output source) is not usable.
+        assert_eq!(select_protocol(&globals(&ext[..1])), None);
+        assert_eq!(select_protocol(&globals(&[])), None);
+    }
+
+    #[test]
+    fn protocol_interface_names_are_the_protocol_names() {
+        assert_eq!(
+            Protocol::ImageCopyCapture.interface(),
+            "ext-image-copy-capture-v1"
+        );
+        assert_eq!(Protocol::Screencopy.interface(), "zwlr-screencopy-v1");
+    }
+
+    #[test]
+    fn dmabuf_format_without_modifiers_is_left_to_the_driver() {
+        #[cfg(feature = "gpu")]
+        {
+            let xr24 = fourcc(b'X', b'R', b'2', b'4');
+            // A bare fourcc (what zwlr-screencopy announces) is usable, with no layout.
+            assert_eq!(
+                pick_dmabuf_format(&[(xr24, vec![])]),
+                Some((xr24, Vec::new()))
+            );
+            // An explicit list keeps its modifiers, minus the INVALID sentinel.
+            assert_eq!(
+                pick_dmabuf_format(&[(xr24, vec![DRM_MOD_INVALID, 7])]),
+                Some((xr24, vec![7]))
+            );
+            // Only INVALID was offered for a format: nothing to allocate with.
+            assert_eq!(pick_dmabuf_format(&[(xr24, vec![DRM_MOD_INVALID])]), None);
+        }
+    }
+
+    #[test]
+    fn flip_vertically_reverses_row_order() {
+        // 2×2: rows swap, pixels within a row keep their order.
+        let mut img = img_2x2();
+        flip_vertically(&mut img);
+        assert_eq!(img.pixel(0, 0), Some([3, 3, 3, 255]));
+        assert_eq!(img.pixel(1, 0), Some([4, 4, 4, 255]));
+        assert_eq!(img.pixel(0, 1), Some([1, 1, 1, 255]));
+        assert_eq!(img.pixel(1, 1), Some([2, 2, 2, 255]));
+        // Flipping twice is the identity.
+        flip_vertically(&mut img);
+        assert_eq!(img.rgba, img_2x2().rgba);
+    }
+
+    #[test]
+    fn flip_vertically_keeps_the_middle_row_of_an_odd_image() {
+        // 1×3, one byte-quad per row: only the outer rows move.
+        let mut img = CapturedImage {
+            width: 1,
+            height: 3,
+            rgba: vec![1, 1, 1, 255, 2, 2, 2, 255, 3, 3, 3, 255],
+        };
+        flip_vertically(&mut img);
+        assert_eq!(img.rgba, vec![3, 3, 3, 255, 2, 2, 2, 255, 1, 1, 1, 255]);
+    }
+
+    #[test]
+    fn session_ids_are_distinct() {
+        let (a, b) = (SessionId::next(), SessionId::next());
+        assert_ne!(a, b);
+    }
+
     #[test]
     fn output_logical_dims_transform() {
         // 4K at scale 2 → 1920×1080 logical.
@@ -1984,10 +2546,36 @@ delegate_noop!(State: ignore ExtImageCaptureSourceV1);
 delegate_noop!(State: ignore ExtForeignToplevelImageCaptureSourceManagerV1);
 delegate_noop!(State: ignore ExtOutputImageCaptureSourceManagerV1);
 delegate_noop!(State: ignore ExtImageCopyCaptureManagerV1);
+// The screencopy manager has no events; everything arrives on its frames.
+delegate_noop!(State: ignore ZwlrScreencopyManagerV1);
 // dma-buf: we drive allocation ourselves (gbm) and create buffers with
 // `create_immed`, so the manager's format/modifier and the params' created/failed
 // events carry nothing we need.
 #[cfg(feature = "gpu")]
 delegate_noop!(State: ignore ZwpLinuxDmabufV1);
+
+#[cfg(feature = "gpu")]
+impl Dispatch<ZwpLinuxDmabufFeedbackV1, ()> for State {
+    fn event(
+        state: &mut Self,
+        _: &ZwpLinuxDmabufFeedbackV1,
+        event: zwp_linux_dmabuf_feedback_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        use zwp_linux_dmabuf_feedback_v1::Event;
+        // `main_device` comes before any tranche, so the first device wins and the
+        // tranche target is only a fallback for a compositor that omits it.
+        let (Event::MainDevice { device } | Event::TrancheTargetDevice { device }) = event else {
+            return;
+        };
+        if state.dmabuf_main_device.is_none()
+            && let Ok(bytes) = <[u8; 8]>::try_from(device.as_slice())
+        {
+            state.dmabuf_main_device = Some(u64::from_ne_bytes(bytes));
+        }
+    }
+}
 #[cfg(feature = "gpu")]
 delegate_noop!(State: ignore ZwpLinuxBufferParamsV1);

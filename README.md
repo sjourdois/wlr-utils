@@ -48,7 +48,7 @@ A wlroots compositor. What you get depends on which capture protocols it exposes
 
 | Capability | Compositor floor | Wayland protocol |
 | --- | --- | --- |
-| **Screen** capture (screenshots, recording, loupe, annotation) | wlroots ≥ 0.19 · Sway ≥ 1.11 | `ext-image-copy-capture-v1` + `wlr-layer-shell` |
+| **Screen** capture (screenshots, recording, loupe, annotation) | wlroots ≥ 0.19 · Sway ≥ 1.11, or any compositor with `wlr-screencopy` | `ext-image-copy-capture-v1` (else `wlr-screencopy`) + `wlr-layer-shell` |
 | **Window** capture (switcher, `-w`, window mirror/record) | wlroots ≥ 0.20 · Sway ≥ 1.12 | adds `ext-foreign-toplevel-list-v1` |
 
 Tools degrade gracefully: where windows aren't capturable they keep their screen features

@@ -9,4 +9,4 @@ loading = …
 preview-unavailable = Предпросмотр недоступен
 show-system = Системные окна
 error = wlr-chooser: { $error }
-capture-no-window = Этот композитор не может захватывать отдельные окна. Захват окон требует wlroots >= 0.20 (Sway >= 1.12); wlroots 0.19 / Sway 1.11 поддерживают только захват экрана. Запустите `wlr-peek doctor`, чтобы узнать, что поддерживает ваш композитор.
+capture-no-window = Этот композитор не может захватывать отдельные окна. Захват окон требует ext-image-copy-capture-v1 с источником foreign-toplevel (wlroots >= 0.20 / Sway >= 1.12). Запустите `wlr-peek doctor`, чтобы узнать, что поддерживает ваш композитор.

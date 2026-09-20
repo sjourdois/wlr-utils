@@ -11,15 +11,17 @@ $ wlr-peek doctor
 ```
 
 It prints your tool version, OS, compositor + version, which of the protocols below
-the running compositor advertises, and whether screen capture and focus-aware sources
-will work — so it doubles as the environment block a bug report needs. Any tool prints
-the same report, so a single-tool install can produce it too.
+the running compositor advertises, which capture protocol the engine uses there, and
+whether screen capture and focus-aware sources will work — so it doubles as the
+environment block a bug report needs. Any tool prints the same report, so a
+single-tool install can produce it too.
 
 ## Protocols used
 
 | Protocol | Used for | Needed by |
 | --- | --- | --- |
 | `ext-image-copy-capture-v1` + `ext-image-capture-source-v1` + the output / foreign-toplevel source managers | the **capture engine** (frames of an output or a window) | everything |
+| `wlr-screencopy` (`zwlr_screencopy_manager_v1`, v3) | the capture engine's fallback, **outputs only**, used when `ext-image-copy-capture-v1` is absent | screen capture on a compositor without the `ext` protocols |
 | `ext-foreign-toplevel-list-v1` | enumerating windows | `wlr-chooser`, `-w`, `wlr-peek mirror`, window record/watch |
 | `wlr-foreign-toplevel-management` (`zwlr_foreign_toplevel_manager_v1`) | focusing the picked window, and reading which window is focused (its `activated` state) | `wlr-switcher` |
 | `wlr-layer-shell` (`zwlr_layer_shell_v1`) | full-screen overlays | the region selector (`-s`), `wlr-peek loupe`/`color`, `wlr-switcher`, `wlr-chooser`, `wlr-draw` |
@@ -30,24 +32,29 @@ the same report, so a single-tool install can produce it too.
 | `tablet-v2` (`zwp_tablet_manager_v2`) | graphics tablet (stylus) input | optional, `wlr-draw`; without it, mouse only |
 | compositor IPC | "the active window" / "the current output" (`-a`, `--current-output`) | a per-compositor focus backend |
 
-`ext-image-capture-source-v1` is the linchpin, and it landed in two steps: the base
+The engine drives `ext-image-copy-capture-v1` where it is available, and
+`wlr-screencopy` otherwise. `ext-image-capture-source-v1` landed in two steps: the base
 protocol plus the **output** source arrived in **wlroots 0.19** (Sway ≥ 1.11), while the
 **foreign-toplevel** source (`ext_foreign_toplevel_image_capture_source_manager_v1`) —
 which window capture depends on — only arrived in **wlroots 0.20** (Sway ≥ 1.12).
 
 So there are **two floors**:
 
-- **Screen capture** — `ext-image-copy-capture-v1` + the **output** source: **wlroots ≥ 0.19
-  / Sway ≥ 1.11**. Screenshots, recording, the loupe/colour picker, region select, and
-  wlr-draw's freeze & save work here.
-- **Window capture** — additionally the **foreign-toplevel** source + list: **wlroots ≥ 0.20
-  / Sway ≥ 1.12**. The Alt-Tab switcher, `-w`/`--pick-window`, and per-window mirror/record
-  need this.
+- **Screen capture** — `ext-image-copy-capture-v1` + the **output** source (**wlroots ≥ 0.19
+  / Sway ≥ 1.11**), or `wlr-screencopy` v3. Screenshots, recording, the loupe/colour
+  picker, region select, and wlr-draw's freeze & save work here.
+- **Window capture** — `ext-image-copy-capture-v1` with the **foreign-toplevel** source +
+  list: **wlroots ≥ 0.20 / Sway ≥ 1.12**. `wlr-screencopy` addresses a `wl_output` and
+  never a window, so it does not lift this floor. The Alt-Tab switcher,
+  `-w`/`--pick-window`, and per-window mirror/record need it.
 
-The tools **degrade gracefully**: on a Sway 1.11 / wlroots 0.19 compositor the screen
+The tools **degrade gracefully**: where only screen capture is available the screen
 features all work, while window-only paths fail with a clear message (`wlr-switcher` says so
 and exits instead of showing an empty overlay; wlr-draw hides freeze/save when even screen
 capture is missing). Run `wlr-peek doctor` to see which of the two your compositor offers.
+
+On a compositor that advertises both capture protocols, `WLR_FORCE_SCREENCOPY=1` makes
+the engine take the `wlr-screencopy` path.
 
 ### GPU capture
 
@@ -78,8 +85,8 @@ backend (for `-a` / `--current-output`). Run `wlr-peek doctor` to check your own
 | **cosmic-comp** | ✅ | ✅ | ✅ | ❌ |
 | **Wayfire** | ✅ ≥ 0.10 (wlroots 0.19) | ❌ (until its 0.20 branch ships) | ✅ | ❌ |
 | **river** | ✅ ≥ 0.3 (wlroots 0.19) | ❌ | ✅ | ❌ |
-| **niri** | ❌ (`wlr-screencopy` only) | ❌ | ✅ | 🟡 `niri msg` (MRU, `-a` n/a) |
-| **dwl** | ❌ (`wlr-screencopy` only) | ❌ | ✅ | ❌ |
+| **niri** | ✅ (`wlr-screencopy`) | ❌ | ✅ | 🟡 `niri msg` (MRU, `-a` n/a) |
+| **dwl** | ✅ (`wlr-screencopy`) | ❌ | ✅ | ❌ |
 | **Mutter** (GNOME) | ❌ | ❌ | ❌ | ❌ |
 | **KWin** (KDE) | ❌ | ❌ | ✅ | ❌ |
 
@@ -94,9 +101,8 @@ Two caveats:
 
 - **Mutter / KWin** — unsupported: neither exposes a capture protocol. `wlr-draw` does run
   on KWin, without its freeze and save.
-- **niri / dwl** expose only the older `wlr-screencopy-v1`, which this suite doesn't use, so
-  they don't work yet (an `ext-image-copy-capture` fallback would be needed). Their focus
-  backend is the only part that can run.
+- **niri / dwl** expose `wlr-screencopy` and none of the `ext` capture protocols, so the
+  screen features work there and the window features do not.
 
 Two things vary by compositor:
 

@@ -9,4 +9,4 @@ loading = …
 preview-unavailable = Preview unavailable
 show-system = System windows
 error = wlr-chooser: { $error }
-capture-no-window = This compositor cannot capture individual windows. Window capture needs wlroots >= 0.20 (Sway >= 1.12); wlroots 0.19 / Sway 1.11 only expose screen capture. Run `wlr-peek doctor` to see what your compositor supports.
+capture-no-window = This compositor cannot capture individual windows. Window capture needs ext-image-copy-capture-v1 with the foreign-toplevel source (wlroots >= 0.20 / Sway >= 1.12). Run `wlr-peek doctor` to see what your compositor supports.

@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **Screen capture over `wlr-screencopy`** — the capture engine uses
+  `zwlr_screencopy_manager_v1` v3 where `ext-image-copy-capture-v1` is absent, so
+  screenshots, recording, the loupe/colour picker, region select and wlr-draw's
+  freeze & save work on **niri** and **dwl**. Both the `wl_shm` and the dma-buf
+  paths are supported. `wlr-screencopy` captures a `wl_output` and never a window,
+  so `wlr-switcher`, `-w`/`--pick-window` and the per-window mirror and recorder
+  stay unavailable there and say so. `doctor` reports which capture protocol is in
+  use; `WLR_FORCE_SCREENCOPY=1` selects `wlr-screencopy` on a compositor that
+  advertises both.
 - **Most recently used window order**
   ([#14](https://github.com/sjourdois/wlr-utils/pull/14), by
   [@bR3iN](https://github.com/bR3iN)) — `--window-order mru|by-name` on
@@ -21,9 +30,7 @@ All notable changes to this project are documented here. The format is based on
   (`focus_timestamp`), so a quick Alt-Tab goes back to the window you were just on
   there too. Checked against a live compositor — Hyprland 0.56.2 and niri 26.04 — by
   comparing the reported order with a known focus sequence. Compositors with no focus
-  IPC backend still fall back to `by-name`. (niri still can't run any of the tools:
-  it implements none of the `ext-image-copy-capture` protocols the suite needs to
-  start, so its backend is ready for the day it does.)
+  IPC backend still fall back to `by-name`.
 
 ### Changed
 

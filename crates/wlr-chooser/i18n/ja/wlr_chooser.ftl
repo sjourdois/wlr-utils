@@ -9,4 +9,4 @@ loading = …
 preview-unavailable = プレビューを利用できません
 show-system = システムウィンドウ
 error = wlr-chooser: { $error }
-capture-no-window = このコンポジタは個別のウィンドウをキャプチャできません。ウィンドウキャプチャには wlroots >= 0.20 (Sway >= 1.12) が必要です。wlroots 0.19 / Sway 1.11 は画面キャプチャのみ対応しています。`wlr-peek doctor` を実行して、お使いのコンポジタが対応している機能を確認してください。
+capture-no-window = このコンポジタは個別のウィンドウをキャプチャできません。ウィンドウキャプチャには ext-image-copy-capture-v1 と foreign-toplevel ソース (wlroots >= 0.20 / Sway >= 1.12) が必要です。`wlr-peek doctor` を実行して、お使いのコンポジタが対応している機能を確認してください。

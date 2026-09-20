@@ -9,4 +9,4 @@ loading = …
 preview-unavailable = 미리 보기를 사용할 수 없음
 show-system = 시스템 창
 error = wlr-chooser: { $error }
-capture-no-window = 이 컴포지터는 개별 창을 캡처할 수 없습니다. 창 캡처에는 wlroots >= 0.20 (Sway >= 1.12)이 필요합니다. wlroots 0.19 / Sway 1.11은 화면 캡처만 제공합니다. `wlr-peek doctor`를 실행하여 컴포지터가 지원하는 기능을 확인하세요.
+capture-no-window = 이 컴포지터는 개별 창을 캡처할 수 없습니다. 창 캡처에는 ext-image-copy-capture-v1과 foreign-toplevel 소스(wlroots >= 0.20 / Sway >= 1.12)가 필요합니다. `wlr-peek doctor`를 실행하여 컴포지터가 지원하는 기능을 확인하세요.

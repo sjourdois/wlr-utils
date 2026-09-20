@@ -9,4 +9,4 @@ loading = …
 preview-unavailable = 预览不可用
 show-system = 系统窗口
 error = wlr-chooser: { $error }
-capture-no-window = 此合成器无法捕获单个窗口。窗口捕获需要 wlroots >= 0.20（Sway >= 1.12）；wlroots 0.19 / Sway 1.11 仅支持屏幕捕获。运行 `wlr-peek doctor` 查看你的合成器支持哪些功能。
+capture-no-window = 此合成器无法捕获单个窗口。窗口捕获需要 ext-image-copy-capture-v1 及 foreign-toplevel 源（wlroots >= 0.20 / Sway >= 1.12）。运行 `wlr-peek doctor` 查看你的合成器支持哪些功能。

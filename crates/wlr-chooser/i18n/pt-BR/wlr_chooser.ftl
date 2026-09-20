@@ -9,4 +9,4 @@ loading = …
 preview-unavailable = Pré-visualização indisponível
 show-system = Janelas do sistema
 error = wlr-chooser: { $error }
-capture-no-window = Este compositor não pode capturar janelas individuais. A captura de janelas requer wlroots >= 0.20 (Sway >= 1.12); wlroots 0.19 / Sway 1.11 oferecem apenas captura de tela. Execute `wlr-peek doctor` para ver o que seu compositor suporta.
+capture-no-window = Este compositor não pode capturar janelas individuais. A captura de janelas requer ext-image-copy-capture-v1 com a fonte foreign-toplevel (wlroots >= 0.20 / Sway >= 1.12). Execute `wlr-peek doctor` para ver o que seu compositor suporta.
