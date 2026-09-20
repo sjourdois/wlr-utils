@@ -72,23 +72,26 @@ backend (for `-a` / `--current-output`). Run `wlr-peek doctor` to check your own
 
 | Compositor | Screen capture | Window capture | Overlays (layer-shell) | Focus IPC |
 | --- | --- | --- | --- | --- |
-| **Sway** | ✅ ≥ 1.11 (wlroots 0.19) | ✅ ≥ 1.12 (wlroots 0.20) | ✅ | ✅ `$SWAYSOCK` |
-| **Hyprland** | ✅ ≥ v0.54 | ✅ ≥ v0.54 | ✅ | ✅ `hyprctl` |
+| **Sway** | ✅ ≥ 1.11 (wlroots 0.19) | ✅ ≥ 1.12 (wlroots 0.20) | ✅ | ✅ `$SWAYSOCK` (MRU) |
+| **Hyprland** | ✅ ≥ v0.54 | ✅ ≥ v0.54 | ✅ | ✅ `hyprctl` (MRU) |
 | **labwc** | ✅ ≥ 0.9 (wlroots 0.19) | 🟡 ≥ 0.20 (partial) | ✅ | ❌ |
 | **cosmic-comp** | ✅ | ✅ | ✅ | ❌ |
 | **Wayfire** | ✅ ≥ 0.10 (wlroots 0.19) | ❌ (until its 0.20 branch ships) | ✅ | ❌ |
 | **river** | ✅ ≥ 0.3 (wlroots 0.19) | ❌ | ✅ | ❌ |
-| **niri** | ❌ (`wlr-screencopy` only) | ❌ | ✅ | 🟡 `niri msg` (`-a` n/a) |
+| **niri** | ❌ (`wlr-screencopy` only) | ❌ | ✅ | 🟡 `niri msg` (MRU, `-a` n/a) |
 | **dwl** | ❌ (`wlr-screencopy` only) | ❌ | ✅ | ❌ |
 | **Mutter** (GNOME) | ✅ (≥ 49) | ❌ | ❌ | ❌ |
 | **KWin** (KDE) | ✅ (≥ 6.6) | ❌ | ❌ | ❌ |
 
-✅ full · 🟡 partial · ❌ none. Versions are from each project's release notes / merge
+✅ full · 🟡 partial · ❌ none. "MRU" marks a backend that also reports the window focus
+history, for `--window-order mru`. Versions are from each project's release notes / merge
 requests (the per-interface numbers on wayland.app are unreliable snapshots).
 
-Only **Sway** (≥ 1.12 / wlroots ≥ 0.20) is **runtime-verified** — it's the development
-compositor. The others are inferred from their protocol support and haven't been exercised
-end-to-end yet; reports welcome.
+**Sway** (≥ 1.12 / wlroots ≥ 0.20) is the development compositor, so it is the one
+**runtime-verified** end to end. The focus IPC backends have also been exercised against a
+live compositor on **Hyprland 0.56.2** and **niri 26.04**, in a VM: what each backend
+answers was compared to a known window-focus sequence. The rest of the matrix is inferred
+from protocol support and hasn't been exercised end-to-end yet; reports welcome.
 
 Two caveats:
 
@@ -98,7 +101,9 @@ Two caveats:
   out of scope; their first-class path is the desktop portal / PipeWire, which this suite
   deliberately doesn't use.
 - **niri / dwl** expose only the older `wlr-screencopy-v1`, which this suite doesn't use, so
-  they don't work yet (an `ext-image-copy-capture` fallback would be needed).
+  they don't work yet (an `ext-image-copy-capture` fallback would be needed). Confirmed
+  again on **niri 26.04**: it advertises no `ext-image-copy-capture-manager-v1`, so no tool
+  in the suite gets past connecting — only its focus backend can be exercised there.
 
 Two things vary by compositor:
 
@@ -108,8 +113,9 @@ Two things vary by compositor:
   source still works: `-s` interactive select, `-g` geometry, `-o NAME`, `-w ID`,
   `--pick-window`. (niri exposes no per-window global rectangle, so its `-a` is
   unavailable — use `-g` / `--current-output`.) Ordering windows most recently
-  focused first (`--window-order mru`) needs one too, and so far only Sway's
-  provides it; elsewhere windows are ordered by name.
+  focused first (`--window-order mru`) needs one too, and all three provide it: Sway
+  from its tree's `focus` arrays, Hyprland from `focusHistoryID`, niri from
+  `focus_timestamp`. Elsewhere windows are ordered by name.
 
   What no longer depends on it: **which tile `wlr-switcher` starts on**. The window
   you are on is read from `wlr-foreign-toplevel-management`'s `activated` state —
@@ -128,6 +134,7 @@ Two things vary by compositor:
 ## Adding a compositor
 
 Focus backends live in [`crates/wlr-capture/src/focus.rs`](crates/wlr-capture/src/focus.rs):
-implement `FocusBackend` (a `focused_output()` and an `active_window_rect()`) over
-your compositor's IPC and add a detection branch in `detect()`. The Sway, Hyprland
-and niri backends are short worked examples.
+implement `FocusBackend` (a `focused_output()` and an `active_window_rect()`, plus an
+optional `focus_order()` for `--window-order mru`) over your compositor's IPC and add a
+detection branch in `detect()`. The Sway, Hyprland and niri backends are short worked
+examples.

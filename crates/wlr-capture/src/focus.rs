@@ -264,6 +264,13 @@ impl FocusBackend for Hyprland {
     fn active_window_rect(&self) -> Option<Region> {
         hypr_active_window_rect(&Self::query("activewindow")?)
     }
+
+    fn focus_order(&self) -> Option<FocusOrder> {
+        // A missing `activewindow` only costs the `focused` field, so it must not
+        // sink the whole history.
+        let active = Self::query("activewindow").unwrap_or_default();
+        hypr_focus_order(&Self::query("clients")?, &active)
+    }
 }
 
 /// Pick the focused monitor's name from `hyprctl -j monitors` (an array of monitors,
@@ -289,6 +296,40 @@ fn hypr_active_window_rect(w: &serde_json::Value) -> Option<Region> {
         y: at.get(1)?.as_i64()? as i32,
         w: size.first()?.as_i64()? as u32,
         h: size.get(1)?.as_i64()? as u32,
+    })
+}
+
+/// Rank the windows of `hyprctl -j clients` by Hyprland's own focus history.
+///
+/// `focusHistoryID` ranks every mapped window, `0` being the one focused most
+/// recently, and `stableId` is exactly the `ext-foreign-toplevel-list-v1`
+/// identifier — so, unlike the announcement order of that list, it also tells
+/// apart two windows sharing an app id and a title.
+///
+/// `active` is `hyprctl -j activewindow`, `{}` when nothing holds the focus: the
+/// head of the history counts as focused only when it is that window, since the
+/// history keeps ranking windows after the focus has left them all.
+fn hypr_focus_order(clients: &serde_json::Value, active: &serde_json::Value) -> Option<FocusOrder> {
+    let mut windows: Vec<(u64, &str, Option<&str>)> = clients
+        .as_array()?
+        .iter()
+        .filter_map(|c| {
+            Some((
+                c.get("focusHistoryID")?.as_u64()?,
+                c.get("stableId")?.as_str()?,
+                c.get("address").and_then(serde_json::Value::as_str),
+            ))
+        })
+        .collect();
+    windows.sort_by_key(|&(rank, ..)| rank);
+    let active_address = active.get("address").and_then(serde_json::Value::as_str);
+    let has_focus = windows
+        .first()
+        .is_some_and(|&(_, _, address)| address.is_some() && address == active_address);
+    let mut ids = windows.iter().map(|&(_, id, _)| id.to_string());
+    Some(FocusOrder {
+        focused: if has_focus { ids.next() } else { None },
+        unfocused: ids.collect(),
     })
 }
 
@@ -322,12 +363,59 @@ impl FocusBackend for Niri {
         // use `--current-output` or `-g` instead.
         None
     }
+
+    fn focus_order(&self) -> Option<FocusOrder> {
+        niri_focus_order(&Self::query("windows")?)
+    }
 }
 
 /// Pick the focused output's name from `niri msg --json focused-output` (the Output
 /// object, or `null` when none).
 fn niri_focused_output(o: &serde_json::Value) -> Option<String> {
     o.get("name")?.as_str().map(String::from)
+}
+
+/// One entry of `niri msg --json windows`, reduced to what ranks it.
+struct NiriWindow {
+    /// `focus_timestamp`, as a `(secs, nanos)` pair; `None` when the window has
+    /// never been focused since the compositor started.
+    stamp: Option<(u64, u64)>,
+    /// The window `id`, whose decimal form is the ext-foreign-toplevel identifier.
+    id: u64,
+    focused: bool,
+}
+
+/// Rank the windows of `niri msg --json windows` by niri's own focus history.
+///
+/// `focus_timestamp` is an object (`{"secs": …, "nanos": …}`, monotonic since the
+/// compositor started), not a scalar, so it is compared as a pair; a window never
+/// focused since then simply has none, and goes after every window that has one.
+/// The window `id`, in decimal, is the `ext-foreign-toplevel-list-v1` identifier —
+/// niri announces that list in neither creation nor focus order, so correlating by
+/// position would be wrong.
+fn niri_focus_order(windows: &serde_json::Value) -> Option<FocusOrder> {
+    let mut windows: Vec<NiriWindow> = windows
+        .as_array()?
+        .iter()
+        .filter_map(|w| {
+            Some(NiriWindow {
+                stamp: w
+                    .get("focus_timestamp")
+                    .and_then(|t| Some((t.get("secs")?.as_u64()?, t.get("nanos")?.as_u64()?))),
+                id: w.get("id")?.as_u64()?,
+                focused: w.get("is_focused")?.as_bool()?,
+            })
+        })
+        .collect();
+    // `Reverse` on the `Option` gives both halves at once: newest first, and the
+    // windows with no timestamp at the end.
+    windows.sort_by_key(|w| std::cmp::Reverse(w.stamp));
+    let has_focus = windows.first().is_some_and(|w| w.focused);
+    let mut ids = windows.iter().map(|w| w.id.to_string());
+    Some(FocusOrder {
+        focused: if has_focus { ids.next() } else { None },
+        unfocused: ids.collect(),
+    })
 }
 
 #[cfg(test)]
@@ -351,6 +439,44 @@ mod tests {
     // `hyprctl -j activewindow` gives `at`/`size` pairs in global logical coords.
     const HYPR_ACTIVEWINDOW: &str =
         r#"{"address":"0x55","class":"foot","title":"foot","at":[120,340],"size":[800,600]}"#;
+
+    // A trimmed `hyprctl -j clients`, from a Hyprland 0.56.2 run where five windows
+    // were focused in the order A, C, B, D, B — so `focusHistoryID` ranks them B, D,
+    // C, A, then the one opened last and never focused again. The array is in
+    // creation order, not rank order, and the last two windows here share an app id
+    // and a title: only `stableId` tells them apart.
+    const HYPR_CLIENTS: &str = r#"[
+        {"address":"0x557fa45bb650","class":"foot","title":"WIN-A","mapped":true,
+         "focusHistoryID":3,"stableId":"18000002"},
+        {"address":"0x557fa6decc90","class":"foot","title":"WIN-B","mapped":true,
+         "focusHistoryID":0,"stableId":"18000003"},
+        {"address":"0x557fa70d91b0","class":"foot","title":"WIN-C","mapped":true,
+         "focusHistoryID":2,"stableId":"18000004"},
+        {"address":"0x557fa6e6efc0","class":"foot","title":"twin","mapped":true,
+         "focusHistoryID":1,"stableId":"18000005"},
+        {"address":"0x557fa739a510","class":"foot","title":"twin","mapped":true,
+         "focusHistoryID":4,"stableId":"18000006"}
+    ]"#;
+
+    // The `activewindow` that goes with `HYPR_CLIENTS`: the head of the history.
+    const HYPR_ACTIVE_OF_CLIENTS: &str = r#"{"address":"0x557fa6decc90","class":"foot","title":"WIN-B","at":[646,21],
+            "size":[613,333]}"#;
+
+    // A trimmed `niri msg --json windows`, from a niri 26.04 run with the same focus
+    // sequence: B focused, then D, C, A by `focus_timestamp`, and E last. The array
+    // order is niri's own and matches neither creation nor focus order.
+    const NIRI_WINDOWS: &str = r#"[
+        {"id":5,"title":"WIN-D","app_id":"foot","is_focused":false,
+         "focus_timestamp":{"secs":352,"nanos":526156848}},
+        {"id":6,"title":"WIN-E","app_id":"foot","is_focused":false,
+         "focus_timestamp":{"secs":346,"nanos":526223482}},
+        {"id":2,"title":"WIN-A","app_id":"foot","is_focused":false,
+         "focus_timestamp":{"secs":349,"nanos":732056369}},
+        {"id":4,"title":"WIN-C","app_id":"foot","is_focused":false,
+         "focus_timestamp":{"secs":350,"nanos":660808585}},
+        {"id":3,"title":"WIN-B","app_id":"foot","is_focused":true,
+         "focus_timestamp":{"secs":353,"nanos":459040460}}
+    ]"#;
 
     /// A trimmed sway `get_tree`: one output with a visible workspace and a hidden one.
     fn sway_tree() -> Node {
@@ -487,6 +613,62 @@ mod tests {
         // Hyprland returns `{}` when nothing is focused.
         let v: serde_json::Value = serde_json::from_str("{}").unwrap();
         assert!(hypr_active_window_rect(&v).is_none());
+    }
+
+    #[test]
+    fn hypr_focus_order_follows_focus_history_ids() {
+        let clients: Value = serde_json::from_str(HYPR_CLIENTS).unwrap();
+        let active: Value = serde_json::from_str(HYPR_ACTIVE_OF_CLIENTS).unwrap();
+        let order = hypr_focus_order(&clients, &active).expect("an array of clients");
+        assert_eq!(order.focused.as_deref(), Some("18000003"));
+        assert_eq!(
+            order.unfocused,
+            ["18000005", "18000004", "18000002", "18000006"]
+        );
+    }
+
+    #[test]
+    fn hypr_focus_order_without_an_active_window_ranks_but_does_not_focus() {
+        let clients: Value = serde_json::from_str(HYPR_CLIENTS).unwrap();
+        // Hyprland returns `{}` when nothing is focused, while the history still
+        // ranks every window.
+        let order = hypr_focus_order(&clients, &json!({})).expect("an array of clients");
+        assert_eq!(order.focused, None);
+        assert_eq!(
+            order.unfocused,
+            ["18000003", "18000005", "18000004", "18000002", "18000006"]
+        );
+        // No windows at all: an empty order, not a failure.
+        let empty = hypr_focus_order(&json!([]), &json!({})).expect("an array of clients");
+        assert_eq!(empty.focused, None);
+        assert!(empty.unfocused.is_empty());
+        // Anything that is not an array is a failure, though.
+        assert!(hypr_focus_order(&json!({}), &json!({})).is_none());
+    }
+
+    #[test]
+    fn niri_focus_order_sorts_by_focus_timestamp() {
+        let windows: Value = serde_json::from_str(NIRI_WINDOWS).unwrap();
+        let order = niri_focus_order(&windows).expect("an array of windows");
+        assert_eq!(order.focused.as_deref(), Some("3"));
+        assert_eq!(order.unfocused, ["5", "4", "2", "6"]);
+    }
+
+    #[test]
+    fn niri_focus_order_puts_never_focused_windows_last() {
+        // `focus_timestamp` is absent for a window never focused since the
+        // compositor started, and `is_focused` can be false for every window.
+        let windows = json!([
+            {"id": 7, "title": "fresh", "app_id": "foot", "is_focused": false},
+            {"id": 8, "title": "old", "app_id": "foot", "is_focused": false,
+             "focus_timestamp": {"secs": 12, "nanos": 5}},
+            {"id": 9, "title": "newer", "app_id": "foot", "is_focused": false,
+             // Same second, later nanos: the pair has to be compared as a pair.
+             "focus_timestamp": {"secs": 12, "nanos": 900}},
+        ]);
+        let order = niri_focus_order(&windows).expect("an array of windows");
+        assert_eq!(order.focused, None);
+        assert_eq!(order.unfocused, ["9", "8", "7"]);
     }
 
     #[test]

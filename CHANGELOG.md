@@ -13,9 +13,17 @@ All notable changes to this project are documented here. The format is based on
   [@bR3iN](https://github.com/bR3iN)) — `--window-order mru|by-name` on
   `wlr-switcher` and `wlr-chooser`. `mru` lists the window you were just on first, so
   a quick Alt-Tab goes back to the previous one; it's the switcher's new default,
-  while the chooser keeps `by-name`. Sway only for now; other compositors fall back to
-  `by-name`. Sway reports focus history per container, so windows on different
-  workspaces aren't interleaved: the current workspace's windows come first.
+  while the chooser keeps `by-name`. Sway reports focus history per container, so
+  windows on different workspaces aren't interleaved: the current workspace's windows
+  come first.
+- **`--window-order mru` on Hyprland and niri** — the focus history now also comes
+  from `hyprctl -j clients` (`focusHistoryID`) and from `niri msg --json windows`
+  (`focus_timestamp`), so a quick Alt-Tab goes back to the window you were just on
+  there too. Checked against a live compositor — Hyprland 0.56.2 and niri 26.04 — by
+  comparing the reported order with a known focus sequence. Compositors with no focus
+  IPC backend still fall back to `by-name`. (niri still can't run any of the tools:
+  it implements none of the `ext-image-copy-capture` protocols the suite needs to
+  start, so its backend is ready for the day it does.)
 
 ### Changed
 

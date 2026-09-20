@@ -150,7 +150,8 @@ Each tile shows a live preview with the app icon as a badge; tune it with
 window, `none` shows app icons only.
 
 Windows are listed most recently focused first where the compositor reports it
-(Sway), by name otherwise; `--window-order by-name` always orders them by name.
+(Sway, Hyprland, niri), by name otherwise; `--window-order by-name` always orders
+them by name.
 
 Whatever the order, the overlay opens with the **first window that is not the one
 you are on** highlighted, so releasing the modifier straight away always switches
