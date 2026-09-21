@@ -14,3 +14,5 @@ focus-unsupported = Deze compositor kan het gekozen venster niet focussen. Een v
 mru-unmatched = De focusgeschiedenis van deze compositor benoemt geen van de getoonde vensters; --window-order mru valt terug op sorteren op naam.
 filter-no-match = Geen enkel geopend venster komt overeen met { $filter }. Niets te tonen.
 pid-unsupported = Deze compositor meldt niet welk proces bij een venster hoort, dus --pid kan niet worden toegepast. Daarvoor is de IPC van sway, Hyprland of niri nodig. Voer `wlr-peek doctor` uit om te zien of er een focus-backend is gevonden.
+hints-need-keyboard = --hints vereist een weergave zonder filterveld: gebruik --layout strip of --layout grid.
+grid-needs-card = --grid bepaalt de grootte van de kaart en vereist dus --layout card (de standaard). De exposé en de strip delen zichzelf in.

@@ -5,27 +5,16 @@
 //! Alt-Tab: hold the modifier, `Tab`/`Shift+Tab` cycle, release to switch. Three
 //! presentations via `--layout`; live previews are the differentiator.
 //!
-//! For the xdg-desktop-portal-wlr picker (prints to stdout), see `wlr-chooser`.
+//! This binary *acts*: it focuses what it picked. For the sibling that *answers* —
+//! naming the source on stdout and touching nothing — see `wlr-chooser`.
 
 use crate::ui::{Live, Mode, Options, View};
-use crate::{FilterArgs, OrderArg};
+use crate::{FilterArgs, HintRowArg, LayoutArg, OrderArg};
 use crate::{acquire_switch_lock, run_overlay};
 use crate::{i18n, tr};
 use clap::{Parser, ValueEnum};
 use std::time::Instant;
 use wlr_capture::{CaptureError, wl};
-
-/// Presentation of the switcher (CLI mirror of [`View`]).
-#[derive(Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
-enum LayoutArg {
-    /// macOS-style single row of tiles (default).
-    #[default]
-    Strip,
-    /// Full-screen mission-control exposé grid.
-    Grid,
-    /// Centred rofi-like card with tabs + search.
-    Card,
-}
 
 /// Which tiles show a live preview (CLI mirror of [`Live`]).
 #[derive(Clone, Copy, ValueEnum)]
@@ -60,7 +49,7 @@ struct Cli {
     no_gpu: bool,
     /// Presentation: `strip` (macOS-style row, default), `grid` (full-screen
     /// exposé) or `card` (centred rofi-like card).
-    #[arg(long, value_enum, default_value_t = LayoutArg::Strip)]
+    #[arg(long, value_enum, default_value = "strip")]
     layout: LayoutArg,
     /// Live previews: `none` (icons only), `current` (only the highlighted window)
     /// or `all` (default). Live capture is the differentiator.
@@ -80,6 +69,13 @@ struct Cli {
     /// modifier — confirm with Enter or a click. Overrides the per-layout default.
     #[arg(long, conflicts_with = "hold")]
     no_hold: bool,
+    /// Label each tile with the key that picks it, taken from a row of the physical
+    /// keyboard: `home` (the resting row, default) or `top` (the row above the
+    /// letters). The label is whatever the active layout prints on that key, so it
+    /// always names the key to press. Off unless asked for; needs a layout with no
+    /// filter field (`strip` or `grid`).
+    #[arg(long, value_enum, value_name = "ROW", num_args = 0..=1, default_missing_value = "home")]
+    hints: Option<HintRowArg>,
     /// Include windows with no app-id (system surfaces)
     #[arg(long)]
     include_system: bool,
@@ -106,6 +102,8 @@ pub fn main() {
         return;
     }
 
+    crate::reject_hints_on_card(cli.hints, cli.layout);
+
     // Single-instance guard: re-pressing the keybind while we're up is a no-op
     // rather than a stacked overlay (sway runs its bindings over our grab).
     let _lock = match acquire_switch_lock() {
@@ -113,11 +111,7 @@ pub fn main() {
         None => return,
     };
 
-    let view = match cli.layout {
-        LayoutArg::Strip => View::Strip,
-        LayoutArg::Grid => View::Grid,
-        LayoutArg::Card => View::Card,
-    };
+    let view = View::from(cli.layout);
     // Hold-to-switch defaults on for the strip (a true Alt-Tab) and off for the
     // exposé/card; --hold / --no-hold force either.
     let hold = if cli.hold {
@@ -136,6 +130,7 @@ pub fn main() {
         live: cli.live.into(),
         order: cli.window_order.into(),
         window_filters: cli.filters.into(),
+        hints: cli.hints.map(Into::into),
     };
 
     // Pre-flight: wlr-switcher switches *windows*, which need the foreign-toplevel

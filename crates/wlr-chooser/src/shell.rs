@@ -15,7 +15,7 @@ use smithay_client_toolkit::{
     registry_handlers,
     seat::{
         Capability, SeatHandler, SeatState,
-        keyboard::{KeyEvent, KeyboardHandler, Keysym, Modifiers, RawModifiers},
+        keyboard::{KeyEvent, KeyboardHandler, Keymap, Keysym, Modifiers, RawModifiers},
         pointer::{PointerEvent, PointerEventKind, PointerHandler},
     },
     shell::{
@@ -430,6 +430,19 @@ impl KeyboardHandler for State {
     ) {
         self.key(event, true);
     }
+    fn update_keymap(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        keymap: Keymap<'_>,
+    ) {
+        // The tile hints name physical keys; only the keymap says what this layout
+        // prints on them. It arrives before focus does, so the labels are right from
+        // the first frame, and again whenever the user switches layout.
+        self.app.set_keymap(&keymap.as_string());
+    }
+
     fn update_modifiers(
         &mut self,
         _: &Connection,
@@ -518,6 +531,12 @@ impl State {
         if self.armed && pressed && is_tab {
             let forward = event.keysym == Keysym::Tab && !self.modifiers.shift;
             self.app.cycle(forward);
+            return;
+        }
+        // A tile hint is a physical key, so it is matched on the evdev code rather than
+        // on the keysym the layout derives from it. It picks straight away; the
+        // keystroke stops here so it can't also land in the UI.
+        if pressed && self.app.press_hint(event.raw_code) {
             return;
         }
         if let Some(key) = map_key(event.keysym) {

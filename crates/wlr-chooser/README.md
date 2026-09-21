@@ -122,6 +122,12 @@ focused output. You can pass options in `chooser_cmd`, e.g.
     --app-id APP_ID    Show only windows with that app-id (repeatable)
     --title TEXT       Show only windows whose title contains TEXT (repeatable)
     --pid PID          Show only windows of that process (repeatable)
+    --layout card|grid|strip
+                       Presentation: centred card (default), full-screen exposé
+                       or macOS-style row
+    --hints [home|top] Label each tile with the key that picks it
+    --format portal|json
+                       How the pick is written on stdout (default: portal)
     --grid COLSxROWS   Fixed grid of that many thumbnails (e.g. 4x3)
     --window-order by-name|mru
                        Order windows by name (default) or most recently focused
@@ -135,6 +141,11 @@ focused output. You can pass options in `chooser_cmd`, e.g.
 In the overlay: type to filter, arrows to move, Enter/click to pick, Escape or
 click-outside to cancel, and the tab bar switches All / Windows / Screens.
 
+The three presentations of `--layout` are the ones `wlr-switcher` offers, with the
+card as the default here: the portal runs the chooser with no argument, so that path
+is unchanged. `--grid COLSxROWS` sizes the card and needs it; the exposé and the strip
+lay themselves out.
+
 `--app-id`, `--title` and `--pid` pick which windows are offered at all. The
 app-id is matched exactly, the title as a substring, both ignoring case — the same
 comparison `wlr-shot --app-id` / `--title` make. `--pid` keeps every window of the
@@ -147,6 +158,59 @@ up with nothing to show: the picker then says so and exits.
 itself does not: Sway, Hyprland and niri do, through their IPC. Elsewhere `--pid`
 says so and exits rather than offering every window.
 
+### Pick a tile with one key — `--hints`
+
+`--hints` labels every tile with the key that picks it. Pressing that key picks the
+tile straight away, like a click on it.
+
+The label is a **physical key**, shown as the character your active keyboard layout
+prints on it. The home row reads `asdfghjkl` on QWERTY and `qsdfghjkl` on AZERTY; the
+key under the finger is the same one. `--hints top` takes the row above the letters
+instead — `1234567890` on QWERTY, `&é"'(-è_çà` on AZERTY. The home row is the default:
+it prints a letter on almost every layout, where the row above often prints
+punctuation.
+
+Nine tiles carry a hint from the home row, ten from the top row. Beyond that the tiles
+have none, and are picked with Tab, the arrows or the mouse as before. A key the
+layout prints nothing on is passed over.
+
+Hints need a presentation with no filter field, where a letter is a shortcut and not
+text: `--layout grid` or `--layout strip`. Asked for on the card, the run says so and
+exits.
+
+```sh
+wlr-chooser -w --app-id foot --layout grid --hints --format json
+```
+
+That is an exposé of your terminals alone, one keystroke each, and the answer on
+stdout for a script to act on.
+
+### Output — `--format`
+
+`portal` (the default) writes the line `xdg-desktop-portal-wlr` reads:
+
+```text
+Window: <foreign-toplevel-identifier>
+Monitor: <output-name>
+```
+
+`json` writes one object on one line instead, naming what a script can act on — that
+identifier means nothing to any other tool:
+
+```json
+{"app-id":"foot","identifier":"7e2cbb…","pid":1312558,"title":"vim","type":"window"}
+{"name":"DP-4","type":"screen"}
+```
+
+`type` says which fields are present. A window carries its `identifier`, `app-id` and
+`title` — the terms `wlr-shot --app-id` / `--title` take — plus its `pid` where the
+compositor names one (Sway, Hyprland, niri); elsewhere the key is absent. A screen
+carries the output `name` that addresses it everywhere else. The field names are a
+contract: they may gain company, never change meaning.
+
+Either way, cancelling writes nothing and exits non-zero, so a script tells a pick
+from a cancel by the exit code.
+
 > **Looking for an Alt-Tab / window switcher?** That is a separate binary,
 > **`wlr-switcher`** (shipped alongside this one) — see [its section](#window-switcher--wlr-switcher) below.
 
@@ -158,6 +222,11 @@ that **focuses** the picked window (via `zwlr-foreign-toplevel-management-v1`, o
 this engine, so previews are **live** — even for windows on other workspaces —
 which is what sets it apart from a plain Cmd-Tab.
 
+The two split the work cleanly: **the chooser answers, the switcher acts.** Both offer
+the same presentations, the same window filters and the same `--hints`; pick the
+chooser when a script decides what happens next, the switcher when the answer is
+"focus it".
+
 Three presentations via `--layout`:
 
 - `strip` (default) — a macOS-style single row of tiles, the highlighted window's
@@ -168,6 +237,14 @@ Three presentations via `--layout`:
 Each tile shows a live preview with the app icon as a badge; tune it with
 `--live none|current|all` (default `all`): `current` previews only the highlighted
 window, `none` shows app icons only.
+
+`--hints [home|top]` labels the tiles with the key that picks them, as it does in the
+chooser (see *Pick a tile with one key* above) — one keystroke to switch instead of a
+run of Tabs. It needs `strip` or `grid`, which have no filter field.
+
+```
+bindsym Mod1+Tab exec wlr-switcher --hints
+```
 
 `--app-id`, `--title` and `--pid` restrict the switcher to a subset of the open
 windows, with the same meaning as in `wlr-chooser` above:

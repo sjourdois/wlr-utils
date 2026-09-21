@@ -14,3 +14,5 @@ focus-unsupported = This compositor cannot focus the window you picked. Focusing
 mru-unmatched = This compositor's focus history names none of the windows listed, so --window-order mru falls back to ordering by name.
 filter-no-match = No open window matches { $filter }. Nothing to show.
 pid-unsupported = This compositor does not report the process behind a window, so --pid cannot be applied. It needs the IPC of sway, Hyprland or niri. Run `wlr-peek doctor` to see whether a focus backend was detected.
+hints-need-keyboard = --hints needs a layout that has no filter field: use --layout strip or --layout grid.
+grid-needs-card = --grid sizes the card, so it needs --layout card (the default). The exposé and the strip lay themselves out.

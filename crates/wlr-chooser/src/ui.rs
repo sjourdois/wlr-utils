@@ -4,6 +4,7 @@
 //! in. Toplevel capture is occlusion-independent, so showing our own window
 //! first is fine.
 
+use crate::hints::{Hint, HintRow};
 use crate::tr;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
@@ -30,6 +31,9 @@ pub struct Selection {
     pub identifier: String, // ext-foreign-toplevel identifier; empty for outputs
     pub app_id: String,     // for zwlr activation / tile labelling
     pub title: String,      // window title
+    /// The output's name (screens only; empty for windows) — what addresses a screen
+    /// outside the portal's `Monitor: <name>` line.
+    pub output: String,
     /// Ordinal among windows sharing this (app_id, title), in creation order, to
     /// disambiguate identical windows when correlating to zwlr handles.
     pub dup_index: usize,
@@ -179,6 +183,8 @@ pub struct Source {
     /// Raw window identity (windows only), for activation / PiP.
     pub app_id: String,
     pub win_title: String,
+    /// Raw output name (screens only), kept apart from the localised `title`.
+    pub output: String,
     /// Ordinal among windows sharing this (app_id, title), in creation order.
     pub dup_index: usize,
 }
@@ -206,6 +212,7 @@ impl Source {
             },
             app_id: self.app_id.clone(),
             title: self.win_title.clone(),
+            output: self.output.clone(),
             dup_index: self.dup_index,
         }
     }
@@ -749,6 +756,7 @@ fn output_source(o: &wl::Output) -> Source {
         is_system: false,
         app_id: String::new(),
         win_title: String::new(),
+        output: o.name.clone(),
         dup_index: 0,
     }
 }
@@ -772,6 +780,7 @@ fn window_source(w: &wl::Toplevel, dup_index: usize) -> Source {
         is_system,
         app_id: w.app_id.clone(),
         win_title: w.title.clone(),
+        output: String::new(),
         dup_index,
     }
 }
@@ -815,6 +824,10 @@ pub struct Options {
     pub order: Order,
     /// Which windows the run offers at all; applied before capture.
     pub window_filters: WindowFilters,
+    /// Label the tiles with a key that picks them, taken from this physical row, or
+    /// `None` to leave them bare. Only the views that own the whole keyboard honour
+    /// it (see [`App::hints_apply`]).
+    pub hints: Option<HintRow>,
 }
 
 /// How long the tiles stay hidden in hold-to-switch mode if keyboard focus
@@ -879,6 +892,11 @@ pub struct App {
     closing: bool,
     out: Outcome,
     theme: Theme,
+    /// Which physical row the tile hints come from, or `None` when they are off.
+    hint_row: Option<HintRow>,
+    /// The hints handed to the tiles, in tile order; empty until the host delivers a
+    /// keymap (see [`App::set_keymap`]).
+    hints: Vec<Hint>,
 }
 
 impl App {
@@ -918,6 +936,8 @@ impl App {
             closing: false,
             out,
             theme,
+            hint_row: opts.hints,
+            hints: Vec::new(),
         }
     }
 
@@ -935,6 +955,59 @@ impl App {
     /// the launch modifier (Alt/Super) and confirm on its release.
     pub fn hold(&self) -> bool {
         self.hold
+    }
+
+    /// Whether this run labels its tiles with a key that picks them.
+    ///
+    /// Only the views that own the whole keyboard do. The card has a filter field the
+    /// user types into, where a letter is a letter and nothing else; a hint there would
+    /// either eat the keystroke or never fire, and both break the filter.
+    fn hints_apply(&self) -> bool {
+        self.hint_row.is_some() && matches!(self.view, View::Strip | View::Grid)
+    }
+
+    /// Take the compositor's keymap (xkb text format) and work out this layout's hints.
+    ///
+    /// The host calls this whenever the keymap arrives or changes, so the labels always
+    /// name the keys of the layout in force — and never the ones of the layout the
+    /// alphabet happened to be written for.
+    pub fn set_keymap(&mut self, keymap: &str) {
+        let Some(row) = self.hint_row.filter(|_| self.hints_apply()) else {
+            return;
+        };
+        self.hints = crate::hints::hints(keymap, row);
+    }
+
+    /// Pick the tile the physical key `code` (an evdev code) labels, and say whether
+    /// it did — the host then keeps the keystroke to itself rather than passing it on.
+    ///
+    /// The match is on the position, not on the character: the label was read off that
+    /// same position, so the key that shows and the key that fires are the same one
+    /// whatever the layout, and whatever modifier is held (Alt-Tab holds one).
+    /// Picking is immediate, like a click on the tile.
+    pub fn press_hint(&mut self, code: u32) -> bool {
+        if !self.hints_apply() || self.closing {
+            return false;
+        }
+        let Some(i) = self.hints.iter().position(|h| h.code == code) else {
+            return false;
+        };
+        // More tiles than hints leaves the tail bare, and a bare tile's key is not ours
+        // to swallow.
+        let Some(sel) = self.visible().get(i).map(|s| s.selection()) else {
+            return false;
+        };
+        self.selected = i;
+        self.choose(sel);
+        true
+    }
+
+    /// The character labelling the tile at `index`, if it has one.
+    fn hint_label(&self, index: usize) -> Option<&str> {
+        self.hints_apply()
+            .then(|| self.hints.get(index))
+            .flatten()
+            .map(|h| h.label.as_str())
     }
 
     /// Arm hold-to-switch: enable Tab-cycle and confirm-on-release, and arm the
@@ -1493,14 +1566,7 @@ impl App {
                         rect.center(),
                         rect.size() * (0.86 + 0.14 * ease),
                     );
-                    self.paint_expose_tile(
-                        ui,
-                        s,
-                        scaled,
-                        *i == self.selected,
-                        resp.hovered(),
-                        ease,
-                    );
+                    self.paint_expose_tile(ui, s, *i, scaled, resp.hovered(), ease);
                     if resp.clicked() {
                         chosen = Some(s.selection());
                     }
@@ -1527,11 +1593,12 @@ impl App {
         &self,
         ui: &egui::Ui,
         s: &Source,
+        index: usize, // position in the visible list: its hint, and whether it is the highlighted one
         rect: egui::Rect,
-        selected: bool,
         hovered: bool,
         a: f32, // intro-animation opacity (1.0 once settled)
     ) {
+        let selected = index == self.selected;
         let t = &self.theme;
         let p = ui.painter();
         let radius = 8.0;
@@ -1608,6 +1675,8 @@ impl App {
             galley,
             fade(t.text),
         );
+
+        self.paint_hint(ui, index, rect, a);
 
         let accent = if s.is_window {
             t.window_accent
@@ -1716,6 +1785,7 @@ impl App {
                         Live::Current => i == sel,
                     };
                     self.paint_switch_cell(ui, s, inner, live);
+                    self.paint_hint(ui, i, cell_rect, 1.0);
                     if resp.clicked() {
                         chosen = Some(s.selection());
                     }
@@ -1769,6 +1839,35 @@ impl App {
             let bd = egui::Rect::from_center_size(brect.center(), isz * sc);
             p.image(ic.id(), bd, full, egui::Color32::WHITE);
         }
+    }
+
+    /// Draw the hint badge of the tile at `index`, in the top-left of `rect`: the
+    /// character to press, on a dark pill.
+    ///
+    /// Top-left because the app-icon badge already holds the bottom-left, and a pill
+    /// because a bare glyph disappears over a bright preview. It is sized off the tile
+    /// and clamped, so it stays readable down to a thumbnail without covering the
+    /// preview it labels. `a` is the intro animation's opacity (1.0 once settled).
+    fn paint_hint(&self, ui: &egui::Ui, index: usize, rect: egui::Rect, a: f32) {
+        let Some(label) = self.hint_label(index) else {
+            return;
+        };
+        let p = ui.painter();
+        let size = (rect.width() * 0.2).clamp(16.0, 34.0);
+        let badge =
+            egui::Rect::from_min_size(rect.min + egui::vec2(5.0, 5.0), egui::vec2(size, size));
+        p.rect_filled(
+            badge,
+            5.0,
+            egui::Color32::from_black_alpha(190).gamma_multiply(a),
+        );
+        p.text(
+            badge.center(),
+            egui::Align2::CENTER_CENTER,
+            label,
+            egui::FontId::proportional(size * 0.62),
+            self.theme.accent.gamma_multiply(a),
+        );
     }
 
     /// Draw a source's app icon filling `rect` (contain). Falls back to its live
@@ -1933,6 +2032,7 @@ mod tests {
             is_system: app_id.is_empty(),
             app_id: app_id.into(),
             win_title: String::new(),
+            output: String::new(),
             dup_index: 0,
         }
     }
@@ -1966,7 +2066,29 @@ mod tests {
             live: Live::All,
             order: Order::ByName,
             window_filters: WindowFilters::default(),
+            hints: None,
         }
+    }
+
+    /// A compositor keymap for `layout`, as the host hands one to [`App::set_keymap`].
+    fn keymap(layout: &str) -> String {
+        let ctx = xkbcommon::xkb::Context::new(xkbcommon::xkb::CONTEXT_NO_FLAGS);
+        xkbcommon::xkb::Keymap::new_from_names(
+            &ctx,
+            "",
+            "",
+            layout,
+            "",
+            None,
+            xkbcommon::xkb::KEYMAP_COMPILE_NO_FLAGS,
+        )
+        .expect("the layouts under test come with xkeyboard-config")
+        .get_as_string(xkbcommon::xkb::KEYMAP_FORMAT_TEXT_V1)
+    }
+
+    /// The evdev code of the `n`-th key of the home row (`a`/`q`, `s`, `d`, …).
+    fn home_key(n: u32) -> u32 {
+        30 + n
     }
 
     /// A `--app-id` / `--title` filter as the CLI builds it.
@@ -2448,6 +2570,142 @@ mod tests {
         h.send(kept);
         h.frame();
         assert_eq!(h.app.visible().len(), 1);
+    }
+
+    #[test]
+    fn the_tiles_are_labelled_with_the_keys_of_the_active_layout() {
+        // The overlay is the same; only the keyboard under it differs. A tile carries
+        // the character its own layout prints on the key that picks it.
+        for (layout, expected) in [("us", ["a", "s", "d"]), ("fr", ["q", "s", "d"])] {
+            let mut h = Harness::new(Options {
+                hints: Some(HintRow::Home),
+                ..options()
+            });
+            h.app.set_keymap(&keymap(layout));
+            h.send(vec![
+                window("a", "foot"),
+                window("b", "firefox"),
+                window("c", "mpv"),
+            ]);
+            h.frame();
+            let labels: Vec<&str> = (0..3).filter_map(|i| h.app.hint_label(i)).collect();
+            assert_eq!(labels, expected, "layout: {layout}");
+        }
+    }
+
+    #[test]
+    fn a_hint_key_picks_the_tile_it_labels() {
+        // On AZERTY the third home key prints `d`, as it does on QWERTY — but the first
+        // prints `q`. Either way it is the position that fires, so the tile the user
+        // read is the tile they get.
+        let mut h = Harness::new(Options {
+            hints: Some(HintRow::Home),
+            ..options()
+        });
+        h.app.set_keymap(&keymap("fr"));
+        h.send(vec![
+            window("a", "foot"),
+            window("b", "firefox"),
+            window("c", "mpv"),
+        ]);
+        h.frame();
+        assert_eq!(h.app.hint_label(0), Some("q"));
+        assert!(h.app.press_hint(home_key(0)));
+        assert!(h.app.closing());
+        assert_eq!(h.picked().as_deref(), Some("Window: a"));
+    }
+
+    #[test]
+    fn hints_run_out_before_the_windows_do() {
+        // Nine keys in the home row and twelve windows on screen: the last three carry
+        // no hint, and their keys are none of ours to swallow. Tab, the arrows and the
+        // mouse still reach them.
+        let mut h = Harness::new(Options {
+            hints: Some(HintRow::Home),
+            ..options()
+        });
+        h.app.set_keymap(&keymap("fr"));
+        let many: Vec<Source> = (0..12)
+            .map(|i| window(&format!("w{i}"), &format!("app{i}")))
+            .collect();
+        h.send(many);
+        h.frame();
+        assert_eq!(h.app.hints.len(), 9);
+        assert!(h.app.hint_label(8).is_some());
+        assert!(h.app.hint_label(9).is_none());
+        // A key no tile carries is left alone, and picks nothing.
+        assert!(!h.app.press_hint(home_key(9)));
+        assert!(!h.app.closing());
+        assert!(h.picked().is_none());
+        // Fewer windows than keys leaves the extra keys inert just the same.
+        let mut h = Harness::new(Options {
+            hints: Some(HintRow::Home),
+            ..options()
+        });
+        h.app.set_keymap(&keymap("us"));
+        h.send(vec![window("a", "foot")]);
+        h.frame();
+        assert!(!h.app.press_hint(home_key(1)));
+        assert!(h.picked().is_none());
+    }
+
+    #[test]
+    fn the_card_leaves_its_letters_to_the_filter_field() {
+        // The picker's card is typed into. A hint there would either eat the keystroke
+        // or never fire, so there is none: no label, and the key goes through untouched.
+        let mut h = Harness::new(Options {
+            view: View::Card,
+            hints: Some(HintRow::Home),
+            ..options()
+        });
+        h.app.set_keymap(&keymap("fr"));
+        h.send(vec![window("a", "foot"), window("b", "firefox")]);
+        h.frame();
+        assert!(h.app.hint_label(0).is_none());
+        assert!(!h.app.press_hint(home_key(0)));
+        assert!(h.picked().is_none());
+        // And the field itself still narrows the list, key by key.
+        h.app.filter = "fire".into();
+        assert_eq!(h.app.visible().len(), 1);
+    }
+
+    #[test]
+    fn without_the_flag_no_tile_carries_a_hint() {
+        // Off unless asked for: the keymap arrives all the same, and nothing comes of
+        // it — no label, and every key left to the rest of the UI.
+        let mut h = Harness::new(options());
+        h.app.set_keymap(&keymap("us"));
+        h.send(vec![window("a", "foot"), window("b", "firefox")]);
+        h.frame();
+        assert!(h.app.hints.is_empty());
+        assert!(h.app.hint_label(0).is_none());
+        assert!(!h.app.press_hint(home_key(0)));
+        assert!(h.picked().is_none());
+    }
+
+    #[test]
+    fn a_hint_picked_under_a_held_modifier_still_picks() {
+        // Alt-Tab holds Alt the whole time. The hint is matched on the physical key and
+        // never on the modifier state, so it fires under the held modifier as it would
+        // without one — which is the only way it is any use in a switcher.
+        let mut h = Harness::focused_on(
+            Options {
+                hold: true,
+                hints: Some(HintRow::Home),
+                ..options()
+            },
+            Some(focus("foot")),
+        );
+        h.app.set_keymap(&keymap("fr"));
+        h.send(vec![
+            window("a", "foot"),
+            window("b", "firefox"),
+            window("c", "mpv"),
+        ]);
+        h.frame();
+        h.app.arm(); // the modifier is down: the overlay is armed
+        assert!(h.app.press_hint(home_key(2)));
+        assert_eq!(h.picked().as_deref(), Some("Window: c"));
     }
 
     #[test]

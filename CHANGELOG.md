@@ -8,6 +8,26 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **One key per tile, on your own keyboard layout**
+  ([#13](https://github.com/sjourdois/wlr-utils/issues/13), requested by
+  [@aoterman12365](https://github.com/aoterman12365)) — `--hints` on `wlr-switcher`
+  and `wlr-chooser` labels every tile with the key that picks it; pressing that key
+  picks it straight away. The label is a physical key, shown as the character the
+  active layout prints on it: the home row reads `asdfghjkl` on QWERTY and
+  `qsdfghjkl` on AZERTY, and the key under the finger is the same one. `--hints top`
+  takes the row above the letters instead. Nine tiles carry a hint from the home row,
+  ten from the top row; beyond that, Tab, the arrows and the mouse still reach them.
+  It needs a presentation with no filter field — `strip` or `grid` — and says so on
+  the card.
+- **`--layout` on `wlr-chooser`** — the picker offers the three presentations
+  `wlr-switcher` has: `card` (the default), `grid` and `strip`. The portal runs the
+  chooser with no argument, so it still gets the card. `--grid COLSxROWS` sizes the
+  card and needs it.
+- **`--format` on `wlr-chooser`** — `portal` (the default) writes the
+  `Window: <identifier>` / `Monitor: <name>` line `xdg-desktop-portal-wlr` reads.
+  `json` writes one object on one line instead, with the window's `identifier`,
+  `app-id` and `title`, its `pid` where the compositor names one, or a screen's output
+  `name`. Cancelling writes nothing and exits non-zero either way.
 - **The pen's dwell-to-snap is yours to tune**
   ([#15](https://github.com/sjourdois/wlr-utils/issues/15), reported by
   [@algmyr](https://github.com/algmyr)) — `wlr-draw`'s `keys.toml` gains `dwell-ms`, the

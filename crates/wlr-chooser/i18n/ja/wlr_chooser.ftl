@@ -14,3 +14,5 @@ focus-unsupported = このコンポジタは選択したウィンドウをフォ
 mru-unmatched = このコンポジタのフォーカス履歴は、表示中のどのウィンドウとも対応しないため、--window-order mru は名前順にフォールバックします。
 filter-no-match = { $filter } に一致する開いているウィンドウがありません。表示するものがありません。
 pid-unsupported = このコンポジタはウィンドウの所属プロセスを報告しないため、--pid は適用できません。sway、Hyprland、niri のいずれかの IPC が必要です。`wlr-peek doctor` を実行して、フォーカスバックエンドが検出されたか確認してください。
+hints-need-keyboard = --hints はフィルター入力欄のないレイアウトを必要とします。--layout strip または --layout grid を使ってください。
+grid-needs-card = --grid はカードの大きさを決めるため、--layout card（既定）が必要です。エクスポゼとストリップは自動で配置されます。

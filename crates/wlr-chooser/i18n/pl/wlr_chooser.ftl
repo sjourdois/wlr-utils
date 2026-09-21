@@ -14,3 +14,5 @@ focus-unsupported = Ten kompozytor nie może aktywować wybranego okna. Aktywacj
 mru-unmatched = Historia fokusu tego kompozytora nie wskazuje żadnego z wypisanych okien, więc --window-order mru wraca do sortowania według nazwy.
 filter-no-match = Żadne otwarte okno nie pasuje do { $filter }. Nie ma nic do pokazania.
 pid-unsupported = Ten kompozytor nie podaje procesu, do którego należy okno, więc nie można zastosować --pid. Wymaga to IPC sway, Hyprland lub niri. Uruchom `wlr-peek doctor`, aby sprawdzić, czy wykryto backend fokusu.
+hints-need-keyboard = --hints wymaga układu bez pola filtra: użyj --layout strip lub --layout grid.
+grid-needs-card = --grid ustala rozmiar karty, więc wymaga --layout card (domyślnie). Ekspozycja i pasek układają się same.

@@ -42,6 +42,13 @@ wayland-protocols = { workspace = true, features = ["unstable"] }
 rustix.workspace = true
 image.workspace = true
 clap.workspace = true
+# xkbcommon to read the compositor's keymap: a tile hint is a physical key, labelled
+# with whatever the active layout prints on it. Already linked transitively via
+# smithay-client-toolkit (no new system dep).
+xkbcommon.workspace = true
+# `--json`: one object per pick, escaped properly. Already in the tree via
+# wlr-capture's compositor IPC backends.
+serde_json.workspace = true
 
 [features]
 default = ["gpu", "i18n"]

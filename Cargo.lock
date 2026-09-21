@@ -3089,11 +3089,13 @@ dependencies = [
  "image",
  "rust-embed",
  "rustix 1.1.5",
+ "serde_json",
  "smithay-client-toolkit",
  "wayland-client",
  "wayland-protocols",
  "wlr-capture",
  "wlr-i18n",
+ "xkbcommon 0.9.0",
 ]
 
 [[package]]

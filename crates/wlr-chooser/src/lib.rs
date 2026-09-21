@@ -5,6 +5,7 @@
 //! they do with the picked source (print a token vs. focus the window).
 
 pub mod chooser_cli;
+pub mod hints;
 mod i18n;
 pub mod shell;
 pub mod switcher_cli;
@@ -20,6 +21,59 @@ use wlr_capture::theme;
 pub(crate) enum OrderArg {
     ByName,
     Mru,
+}
+
+/// Presentation (CLI mirror of [`ui::View`]), shared by both front-ends so `--layout`
+/// means the same thing wherever it is accepted.
+#[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum LayoutArg {
+    /// macOS-style single row of tiles.
+    Strip,
+    /// Full-screen mission-control exposé grid.
+    Grid,
+    /// Centred rofi-like card with tabs + search.
+    Card,
+}
+
+impl From<LayoutArg> for ui::View {
+    fn from(v: LayoutArg) -> Self {
+        match v {
+            LayoutArg::Strip => ui::View::Strip,
+            LayoutArg::Grid => ui::View::Grid,
+            LayoutArg::Card => ui::View::Card,
+        }
+    }
+}
+
+/// Which physical keyboard row the tile hints come from (CLI mirror of
+/// [`hints::HintRow`]), shared by both front-ends.
+#[derive(Clone, Copy, clap::ValueEnum)]
+pub(crate) enum HintRowArg {
+    /// The home row — `asdfghjkl` on QWERTY.
+    Home,
+    /// The row above the letters — `1234567890` on QWERTY.
+    Top,
+}
+
+impl From<HintRowArg> for hints::HintRow {
+    fn from(v: HintRowArg) -> Self {
+        match v {
+            HintRowArg::Home => hints::HintRow::Home,
+            HintRowArg::Top => hints::HintRow::Top,
+        }
+    }
+}
+
+/// Say so and exit when tile hints were asked for on the one presentation that cannot
+/// carry them.
+///
+/// The card has a filter field the user types into, where a letter is a letter. Saying
+/// so beats accepting a flag that would then do nothing.
+pub(crate) fn reject_hints_on_card(hints: Option<HintRowArg>, layout: LayoutArg) {
+    if hints.is_some() && layout == LayoutArg::Card {
+        eprintln!("{}", crate::tr!("hints-need-keyboard"));
+        std::process::exit(2);
+    }
 }
 
 impl From<OrderArg> for ui::Order {

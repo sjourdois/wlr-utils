@@ -14,3 +14,5 @@ focus-unsupported = 이 컴포지터는 선택한 창에 포커스를 줄 수 �
 mru-unmatched = 이 컴포지터의 포커스 기록이 나열된 어떤 창과도 일치하지 않으므로 --window-order mru는 이름순 정렬로 대체됩니다.
 filter-no-match = { $filter }와(과) 일치하는 열린 창이 없습니다. 표시할 것이 없습니다.
 pid-unsupported = 이 컴포지터는 창이 속한 프로세스를 알려주지 않으므로 --pid를 적용할 수 없습니다. sway, Hyprland 또는 niri의 IPC가 필요합니다. `wlr-peek doctor`를 실행하여 포커스 백엔드가 감지되었는지 확인하세요.
+hints-need-keyboard = --hints는 필터 입력란이 없는 레이아웃이 필요합니다. --layout strip 또는 --layout grid를 사용하세요.
+grid-needs-card = --grid는 카드 크기를 정하므로 --layout card(기본값)가 필요합니다. 엑스포제와 스트립은 스스로 배치됩니다.
