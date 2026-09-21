@@ -9,7 +9,7 @@
 ⚡ Zero-copy GPU capture &nbsp;·&nbsp; 👁️ Sees occluded & off-workspace windows
 &nbsp;·&nbsp; 🦀 Rust, no XWayland &nbsp;·&nbsp; 🎨 Themeable &nbsp;·&nbsp; 🌍 13 languages
 
-Five sharp tools for **wlroots and derivatives**, all sharing one capture engine.
+Five graphical tools for **wlroots and derivatives**.
 
 | Tool | What it does | crate |
 | --- | --- | --- |
