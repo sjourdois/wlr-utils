@@ -14,8 +14,8 @@
 //! surface, no keyboard held, no capture running.
 
 use crate::daemon::{self, Reply, Tool};
+use crate::i18n;
 use crate::shell::Host;
-use crate::{i18n, tr};
 use clap::Parser;
 use std::time::Instant;
 
@@ -59,7 +59,10 @@ pub fn main() {
     }
 
     if let Err(e) = daemon::run(t0, serve) {
-        eprintln!("{}", tr!("error", error = format!("{e:#}")));
+        // No tool-name prefix: the messages name the daemon where it matters, and
+        // this goes to whatever the session autostart points its output at — a
+        // journal already headed by the unit, more often than not.
+        eprintln!("{e:#}");
         std::process::exit(2);
     }
 }
