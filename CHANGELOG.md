@@ -16,8 +16,6 @@ All notable changes to this project are documented here. The format is based on
   `Alt` inverts it for the stroke in progress. The status chip says `snap off` whenever
   a pen stroke would not snap.
 - **`--app-id`, `--title` and `--pid` on `wlr-switcher` and `wlr-chooser`**
-||||||| parent of b341674 (feat(draw): make dwell-to-snap tunable, switchable and invertible)
-- **`--app-id` and `--title` on `wlr-switcher` and `wlr-chooser`**
   ([#12](https://github.com/sjourdois/wlr-utils/issues/12)) — offer only the windows
   that match, instead of every open one. The app id is matched exactly, the title as a
   substring, both ignoring case, like the flags of the same name on `wlr-shot`; `--pid`
