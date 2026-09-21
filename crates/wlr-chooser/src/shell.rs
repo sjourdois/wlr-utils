@@ -42,6 +42,7 @@ use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::{
     zwp_keyboard_shortcuts_inhibit_manager_v1::ZwpKeyboardShortcutsInhibitManagerV1,
     zwp_keyboard_shortcuts_inhibitor_v1::ZwpKeyboardShortcutsInhibitorV1,
 };
+use wlr_capture::pointer::Pointer;
 use wlr_capture::render::Gpu;
 use wlr_capture::theme;
 
@@ -60,7 +61,7 @@ struct State {
     /// somewhere to realise its EGL context before any overlay exists.
     scratch: Option<wl_surface::WlSurface>,
     keyboard: Option<wl_keyboard::WlKeyboard>,
-    pointer: Option<wl_pointer::WlPointer>,
+    pointer: Pointer,
     /// The seat the keyboard came from, to inhibit its shortcuts on each overlay's
     /// own surface.
     seat: Option<wl_seat::WlSeat>,
@@ -191,7 +192,7 @@ impl Host {
             layer: None,
             scratch: None,
             keyboard: None,
-            pointer: None,
+            pointer: Pointer::new(&globals, &qh),
             seat: None,
             shortcuts_mgr,
             shortcuts_inhibitor: None,
@@ -584,8 +585,8 @@ impl SeatHandler for State {
             // [`State::begin`]).
             self.seat = Some(seat.clone());
         }
-        if cap == Capability::Pointer && self.pointer.is_none() {
-            self.pointer = self.seat_state.get_pointer(qh, &seat).ok();
+        if cap == Capability::Pointer {
+            self.pointer.create(&mut self.seat_state, &seat, qh);
         }
     }
     fn remove_capability(
@@ -825,6 +826,9 @@ impl PointerHandler for State {
     ) {
         for e in events {
             let pos = egui::pos2(e.position.0 as f32, e.position.1 as f32);
+            if let PointerEventKind::Enter { serial } = e.kind {
+                self.pointer.enter(serial);
+            }
             match e.kind {
                 PointerEventKind::Enter { .. } | PointerEventKind::Motion { .. } => {
                     self.pointer_pos = pos;

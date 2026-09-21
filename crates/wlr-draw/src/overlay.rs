@@ -65,6 +65,8 @@ use wayland_protocols::wp::tablet::zv2::client::{
     zwp_tablet_tool_v2::{self, ZwpTabletToolV2},
     zwp_tablet_v2::{self, ZwpTabletV2},
 };
+// Imported as a module: this file's own `Shape` is a drawn shape, not a cursor.
+use wlr_capture::pointer::{self, Pointer};
 use wlr_capture::render::Gpu;
 use wlr_capture::theme::Theme;
 use wlr_capture::{capture, wl};
@@ -315,7 +317,7 @@ struct State {
     seat_state: SeatState,
     output_state: OutputState,
     keyboard: Option<wl_keyboard::WlKeyboard>,
-    pointer: Option<wl_pointer::WlPointer>,
+    pointer: Pointer,
     /// `zwp_tablet_manager_v2`, if the compositor advertises tablet support. Stylus
     /// input is optional — everything else works unchanged without it.
     tablet_manager: Option<ZwpTabletManagerV2>,
@@ -828,6 +830,17 @@ impl State {
         }
     }
 
+    /// The cursor for the current tool. A tool change is not a pointer event, so this
+    /// is called from the change itself.
+    fn apply_cursor(&mut self) {
+        let shape = match self.tool {
+            Tool::Text => pointer::Shape::Text,
+            Tool::Move => pointer::Shape::Grab,
+            _ => pointer::Shape::Crosshair,
+        };
+        self.pointer.set_cursor(Some(shape));
+    }
+
     /// Clear the selection (and finalize any move in progress).
     fn deselect(&mut self) {
         self.end_move_session();
@@ -901,6 +914,7 @@ impl State {
                     self.deselect();
                 }
                 self.tool = t;
+                self.apply_cursor();
                 self.dirty = true;
                 self.sync_tray();
             }
@@ -1359,7 +1373,7 @@ pub fn run() -> anyhow::Result<()> {
         seat_state: SeatState::new(&globals, &qh),
         output_state: OutputState::new(&globals, &qh),
         keyboard: None,
-        pointer: None,
+        pointer: Pointer::new(&globals, &qh),
         tablet_manager,
         tablet_seats: Vec::new(),
         tablet_tools: Vec::new(),
@@ -1413,6 +1427,7 @@ pub fn run() -> anyhow::Result<()> {
         dirty: false,
         quit: false,
     };
+    state.apply_cursor();
 
     // Build one click-through overlay for each output present at startup; later hotplug
     // is handled live by the OutputHandler (new_output / output_destroyed).
@@ -2551,8 +2566,8 @@ impl SeatHandler for State {
                 )
                 .ok();
         }
-        if cap == Capability::Pointer && self.pointer.is_none() {
-            self.pointer = self.seat_state.get_pointer(qh, &seat).ok();
+        if cap == Capability::Pointer {
+            self.pointer.create(&mut self.seat_state, &seat, qh);
         }
     }
     fn remove_capability(
@@ -2716,6 +2731,9 @@ impl PointerHandler for State {
         events: &[PointerEvent],
     ) {
         for e in events {
+            if let PointerEventKind::Enter { serial } = e.kind {
+                self.pointer.enter(serial);
+            }
             match e.kind {
                 PointerEventKind::Enter { .. } | PointerEventKind::Motion { .. } => {
                     if let Some(g) = self.to_global(&e.surface, e.position) {

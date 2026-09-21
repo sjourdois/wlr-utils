@@ -13,6 +13,7 @@
 //! ratio; collapsing shrinks it, and any new frame while collapsed restores it.
 
 use crate::error::{CaptureError, Context, Result};
+use crate::pointer::{Pointer, Shape};
 use crate::render::{DmabufImporter, Gpu};
 use crate::stream;
 use crate::theme::Theme;
@@ -258,6 +259,16 @@ fn toolbar_rects(w: f32) -> (egui::Rect, egui::Rect) {
     (close, collapse)
 }
 
+/// What the pointer is over ([`State::hit`]). Collapsed, the whole badge restores the
+/// tile, so nothing else is hit-testable.
+enum Hit {
+    Badge,
+    Close,
+    Collapse,
+    Grip,
+    Body,
+}
+
 /// Resize-grip rect (bottom-right), in logical coordinates.
 fn grip_rect(w: f32, h: f32) -> egui::Rect {
     let s = 18.0;
@@ -300,7 +311,7 @@ struct State {
     window: Window,
     seat: Option<wl_seat::WlSeat>,
     keyboard: Option<wl_keyboard::WlKeyboard>,
-    pointer: Option<wl_pointer::WlPointer>,
+    pointer: Pointer,
 
     egui_ctx: egui::Context,
     gpu: Option<Gpu>,
@@ -489,7 +500,7 @@ pub fn run_on(conn: &Connection, source: Source, config: Config) -> Result<()> {
         window,
         seat: None,
         keyboard: None,
-        pointer: None,
+        pointer: Pointer::new(&globals, &qh),
         egui_ctx,
         gpu: None,
         content: Content {
@@ -772,8 +783,8 @@ impl SeatHandler for State {
         if cap == Capability::Keyboard && self.keyboard.is_none() {
             self.keyboard = self.seat_state.get_keyboard(qh, &seat, None).ok();
         }
-        if cap == Capability::Pointer && self.pointer.is_none() {
-            self.pointer = self.seat_state.get_pointer(qh, &seat).ok();
+        if cap == Capability::Pointer {
+            self.pointer.create(&mut self.seat_state, &seat, qh);
         }
         self.seat = Some(seat);
     }
@@ -864,13 +875,16 @@ impl PointerHandler for State {
         for e in events {
             let pos = egui::pos2(e.position.0 as f32, e.position.1 as f32);
             match e.kind {
-                PointerEventKind::Enter { .. } => {
+                PointerEventKind::Enter { serial } => {
                     self.pointer_pos = pos;
                     self.hovered = true;
+                    self.update_cursor();
+                    self.pointer.enter(serial);
                     self.redraw();
                 }
                 PointerEventKind::Motion { .. } => {
                     self.pointer_pos = pos;
+                    self.update_cursor();
                 }
                 PointerEventKind::Leave { .. } => {
                     self.hovered = false;
@@ -897,25 +911,45 @@ impl PointerHandler for State {
 }
 
 impl State {
-    /// Left-button press: hit-test the toolbar / grip / body and act.
-    fn on_press(&mut self, seat: &wl_seat::WlSeat, serial: u32) {
+    /// What the pointer is over, driving both the click and the cursor image.
+    fn hit(&self) -> Hit {
         if self.collapsed {
-            self.set_collapsed(false);
-            return;
+            return Hit::Badge;
         }
         let (w, h) = (self.width as f32, self.height as f32);
         let (close, collapse) = toolbar_rects(w);
         let p = self.pointer_pos;
         if self.hovered && close.contains(p) {
-            self.closing = true;
+            Hit::Close
         } else if self.hovered && collapse.contains(p) {
-            self.set_collapsed(true);
+            Hit::Collapse
         } else if self.hovered && grip_rect(w, h).contains(p) {
-            self.window
-                .xdg_toplevel()
-                .resize(seat, serial, ResizeEdge::BottomRight);
+            Hit::Grip
         } else {
-            self.window.xdg_toplevel()._move(seat, serial);
+            Hit::Body
+        }
+    }
+
+    fn update_cursor(&mut self) {
+        let shape = match self.hit() {
+            Hit::Badge | Hit::Close | Hit::Collapse => Shape::Pointer,
+            Hit::Grip => Shape::SeResize,
+            Hit::Body => Shape::Move,
+        };
+        self.pointer.set_cursor(Some(shape));
+    }
+
+    /// Left-button press: act on whatever it landed on.
+    fn on_press(&mut self, seat: &wl_seat::WlSeat, serial: u32) {
+        match self.hit() {
+            Hit::Badge => self.set_collapsed(false),
+            Hit::Close => self.closing = true,
+            Hit::Collapse => self.set_collapsed(true),
+            Hit::Grip => self
+                .window
+                .xdg_toplevel()
+                .resize(seat, serial, ResizeEdge::BottomRight),
+            Hit::Body => self.window.xdg_toplevel()._move(seat, serial),
         }
     }
 

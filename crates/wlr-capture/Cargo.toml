@@ -86,14 +86,17 @@ compose = ["dep:image"]
 # Focus-aware capture (`focus`): ask the compositor for the active window / current
 # output. Pulls `serde_json` to parse `hyprctl` and `niri msg` outputs.
 focus = ["dep:serde_json", "dep:swayipc"]
+# A seat's pointer and the cursor image it sets (`pointer`), for a windowing host to
+# hold: the wl_pointer plus its cursor-shape-v1 device. Needs sctk.
+pointer = ["dep:smithay-client-toolkit"]
 # The shared frozen-screen overlay (`overlay`): a layer-shell surface per output
 # rendering a frozen capture for interactive region/point selection. Needs the
 # toolkit (egui rendering), compose (OutputCapture) and a windowing host (sctk).
-overlay = ["toolkit", "compose", "dep:smithay-client-toolkit"]
+overlay = ["toolkit", "compose", "pointer"]
 # The floating live-mirror host (`mirror`): an xdg-toplevel egui window that streams
 # a source (a window, or a magnified region) live. Shared by `wlr-peek mirror`. Needs
 # the toolkit (egui rendering) and a windowing host (sctk, with its calloop + xdg).
-mirror = ["toolkit", "dep:smithay-client-toolkit"]
+mirror = ["toolkit", "pointer"]
 # Hardware/software video encoding (`video`): a FrameSink that encodes a capture
 # stream to a file via FFmpeg (NVENC / VAAPI / libx264). Headless — no toolkit. Pulls
 # `ffmpeg-next`, which links the system libav* libraries (needs the `-dev` packages).
