@@ -26,9 +26,16 @@ use std::time::Instant;
     version,
     about = "Overlay daemon for wlr-switcher and wlr-chooser (instant overlays)",
     long_about = "Runs in the foreground holding the Wayland connection and the GPU \
-context an overlay would otherwise build from scratch every time. Start it from your \
-session autostart (sway: `exec_always wlr-overlayd`); `wlr-switcher` and `wlr-chooser` \
-then find it on their own. Nothing is captured while it waits."
+context an overlay would otherwise build from scratch every time — some ninety \
+milliseconds, paid once here instead of at every overlay.\n\n\
+Start it with your session and nothing else changes: `wlr-switcher` and `wlr-chooser` \
+find it on their own, and work exactly as before when it is not running.\n\n\
+    sway:      exec_always wlr-overlayd\n\
+    Hyprland:  exec-once = wlr-overlayd\n\
+    niri:      spawn-at-startup \"wlr-overlayd\"\n\n\
+A systemd --user unit is shipped as contrib/wlr-overlayd.service. Nothing is captured \
+while the daemon waits. To show an overlay in its own process anyway, pass --no-daemon \
+to wlr-switcher or wlr-chooser."
 )]
 struct Cli {
     /// Capture through shared memory instead of the zero-copy dma-buf path, for

@@ -298,50 +298,87 @@ the overlay. Bind a strip to a key with no modifier (or run it from a terminal) 
 
 ## Instant overlays — `wlr-overlayd`
 
-Most of the delay before an overlay appears is initialisation the run then throws
-away: the EGL context and its compiled shaders, the font set, the Wayland connection.
-On an NVIDIA driver at 2560×1440 that is 93 to 109 ms, of which the EGL setup alone is
-about 70.
+Most of the delay before an overlay appears is initialisation the run then throws away:
+the EGL context and its compiled shaders, the font set, the Wayland connection. On an
+NVIDIA driver at 2560×1440 that is 93 to 109 ms, of which the EGL setup alone is about 70.
 
-**`wlr-overlayd`** pays it once and keeps it. Put it in your session autostart:
+**`wlr-overlayd`** pays it once, at login, and keeps it. With one running, `wlr-switcher`
+and `wlr-chooser` hand it the run and the overlay is up in roughly ten milliseconds.
+
+### What you have to do
+
+Start it with your session. That is the whole setup: **your keybindings do not change**,
+and neither does the portal. Both tools find the daemon on their own, and behave exactly
+as before when there is none.
+
+One line in your compositor's config:
 
 ```
-exec_always wlr-overlayd                          # sway
+exec_always wlr-overlayd          # sway
+exec-once = wlr-overlayd          # Hyprland
+spawn-at-startup "wlr-overlayd"   # niri
 ```
 
-With one running, both `wlr-switcher` and `wlr-chooser` hand it the run and the
-overlay is up in roughly ten milliseconds — **nothing else changes**, not your
-keybindings and not the portal:
+Or, if you would rather have it in the journal and restarted with the session, the
+provided systemd `--user` unit ([`contrib/wlr-overlayd.service`](contrib/wlr-overlayd.service)):
 
-```
-bindsym Mod1+Tab exec wlr-switcher                # goes through the daemon if there is one
-bindsym $mod+Tab exec wlr-switcher --layout grid  # every option still means the same thing
+```sh
+install -Dm644 contrib/wlr-overlayd.service ~/.config/systemd/user/wlr-overlayd.service
+systemctl --user enable --now wlr-overlayd.service
 ```
 
-One daemon serves both because they *are* one overlay: the same egui app on the same
-engine, differing only in what they do with the pick. Two would warm two GPU contexts
+It is bound to `graphical-session.target`, so it comes up with the Wayland session and
+goes down with it — this needs a session that populates that target, which uwsm does. The
+unit calls `wlr-overlayd` by name; if yours lives somewhere the user manager's `PATH` does
+not cover, write the full path in `ExecStart`. **Use one mechanism, not both.**
+
+To check it took, run `wlr-switcher` from a terminal: silence means the daemon served it,
+and a line on stderr says why it did not.
+
+### Stopping, restarting, logs
+
+```sh
+wlr-overlayd --quit                          # stop the running daemon
+systemctl --user restart wlr-overlayd        # after installing a new build
+journalctl --user -t wlr-overlayd -f         # its output, however it was started
+```
+
+Filtering the journal by the **binary name** rather than the unit works whichever way you
+started it. Set `WLR_CHOOSER_TIMING=1` in its environment and it prints, for every overlay
+it shows, where the milliseconds went.
+
+### What it does and does not hold
+
+One daemon serves both front-ends because they *are* one overlay: the same egui app on the
+same engine, differing only in what they do with the pick. Two would warm two GPU contexts
 for it.
 
-Nothing starts a daemon for you, and nothing depends on one: with none listening,
-both tools show the overlay themselves exactly as they always have, and say so on
-stderr — paying the full startup is otherwise invisible. `--no-daemon` says nothing:
-it asked for that.
+**It captures nothing while it idles.** The capture thread is spawned for each overlay and
+dies with it — between two, the daemon holds a Wayland connection and a GPU context, and
+reads no window contents. What an overlay put on the GPU is freed when it closes, the
+imported window buffers included, so the daemon holds on to no window it is no longer
+showing. Idle it sits on a `poll()` and costs no CPU; of its resident memory, most is
+library pages shared with everything else drawing on screen, and about 40 MB is the warm
+GPU context itself — which is the whole point of it.
 
-**It captures nothing while it idles.** The capture thread is spawned for each
-overlay and dies with it — between two, the daemon holds a Wayland connection and a
-GPU context, and reads no window contents. What an overlay put on the GPU is freed
-when it closes, the imported window buffers included, so the daemon holds on to no
-window it is no longer showing. Idle, it sits on a `poll()` and costs no CPU; its
-memory is the GPU driver's mappings, shared with everything else drawing on screen,
-plus a few megabytes of its own.
-
-Each overlay still builds its own layer surface, so it opens on the screen you are
-working on, and screens can be plugged or unplugged under an idle daemon.
+Each overlay still builds its own layer surface, so it opens on the screen you are working
+on, and screens can be plugged or unplugged under an idle daemon.
 
 It shows **one overlay at a time**, and tells a second caller so at once. For
 `wlr-switcher` that is the no-op pressing the keybinding twice has always been;
-`wlr-chooser` shows its own overlay instead, so a portal waiting for a screen-share
-picker is never left with no answer.
+`wlr-chooser` shows its own overlay instead, so a portal waiting for a screen-share picker
+is never left with no answer.
+
+### Running without it
+
+Nothing starts a daemon for you, and nothing depends on one: with none listening, both
+tools show the overlay themselves exactly as they always have, and say so on stderr — you
+would otherwise have no way of knowing you were paying the full startup. If that is a
+deliberate choice, `--no-daemon` makes it explicit and silences the notice:
+
+```
+bindsym Mod1+Tab exec wlr-switcher --no-daemon
+```
 
 | | |
 |---|---|
@@ -351,30 +388,23 @@ picker is never left with no answer.
 | `--no-daemon` | on either tool: show the overlay in this process, daemon or not |
 
 A run that asks for `--no-gpu`, or that has `WLR_NO_GPU` set, never goes through the
-daemon: it changes what the whole process does, and a daemon started without it
-cannot honour it. Such a run shows its own overlay, at the usual cold-start cost —
-start the daemon itself with `--no-gpu` if that is what your driver needs.
+daemon: it changes what the whole process does, and a daemon started without it cannot
+honour it. Such a run shows its own overlay, at the usual cold-start cost — start the
+daemon itself with `--no-gpu` if that is what your driver needs.
 
-The daemon listens on `$XDG_RUNTIME_DIR/wlr-overlayd.sock`, one line of text per
-request, like `wlr-draw`'s control socket — `switch` or `choose` (with the
-invocation's arguments after it, separated by `\x1f`), `ping` or `quit`. It answers
-`ok`, `ok <stdout line>`, `cancel`, `busy` or `err <reason>`, which the client turns
-back into its own output and exit status. Exit statuses are unchanged: `0` for a run
-that did what it was asked, `1` for a cancel, `2` for a failure — and `wlr-chooser`
-writes the same stdout line wherever the overlay was shown.
+### The protocol
 
-Messages an overlay writes to stderr — a compositor that cannot focus a window, a
-`--pid` filter it cannot apply — reach the client that asked for it. Anything the
-capture thread has to say goes to the daemon's own output, wherever your autostart
-sends it.
+The daemon listens on `$XDG_RUNTIME_DIR/wlr-overlayd.sock`, one line of text per request,
+like `wlr-draw`'s control socket — `switch` or `choose` (with the invocation's arguments
+after it, separated by `\x1f`), `ping` or `quit`. It answers `ok`, `ok <stdout line>`,
+`cancel`, `busy` or `err <reason>`, which the client turns back into its own output and
+exit status. Exit statuses are unchanged: `0` for a run that did what it was asked, `1`
+for a cancel, `2` for a failure — and `wlr-chooser` writes the same stdout line wherever
+the overlay was shown.
 
-> **Tip:** set `WLR_CHOOSER_TIMING=1` to print cold-start timing milestones to
-> stderr if you want to profile how fast the overlay appears. On the daemon it
-> prints them for every overlay it shows.
-
-> **Looking for a floating live mirror?** **`wlr-peek mirror`** keeps a picture-in-picture
-> of a window (or a magnified region) always on top — see the
-> [wlr-peek README](https://github.com/sjourdois/wlr-utils/tree/main/crates/wlr-peek).
+Messages an overlay writes to stderr — a compositor that cannot focus a window, a `--pid`
+filter it cannot apply — reach the client that asked for it. Anything the capture thread
+has to say goes to the daemon's own output.
 
 ## Output contract
 
