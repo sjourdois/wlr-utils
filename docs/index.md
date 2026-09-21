@@ -18,7 +18,7 @@ layout: default
 <span>🌍 13 languages</span>
 </p>
 
-<p class="lead">Five sharp tools. One capture engine.<br>Pick · switch · capture · inspect · draw.</p>
+<p class="lead">Five tools for wlroots and derivatives.<br>Pick · switch · capture · inspect · draw.</p>
 
 <p style="text-align:center;max-width:660px;margin:0 auto 1.4rem;font-size:1.05rem;line-height:1.5">
 <strong>Name a window — even one you can't see.</strong> Screenshot, record, mirror, OCR or
@@ -36,7 +36,9 @@ workspace. No clicking, no workspace-hopping — and it scripts.</p>
 ## wlr-chooser — pick a window or screen
 
 **Share the right window.** A rofi-like picker with live thumbnails for the
-screencast portal — pick from live previews, not a text list.
+screencast portal — pick from live previews, not a text list. It also answers to
+scripts: `--layout grid --hints` for one keystroke per window, `--format json` for
+the app id, title and pid of what you picked.
 
 <img src="assets/wlr-chooser/picker.png" width="900">
 
@@ -50,9 +52,15 @@ workspaces* — even occluded ones. Real moving thumbnails, not icons.
 <video src="assets/wlr-switcher/altab.mp4" autoplay loop muted playsinline width="49%"></video>
 <video src="assets/wlr-switcher/expose.mp4" autoplay loop muted playsinline width="49%"></video>
 
+Press a letter to jump straight to a window: the label is whatever your keyboard
+layout prints on that key, so it names the key under your finger — `a` on QWERTY,
+`q` on AZERTY, same position. Narrow the list first with `--app-id`, `--title` or
+`--pid`; the windows left out are never captured.
+
 ```sh
 # A true Alt-Tab: bind it to a held modifier.
 bindsym Mod1+Tab exec wlr-switcher
+bindsym Mod1+grave exec wlr-switcher --layout grid --hints --app-id foot
 ```
 
 ---
@@ -77,6 +85,7 @@ Below: the frozen region selector.
 wlr-shot screenshot -s out.png            # drag a region on a frozen screen
 wlr-shot screenshot --app-id firefox out.png   # a window by name — even hidden or locked
 wlr-shot record -o DP-1 out.mp4                # video + system audio
+wlr-shot record -o DP-1 --crf 18 --cursor out.mp4   # finer encoding, pointer included
 ```
 
 ---
@@ -84,7 +93,9 @@ wlr-shot record -o DP-1 out.mp4                # video + system audio
 ## wlr-draw — draw live on screen
 
 **Scribble over anything.** Arrows, shapes, dwell-snap and text on a transparent
-always-on-top overlay — plus a presenter **spotlight** to focus the room.
+always-on-top overlay — plus a presenter **spotlight** to focus the room. Hold a
+freehand stroke still and it snaps to a clean line or ellipse; tune that delay in
+`keys.toml`, switch it off with a key, or hold Alt to invert it for one stroke.
 
 <video src="assets/wlr-draw/annotate.mp4" autoplay loop muted playsinline width="900"></video>
 
