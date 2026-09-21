@@ -41,7 +41,7 @@ window or a monitor with a click.
 - **Live thumbnails that actually move**: previews refresh in real time, and on
   the GPU path (default) the dma-buf is imported straight as a texture — no
   read-back, near-zero CPU. Falls back to CPU shm where the GPU path isn't usable.
-- **Doubles as a window switcher** (`--switch`): pick a window to focus it.
+- **Doubles as a window switcher**: the `wlr-switcher` binary picks a window to focus it.
 - **Native Wayland** (no XWayland), built in Rust with [egui]; opens near-instantly.
 - **Themeable** (8 ready palettes incl. Catppuccin), **localised** (13 languages,
   with CJK font fallback), and a configurable thumbnail grid.
@@ -59,7 +59,8 @@ window or a monitor with a click.
 - `xdg-desktop-portal-wlr` ≥ 0.8 (for the screencast chooser use).
 - For the **GPU path** (default): a working EGL/GLES driver and `libgbm`
   (ships with Mesa). It falls back to CPU automatically if unavailable.
-- For the **`--switch`** window-switcher: `zwlr-foreign-toplevel-management-v1`.
+- For **`wlr-switcher`**: `zwlr-foreign-toplevel-management-v1`, or COSMIC's
+  `cosmic-toplevel-management` where that is missing.
 
 ## Install
 

@@ -44,7 +44,7 @@ wlr-draw on | off        # force draw mode on/off
 wlr-draw clear           # erase everything
 wlr-draw undo | redo
 wlr-draw visibility      # hide/show the annotations without discarding them
-wlr-draw tool  <pen|rect|mask|arrow|text|eraser>   # mask = solid box to redact areas
+wlr-draw tool  <pen|rect|mask|arrow|text|eraser|move>   # mask = solid box to redact areas
 wlr-draw color <name|#rrggbb[aa]>     # red green blue yellow orange cyan magenta white black
 wlr-draw width <px>
 wlr-draw save [path]     # write the annotated screen to a PNG (Pictures dir by default)

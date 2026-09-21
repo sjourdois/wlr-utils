@@ -56,7 +56,7 @@ enum Ctl {
     Redo,
     /// Hide / show the annotations without discarding them
     Visibility,
-    /// Select a tool: pen, line, rect, ellipse, arrow, text, eraser
+    /// Select a tool: pen, rect, mask, arrow, text, eraser, move
     Tool {
         /// Tool name
         name: String,
