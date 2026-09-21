@@ -54,6 +54,8 @@ shots_out() { mkdir -p "$SHOTS_ASSETS/$1"; printf '%s/%s' "$SHOTS_ASSETS/$1" "$2
 : "${SHOTS_MPV_PAUSE:=0}"
 # How many pixels must change for shots_expect_change to call an effect visible.
 : "${SHOTS_CHANGE_MIN:=200}"
+# Playback rate of the README GIFs. Lower than the MP4's: see shots_record.
+: "${SHOTS_GIF_FPS:=6}"
 SHOTS_FOOT_INI="$SHOTS_DIR/foot.ini"
 # uBlock Origin Lite (unpacked, MV3) loaded into the demo browsers to keep ads
 # out of the captures. Fetched into vendor/ubol by capture.sh if missing.
@@ -444,8 +446,10 @@ shots_key()  { wtype -k Shift_L -k "$1" 2>/dev/null; }
 
 # --- capture -----------------------------------------------------------------
 
-# Grab the virtual output to a PNG, including the cursor (-c). Args: outfile [output]
-shots_grab() { grim -c -o "${2:-HEADLESS-1}" "$1" 2>/dev/null; }
+# Grab the virtual output to a PNG, cursor included. Args: outfile [output]
+shots_grab() {
+  "$(shots_tool wlr-shot)" screenshot --cursor -o "${2:-HEADLESS-1}" "$1" 2>/dev/null
+}
 
 # Run an action between two grabs and warn when the screen barely moved. For the
 # effects no IPC can confirm -- a pointer hover, whose coordinate is tied to a
@@ -459,9 +463,10 @@ shots_expect_change() {
   local label="$1"; shift
   local before after changed
   before="$(mktemp --suffix=.png)"; after="$(mktemp --suffix=.png)"
-  grim -o HEADLESS-1 "$before" 2>/dev/null
+  local shot; shot="$(shots_tool wlr-shot)"
+  "$shot" screenshot -o HEADLESS-1 "$before" 2>/dev/null
   "$@"
-  grim -o HEADLESS-1 "$after" 2>/dev/null
+  "$shot" screenshot -o HEADLESS-1 "$after" 2>/dev/null
   changed="$(magick compare -metric AE "$before" "$after" null: 2>&1 | awk '{printf "%d", $1}')"
   rm -f "$before" "$after"
   [ "${changed:-0}" -ge "$SHOTS_CHANGE_MIN" ] && return 0
@@ -469,36 +474,61 @@ shots_expect_change() {
   return 1
 }
 
-# Capture a sequence of frames while a driver function runs, then assemble a
-# looping animation in two formats: MP4 (the primary one) and GIF (maximum
-# compatibility, embedded in the READMEs). Args: basename fps driver_fn
-# The driver function is invoked with the frame directory as $1 and should
-# return after issuing all its input; frames are grabbed in parallel.
+# Record an animation while a driver function runs, in two formats: MP4 (the
+# primary one) and GIF (maximum compatibility, embedded in the READMEs).
+# Args: basename fps driver_fn
+#
+# wlr-shot emits on a fixed 1/fps cadence, repeating the last frame through
+# static stretches, so the MP4 lasts exactly as long as the driver did whatever
+# rate the capture sustains underneath. The GIF is derived from that MP4 rather
+# than recorded a second time: wlr-shot caps its own GIF at 800 px and the
+# READMEs want 1280.
 shots_record() {
-  local out="$1" fps="$2" driver="$3"
-  local dir; dir="$(mktemp -d)"
-  local period; period="$(awk "BEGIN{printf \"%.3f\", 1/$fps}")"
-  local n=0
-  ( # frame grabber: keep grabbing until the marker file appears
-    while [ ! -e "$dir/.stop" ]; do
-      grim -c -o HEADLESS-1 "$(printf '%s/f%04d.png' "$dir" "$n")" 2>/dev/null
-      n=$((n+1)); sleep "$period"
-    done
-  ) &
-  local gpid=$!
-  "$driver" "$dir"
-  touch "$dir/.stop"; wait "$gpid" 2>/dev/null
+  local out="$1" fps="$2" driver="$3" i
+  local shot; shot="$(shots_tool wlr-shot)"
+  # A video recording takes system audio by default, and the nested session shares
+  # the host's PipeWire: without this the showcase would carry whatever the machine
+  # happened to be playing. The flag only exists in a build with the audio feature;
+  # a video-only build is silent already.
+  local quiet=()
+  "$shot" record --help 2>&1 | grep -q -- '--no-audio' && quiet=(--no-audio)
+  local err; err="$(mktemp)"
+  "$shot" record --cursor "${quiet[@]}" -o HEADLESS-1 --fps "$fps" "$out.mp4" \
+    >/dev/null 2>"$err" &
+  local rpid=$!
+  # wlr-shot announces itself once the encoder is up and it is entering the
+  # capture loop. Driving before that clips the first moves off the animation.
+  for i in $(seq 1 100); do
+    [ -s "$err" ] && break
+    kill -0 "$rpid" 2>/dev/null || break
+    sleep 0.05
+  done
+  shots_settle 0.3
+  "$driver"
+  # SIGINT is what wlr-shot's Ctrl-C handler waits for: it leaves the loop and
+  # finalises the container. SIGTERM would leave an unplayable file behind.
+  kill -INT "$rpid" 2>/dev/null; wait "$rpid" 2>/dev/null
 
-  # H.264 MP4 — the primary format: clean video, no palette/disposal artifacts.
-  # Even dimensions + yuv420p for broad playback; +faststart for web streaming.
-  ffmpeg -y -framerate "$fps" -pattern_type glob -i "$dir/f*.png" \
-    -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos,format=yuv420p" \
-    -c:v libx264 -crf 20 -preset medium -movflags +faststart "$out.mp4" >/dev/null 2>&1
+  if [ ! -s "$out.mp4" ]; then
+    shots_msg "NO RECORDING: $(basename "$out") — $(tr '\n' ' ' < "$err")"
+    rm -f "$err"; return 1
+  fi
+  rm -f "$err"
+
+  # Move the moov atom to the front. These files are served by GitHub Pages, and a
+  # player otherwise has to fetch the whole thing before it can start. Stream copy,
+  # so the encode itself is untouched.
+  if ffmpeg -y -i "$out.mp4" -c copy -movflags +faststart "$out.fs.mp4" >/dev/null 2>&1; then
+    mv -f "$out.fs.mp4" "$out.mp4"
+  else
+    rm -f "$out.fs.mp4"
+  fi
+
   # GIF — full frames (no transdiff) so simple viewers (feh) don't drift; a global
   # palette keeps it stable. Embedded in the READMEs (crates.io can't play MP4).
-  ffmpeg -y -framerate "$fps" -pattern_type glob -i "$dir/f*.png" \
-    -gifflags -transdiff \
-    -vf "scale='min(1280,iw)':-2:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse=dither=sierra2_4a" \
+  # Resampled down: a GIF stores whole frames, so one at the MP4's rate weighs
+  # several times what a README should carry.
+  ffmpeg -y -i "$out.mp4" -gifflags -transdiff \
+    -vf "fps=$SHOTS_GIF_FPS,scale='min(1280,iw)':-2:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse=dither=sierra2_4a" \
     "$out.gif" >/dev/null 2>&1
-  rm -rf "$dir"
 }

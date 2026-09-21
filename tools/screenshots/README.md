@@ -23,9 +23,14 @@ Output lands in `../../docs/assets/<tool>/` as `*.png` (still) plus `*.mp4` and
 
 To render the overlays in French (or any locale): `SHOTS_LANG=fr_FR.UTF-8 ./capture.sh`.
 
+Animations are recorded with `wlr-shot record`, which emits a constant frame rate,
+so the MP4 runs at the speed the scene was actually driven. The GIF beside it is
+derived from that MP4 and plays at `SHOTS_GIF_FPS` (6 by default) — lower it for
+smaller files, since a GIF stores whole frames.
+
 ## Requirements
 
-System tools: `sway`, `grim`, `wtype`, `foot`, `ffmpeg`, `jq`, `curl`,
+System tools: `sway`, `wtype`, `foot`, `ffmpeg`, `jq`, `curl`,
 ImageMagick, plus `batcat`/`tree` for the demo windows. The scenes that show a
 desktop also need `chromium`, `galculator`, `mpv`, `btop` and `cmatrix`. The
 first run also builds a tiny virtual-pointer injector:
