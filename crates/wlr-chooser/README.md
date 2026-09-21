@@ -314,7 +314,7 @@ as before when there is none.
 One line in your compositor's config:
 
 ```
-exec_always wlr-overlayd          # sway
+exec wlr-overlayd                 # sway
 exec-once = wlr-overlayd          # Hyprland
 spawn-at-startup "wlr-overlayd"   # niri
 ```

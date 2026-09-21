@@ -30,7 +30,7 @@ context an overlay would otherwise build from scratch every time — some ninety
 milliseconds, paid once here instead of at every overlay.\n\n\
 Start it with your session and nothing else changes: `wlr-switcher` and `wlr-chooser` \
 find it on their own, and work exactly as before when it is not running.\n\n\
-    sway:      exec_always wlr-overlayd\n\
+    sway:      exec wlr-overlayd\n\
     Hyprland:  exec-once = wlr-overlayd\n\
     niri:      spawn-at-startup \"wlr-overlayd\"\n\n\
 A systemd --user unit is shipped as contrib/wlr-overlayd.service. Nothing is captured \

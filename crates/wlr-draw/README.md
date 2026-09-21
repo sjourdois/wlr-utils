@@ -180,65 +180,71 @@ setup needed; a compositor without tablet support just runs with the mouse.
 
 ## Running the daemon
 
-### Start on login (default)
+### Starting it
 
-With the `tray` feature (on by default) **nothing needs installing**: on its very first
-run the daemon registers an XDG autostart entry at `~/.config/autostart/wlr-draw.desktop`
-(tracked by a sentinel under `$XDG_STATE_HOME`), so it comes up with the session out of
-the box — picked up by any XDG-compliant session, including the systemd xdg-autostart
-generator under uwsm.
+**With the tray (the default build), there is nothing to install.** On its very first run
+the daemon registers itself to start with your session, and comes up on its own from then
+on — picked up by any XDG-compliant session, including the systemd xdg-autostart generator
+under uwsm.
 
-After that first run the desktop file's presence is the sole source of truth: the tray's
-**Start on login** checkbox writes or removes it, and unchecking it is permanent — a later
-manual launch won't recreate an entry you deliberately dropped.
+It does that by writing `~/.config/autostart/wlr-draw.desktop`. Worth knowing before it
+happens: it is the one file `wlr-draw` puts in your configuration, and it only ever writes
+it once (a sentinel under `$XDG_STATE_HOME` remembers). After that the file's presence is
+the sole source of truth — the tray's **Start on login** checkbox writes or removes it,
+and unchecking it sticks: a later manual launch will not recreate an entry you
+deliberately dropped.
 
-### Logs
+If you would rather say it yourself — or you build `--no-default-features`, which has no
+tray and so no self-registration — start the daemon the way you start anything else with
+your session. One line in your compositor's config:
 
-The daemon logs to stderr, which the session journals. Filter by the **binary name**, not
-the unit — it's clean and works however the daemon was started:
-
-```sh
-journalctl --user -t wlr-draw -f
+```
+exec wlr-draw                # sway
+exec-once = wlr-draw         # Hyprland
+spawn-at-startup "wlr-draw"  # niri
 ```
 
-(A default XDG-autostart launch shows up under the systemd unit `app-wlr\x2ddraw@…` — the
-`\x2d` is just systemd escaping the dash in the desktop-file name, which is awkward to
-type. `-t wlr-draw` sidesteps it. If you want a tidy unit name in the journal too, run the
-daemon from the systemd user unit below instead, and it appears as `wlr-draw.service`.)
-
-Restarting the autostart daemon (e.g. after installing a new build) uses that same escaped
-unit name — quote it so the shell keeps the backslash:
+Or the provided systemd `--user` unit
+([`contrib/wlr-draw.service`](contrib/wlr-draw.service)), which also restarts the daemon
+if it ever dies:
 
 ```sh
-systemctl --user restart 'app-wlr\x2ddraw@autostart.service'
+install -Dm644 contrib/wlr-draw.service ~/.config/systemd/user/wlr-draw.service
+systemctl --user enable --now wlr-draw.service
 ```
+
+It is bound to `graphical-session.target`, so it comes up with the Wayland session and
+goes down with it — this needs a session that populates that target, which uwsm does. The
+unit calls `wlr-draw` by name; if yours lives somewhere the user manager's `PATH` does not
+cover, write the full path in `ExecStart`. **Use one mechanism, not several** — and if you
+pick one of these, untick **Start on login** in the tray so the autostart entry does not
+race yours.
+
+You will know soon enough either way: with no daemon listening, every command exits
+non-zero with `no wlr-draw daemon listening on … ; start one with wlr-draw`.
+
+### Stopping, restarting, logs
+
+```sh
+wlr-draw quit                                     # stop the daemon
+journalctl --user -t wlr-draw -f                  # its output, however it was started
+systemctl --user restart 'app-wlr\x2ddraw@autostart.service'   # after a new build
+```
+
+Filtering the journal by the **binary name** rather than the unit works whichever way you
+started it, which is why it is the one to remember. The restart line is only for the
+default XDG-autostart launch: systemd names that unit after the desktop file and escapes
+the dash as `\x2d`, so the quotes matter. Started from the systemd unit above instead, it
+is plain `systemctl --user restart wlr-draw`.
 
 ### Tray icon
 
 With the `tray` feature (on by default) the daemon shows a StatusNotifierItem tray icon
 (e.g. in waybar's `tray` module): a hollow ring when idle, a filled disc in the current
-stroke colour while drawing. Left-click toggles draw mode; the menu offers toggle /
-clear / undo / quit, a **Shortcuts** submenu with the full key legend, and the **Start on
-login** checkbox above. `--no-default-features` drops it (and the D-Bus dependency).
-
-### Without the tray: systemd or the compositor
-
-A `--no-default-features` build has no tray and so no self-registering autostart — start
-the daemon yourself. Either drop in the provided systemd `--user` unit
-([`contrib/wlr-draw.service`](contrib/wlr-draw.service), bound to
-`graphical-session.target` so it tracks the Wayland session — works with uwsm, which
-imports `WAYLAND_DISPLAY` into the user manager):
-
-```sh
-install -Dm644 contrib/wlr-draw.service ~/.config/systemd/user/wlr-draw.service
-# If wlr-draw is in ~/.local/bin (not on the user manager's PATH), point at it:
-#   sed -i 's|^ExecStart=wlr-draw$|ExecStart=%h/.local/bin/wlr-draw|' \
-#       ~/.config/systemd/user/wlr-draw.service
-systemctl --user enable --now wlr-draw.service
-```
-
-…or launch it straight from the compositor — sway: `exec wlr-draw`. Use one mechanism, not
-several.
+stroke colour while drawing. Left-click toggles draw mode; the menu offers toggle / clear
+/ undo / quit, a **Shortcuts** submenu with the full key legend, and the **Start on login**
+checkbox described above. `--no-default-features` drops the icon and the D-Bus dependency
+with it.
 
 ## Example sway bindings
 

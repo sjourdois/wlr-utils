@@ -3,7 +3,7 @@ Description=wlr-overlayd — overlay daemon for wlr-switcher and wlr-chooser (wl
 Documentation=https://github.com/sjourdois/wlr-utils
 # Tie the daemon's lifetime to the Wayland graphical session (works with uwsm, which
 # imports WAYLAND_DISPLAY into the user manager). For a non-systemd session, launch it
-# from the compositor instead (e.g. sway `exec_always wlr-overlayd`).
+# from the compositor instead (e.g. sway `exec wlr-overlayd`).
 PartOf=graphical-session.target
 After=graphical-session.target
 # The daemon needs a compositor to connect to: don't start at all without one, rather
