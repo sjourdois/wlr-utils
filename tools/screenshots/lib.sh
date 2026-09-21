@@ -7,9 +7,18 @@
 # Design notes:
 #   * The nested compositor uses WLR_BACKENDS=headless -> virtual in-memory
 #     outputs, no DRM master. It is SAFE to run next to a live session.
+#   * It gets its OWN XDG_RUNTIME_DIR: a 0700 sub-directory of the live one,
+#     recreated empty at each start. Every runtime path the tools derive from
+#     that variable lands there -- the Wayland socket, wlr-draw's control socket,
+#     wlr-chooser's and wlr-peek's single-instance locks. Sharing the live
+#     directory means the first daemon to bind a name owns it: a scene then
+#     starts no daemon of its own and drives the user's, on the real screen.
 #   * It gets its OWN WAYLAND_DISPLAY (discovered via an exec_always that writes
 #     the value to a file) and its OWN SWAYSOCK -- I3SOCK too, which swayipc reads
 #     first, so a tool under test never answers from the live session.
+#   * Services that stay shared are addressed explicitly: D-Bus through
+#     DBUS_SESSION_BUS_ADDRESS, PipeWire/Pulse through PIPEWIRE_RUNTIME_DIR and
+#     PULSE_RUNTIME_PATH, all pointing back at the live runtime directory.
 #   * Teardown kills the nested sway by PID. We never `pkill -f` a pattern that
 #     could also match this script's own command line (that self-kills).
 #
@@ -21,7 +30,12 @@ set -u
 # --- paths & configuration ---------------------------------------------------
 SHOTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SHOTS_CONF="$SHOTS_DIR/nested-sway.conf"
-SHOTS_RUNTIME="${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR must be set}"
+# The live session's runtime directory. Nothing of ours is written here; it is
+# kept only to address the services the nested clients still share with it.
+SHOTS_HOST_RUNTIME="${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR must be set}"
+# The nested session's own XDG_RUNTIME_DIR. A sub-directory of the host's, so it
+# sits on the same per-user tmpfs, owned by us and mode 0700 as Wayland demands.
+SHOTS_RUNTIME="${SHOTS_RUNTIME:-$SHOTS_HOST_RUNTIME/wlr-shots}"
 SHOTS_IPC="$SHOTS_RUNTIME/wlr-shots-ipc.sock"
 SHOTS_DISPFILE="$SHOTS_RUNTIME/wlr-shots-display"
 SHOTS_LOG="$SHOTS_DIR/.sway.log"
@@ -95,14 +109,38 @@ shots_kill_stray() {
   done
 }
 
+# Hand this process, and everything it starts, the nested session's private
+# runtime directory. Recreated empty, so an aborted run leaves no stale socket.
+# Shared services keep pointing at the live directory: D-Bus and PipeWire run
+# there and read their own variables, which we set rather than leave to the
+# XDG_RUNTIME_DIR fallback they would otherwise take.
+shots_runtime_start() {
+  [ "$SHOTS_RUNTIME" != "$SHOTS_HOST_RUNTIME" ] \
+    || shots_die "SHOTS_RUNTIME must not be the live $SHOTS_HOST_RUNTIME"
+  rm -rf "$SHOTS_RUNTIME"
+  mkdir -p "$SHOTS_RUNTIME" && chmod 700 "$SHOTS_RUNTIME" \
+    || shots_die "could not create $SHOTS_RUNTIME"
+  export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$SHOTS_HOST_RUNTIME/bus}"
+  export PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-$SHOTS_HOST_RUNTIME}"
+  export PULSE_RUNTIME_PATH="${PULSE_RUNTIME_PATH:-$SHOTS_HOST_RUNTIME/pulse}"
+  export XDG_RUNTIME_DIR="$SHOTS_RUNTIME"
+}
+
+shots_runtime_stop() {
+  [ "${XDG_RUNTIME_DIR:-}" = "$SHOTS_RUNTIME" ] || return 0
+  export XDG_RUNTIME_DIR="$SHOTS_HOST_RUNTIME"
+  rm -rf "$SHOTS_RUNTIME"
+}
+
 shots_start() {
   local res="${1:-${SHOTS_WIDTH}x${SHOTS_HEIGHT}}"
   SHOTS_WIDTH="${res%x*}"; SHOTS_HEIGHT="${res#*x}"
   shots_kill_stray
-  rm -f "$SHOTS_DISPFILE"
+  shots_runtime_start
 
   env -u DISPLAY -u WAYLAND_DISPLAY -u SWAYSOCK -u I3SOCK \
       WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
+      XDG_RUNTIME_DIR="$SHOTS_RUNTIME" \
       SWAYSOCK="$SHOTS_IPC" I3SOCK="$SHOTS_IPC" \
       sway -c "$SHOTS_CONF" > "$SHOTS_LOG" 2>&1 &
   SHOTS_SWAY_PID=$!
@@ -139,15 +177,17 @@ shots_stop() {
     [ -n "$prof" ] || continue
     pkill -f -- "$prof" 2>/dev/null
   done
-  [ -n "${SHOTS_SWAY_PID:-}" ] || { SHOTS_CHROMIUM_PROFILES=(); return 0; }
-  swaymsg exit >/dev/null 2>&1
-  sleep 0.4
-  kill "$SHOTS_SWAY_PID" 2>/dev/null
-  SHOTS_SWAY_PID=""
+  if [ -n "${SHOTS_SWAY_PID:-}" ]; then
+    swaymsg exit >/dev/null 2>&1
+    sleep 0.4
+    kill "$SHOTS_SWAY_PID" 2>/dev/null
+    SHOTS_SWAY_PID=""
+  fi
   for prof in "${SHOTS_CHROMIUM_PROFILES[@]:-}"; do
     [ -n "$prof" ] && rm -rf "$prof" 2>/dev/null
   done
   SHOTS_CHROMIUM_PROFILES=()
+  shots_runtime_stop
 }
 
 # --- scene helpers -----------------------------------------------------------
@@ -179,34 +219,32 @@ shots_wait_window() {
   return 1
 }
 
-# PIDs of wlr-draw daemons attached to a given WAYLAND_DISPLAY ("" = any other
-# session than ours). Args: display
+# PIDs of the wlr-draw daemons attached to OUR nested session. Matched on the
+# pair that actually identifies a Wayland socket, XDG_RUNTIME_DIR and
+# WAYLAND_DISPLAY: the nested compositor takes wayland-1 in its own empty
+# directory, the same name the live session uses in its own.
 shots_draw_pids() {
-  local p d
+  local p e
   for p in $(pgrep -x wlr-draw 2>/dev/null); do
-    d="$(tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | sed -n 's/^WAYLAND_DISPLAY=//p')"
-    if [ -n "$1" ]; then [ "$d" = "$1" ] && printf '%s\n' "$p"
-    else [ "$d" != "$WAYLAND_DISPLAY" ] && printf '%s\n' "$p"; fi
+    e="$(tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null)"
+    [ "$(printf '%s\n' "$e" | sed -n 's/^WAYLAND_DISPLAY=//p')" = "$WAYLAND_DISPLAY" ] || continue
+    [ "$(printf '%s\n' "$e" | sed -n 's/^XDG_RUNTIME_DIR=//p')" = "$XDG_RUNTIME_DIR" ] || continue
+    printf '%s\n' "$p"
   done
 }
 
 # Start the scene's wlr-draw daemon and return only once OUR daemon answers.
 #
-# The control socket lives in $XDG_RUNTIME_DIR, which the nested session shares
-# with the live one. A daemon already listening there — the user's own, say —
-# keeps ours from binding, and every control command the scene then sends lands
-# in the LIVE session: the capture comes out with no annotation on it and the
-# real screen gets the commands. Refuse instead of shooting that. Args: binary
+# The control socket sits in $XDG_RUNTIME_DIR, private to the nested session, so
+# no other daemon can hold the name. What remains is a daemon of ours that dies
+# on startup: the scene would then send its commands to a socket nobody serves
+# and the capture would come out bare. Wait for it, and say so loudly otherwise.
+# Args: binary
 shots_draw_start() {
-  local draw="$1" foreign i
-  foreign="$(shots_draw_pids "" | tr '\n' ' ')"
-  if [ -n "${foreign// /}" ]; then
-    shots_msg "FOREIGN wlr-draw DAEMON (pid ${foreign% }) owns $XDG_RUNTIME_DIR/wlr-draw.sock; stop it before capturing"
-    return 1
-  fi
+  local draw="$1" i
   shots_spawn "$draw"
   for i in $(seq 1 100); do
-    if [ -n "$(shots_draw_pids "$WAYLAND_DISPLAY")" ] && [ -S "$XDG_RUNTIME_DIR/wlr-draw.sock" ]; then
+    if [ -n "$(shots_draw_pids)" ] && [ -S "$XDG_RUNTIME_DIR/wlr-draw.sock" ]; then
       shots_settle 0.8      # the socket is bound before the overlay is mapped
       return 0
     fi

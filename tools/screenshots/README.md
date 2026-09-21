@@ -3,8 +3,8 @@
 Reproducible, hands-off screenshots and short animations of every wlr-utils
 tool, used in the project READMEs and the GitHub Pages showcase.
 
-Each scene spins up an **isolated, headless nested sway** on its own
-`WAYLAND_DISPLAY`, populates a small desktop, drives the tool with a synthetic
+Each scene spins up an **isolated, headless nested sway** in its own
+`XDG_RUNTIME_DIR`, populates a small desktop, drives the tool with a synthetic
 pointer + keyboard, and captures the result. The nested compositor uses the
 headless wlroots backend (virtual in-memory outputs, no DRM master), so it runs
 safely **alongside a live session and never touches your real screens**.
@@ -70,6 +70,13 @@ download the desktop falls back to a generated test pattern and says so.
 
 ## Notes
 
+- **Private runtime directory.** The nested session runs with
+  `XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR/wlr-shots`, created mode 0700 and recreated
+  empty at each start. The tools derive their runtime paths from that variable —
+  `wlr-draw`'s control socket, `wlr-chooser`'s and `wlr-peek`'s single-instance
+  locks, the Wayland socket itself — so a capture can no longer bind a name the
+  live session already holds, nor drive a daemon of yours on the real screen.
+  D-Bus, PipeWire and Pulse stay shared and are addressed by their own variables.
 - **Why a virtual pointer?** A headless seat has no input devices, so it has no
   pointer capability and sway's `seat cursor` IPC delivers nothing to clients.
   `shots-pointer` creates a real virtual pointer, which the overlays then see.
