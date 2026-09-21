@@ -11,8 +11,9 @@ on:
         description: Release tag to build the .debs for and attach them to
         required: true
 
-permissions:
-  contents: write
+# No workflow-wide write: `build` checks out the tag and then runs its code —
+# build scripts, dependency builds, cargo-deb — so it gets `contents: read`, and only
+# `upload`, which touches no checkout, may write to the release. Declared per job below.
 
 # `workflow_run` runs on the default branch; the jobs need the upstream run's tag.
 env:
@@ -28,6 +29,8 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && startsWith(github.event.workflow_run.head_branch, 'v')) }}
     runs-on: ubuntu-latest
     container: ${{ matrix.image }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -44,6 +47,16 @@ jobs:
           - { image: 'ubuntu:26.04',         codename: ubuntu2604,  experimental: true  }
     continue-on-error: ${{ matrix.experimental }}
     steps:
+      - name: Refuse a tag that is not one
+        run: |
+          set -eu
+          # TAG comes from a `workflow_run` head_branch, and is about to name the ref
+          # this job checks out and then executes. A branch name may hold anything a
+          # ref allows; a release tag may not.
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "refusing '$TAG': a release tag is vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
       - name: Install build prerequisites
         run: |
           set -eux
@@ -87,6 +100,8 @@ jobs:
     needs: build
     if: ${{ always() && needs.build.result != 'cancelled' && needs.build.result != 'skipped' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v8
         with:

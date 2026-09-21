@@ -28,7 +28,11 @@ jobs:
     permissions:
       contents: read
     env:
-      AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+      # Whether a key is configured, as a plain flag the step conditions can read.
+      # The secret itself is handed only to the step that writes it to disk: every
+      # other step in this job runs code from the checked-out tag, and a deploy key
+      # has no business being in their environment.
+      HAS_AUR_KEY: ${{ secrets.AUR_SSH_KEY != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -40,10 +44,21 @@ jobs:
     steps:
       - name: Resolve the release version
         id: ver
+        env:
+          # Through the environment, never interpolated into the script: this comes
+          # from a `workflow_run` head_branch, and a branch name may hold shell
+          # metacharacters. It then names a checkout ref and a package version, so it
+          # is checked against what a release tag can look like and refused otherwise
+          # — quoting our way around a value we can simply reject would be worse.
+          RAW_TAG: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
         run: |
-          tag="${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}"
-          echo "tag=$tag" >>"$GITHUB_OUTPUT"
-          echo "pkgver=${tag#v}" >>"$GITHUB_OUTPUT"
+          set -eu
+          if ! printf '%s' "$RAW_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "refusing '$RAW_TAG': a release tag is vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          printf 'tag=%s\n'    "$RAW_TAG"     >>"$GITHUB_OUTPUT"
+          printf 'pkgver=%s\n' "${RAW_TAG#v}" >>"$GITHUB_OUTPUT"
 
       - name: Install tooling
         run: pacman -Syu --noconfirm --needed git openssh pacman-contrib rust clang curl
@@ -54,14 +69,17 @@ jobs:
 
       - name: Prepare the PKGBUILD
         working-directory: packaging/aur
+        env:
+          PKGBUILD_FILE: ${{ matrix.pkgbuild }}
+          PKGVER: ${{ steps.ver.outputs.pkgver }}
         run: |
           # The source package's file is already named PKGBUILD (copying it onto
           # itself is an error); only the -bin variant needs renaming into place.
-          if [ "${{ matrix.pkgbuild }}" != PKGBUILD ]; then
-            cp "${{ matrix.pkgbuild }}" PKGBUILD
+          if [ "$PKGBUILD_FILE" != PKGBUILD ]; then
+            cp "$PKGBUILD_FILE" PKGBUILD
           fi
           # The release drives the version; a fresh version resets pkgrel to 1.
-          sed -i "s/^pkgver=.*/pkgver=${{ steps.ver.outputs.pkgver }}/" PKGBUILD
+          sed -i "s/^pkgver=.*/pkgver=$PKGVER/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
 
       - name: Create a build user (makepkg refuses root)
@@ -80,15 +98,20 @@ jobs:
           '
 
       - name: Install the AUR deploy key
-        if: env.AUR_SSH_KEY != ''
+        if: env.HAS_AUR_KEY == 'true'
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
         run: |
           install -dm700 ~/.ssh
           printf '%s\n' "$AUR_SSH_KEY" > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
 
       - name: Push to the AUR
-        if: env.AUR_SSH_KEY != ''
+        if: env.HAS_AUR_KEY == 'true'
         working-directory: packaging/aur
+        env:
+          AUR_PKG: ${{ matrix.name }}
+          TAG: ${{ steps.ver.outputs.tag }}
         run: |
           # Impose the key + host-key handling on git's ssh directly; the runner's
           # HOME juggling means a ~/.ssh/config isn't reliably read. A dedicated deploy
@@ -98,17 +121,19 @@ jobs:
           git config --global user.email 'stephane@jourdois.fr'
           git config --global --add safe.directory '*'
           # A never-published name clones as an empty repo; the first push creates it.
-          git clone "ssh://aur@aur.archlinux.org/${{ matrix.name }}.git" aur-repo
+          git clone "ssh://aur@aur.archlinux.org/$AUR_PKG.git" aur-repo
           cp PKGBUILD .SRCINFO aur-repo/
           cd aur-repo
           git add PKGBUILD .SRCINFO
           if git diff --cached --quiet; then
-            echo "No change for ${{ matrix.name }} ${{ steps.ver.outputs.tag }}."
+            echo "No change for $AUR_PKG $TAG."
           else
-            git commit -m "Update to ${{ steps.ver.outputs.tag }}"
+            git commit -m "Update to $TAG"
             git push
           fi
 
       - name: Note a skipped push
-        if: env.AUR_SSH_KEY == ''
-        run: echo "AUR_SSH_KEY not set — built and validated ${{ matrix.name }}, skipped the push."
+        if: env.HAS_AUR_KEY != 'true'
+        env:
+          AUR_PKG: ${{ matrix.name }}
+        run: echo "AUR_SSH_KEY not set — built and validated $AUR_PKG, skipped the push."
