@@ -16,3 +16,7 @@ filter-no-match = { $filter } に一致する開いているウィンドウが�
 pid-unsupported = このコンポジタはウィンドウの所属プロセスを報告しないため、--pid は適用できません。sway、Hyprland、niri のいずれかの IPC が必要です。`wlr-peek doctor` を実行して、フォーカスバックエンドが検出されたか確認してください。
 hints-need-keyboard = --hints はフィルター入力欄のないレイアウトを必要とします。--layout strip または --layout grid を使ってください。
 grid-needs-card = --grid はカードの大きさを決めるため、--layout card（既定）が必要です。エクスポゼとストリップは自動で配置されます。
+daemon-already-running = wlr-switcher のデーモンはすでに実行中です。
+daemon-none = wlr-switcher のデーモンは実行されていません。
+daemon-gone = wlr-switcher のデーモンが応答せずに終了しました。ウィンドウは切り替わっていません。
+daemon-cannot-serve = この実行はデーモンでは扱えません。--no-gpu と --doctor はプロセス全体の動作を変えるためです。--no-daemon を付けて実行してください。

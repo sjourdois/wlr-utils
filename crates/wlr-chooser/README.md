@@ -292,8 +292,65 @@ keyboard counts as released: a quick tap switches straight away, without showing
 the overlay. Bind a strip to a key with no modifier (or run it from a terminal) with
 `--no-hold`, or it switches as soon as it opens.
 
+### Instant overlays — the daemon
+
+Most of the delay before the overlay appears is initialisation the run then throws
+away: the EGL context and its compiled shaders, the font set, the Wayland
+connection. On an NVIDIA driver at 2560×1440 that is 93 to 109 ms, of which the EGL
+setup alone is about 70.
+
+`wlr-switcher --daemon` pays it once and keeps it. Put it in your session autostart:
+
+```
+exec_always wlr-switcher --daemon                 # sway
+```
+
+With one running, an ordinary `wlr-switcher` hands it the run and the overlay is up
+in roughly ten milliseconds — **your keybindings do not change**:
+
+```
+bindsym Mod1+Tab exec wlr-switcher                # goes through the daemon if there is one
+bindsym $mod+Tab exec wlr-switcher --layout grid  # every option still means the same thing
+```
+
+Nothing starts a daemon for you, and nothing depends on one: with none listening,
+`wlr-switcher` shows the overlay itself exactly as it always has.
+
+**It captures nothing while it idles.** The capture thread is spawned for each
+overlay and dies with it — between two, the daemon holds a Wayland connection and a
+GPU context, and reads no window contents. Idle, it sits on a `poll()` and costs no
+CPU; it holds about 170 MB of resident memory, most of it the GPU driver's mappings
+shared with everything else on screen (90 MB proportional).
+
+Each overlay still builds its own layer surface, so it opens on the screen you are
+working on, and screens can be plugged or unplugged under an idle daemon.
+
+| | |
+|---|---|
+| `--daemon` | run the daemon in the foreground (it is what your autostart runs) |
+| `--no-daemon` | show the overlay in this process, even if a daemon is running |
+| `--stop-daemon` | stop the running daemon |
+
+A run that asks for `--no-gpu`, or that has `WLR_NO_GPU` set, never goes through the
+daemon: it changes what the whole process does, and a daemon started without it
+cannot honour it. Such a run shows its own overlay, at the usual cold-start cost.
+
+The daemon listens on `$XDG_RUNTIME_DIR/wlr-switcher.sock`, one line of text per
+request, like `wlr-draw`'s control socket — `show` (with the invocation's arguments
+after it, separated by `\x1f`), `ping` or `quit`; it answers `ok`, `cancel`, `busy`
+or `err <reason>`, which the client turns back into its own exit status. Exit
+statuses are unchanged: `0` for a switch, `1` for a cancel, `2` for a failure, and
+`0` for a keybinding pressed while an overlay is already up — still a no-op, never a
+second overlay.
+
+Messages an overlay writes to stderr — a compositor that cannot focus a window, a
+`--pid` filter it cannot apply — reach the client that asked for it. Anything the
+capture thread has to say goes to the daemon's own output, wherever your autostart
+sends it.
+
 > **Tip:** set `WLR_CHOOSER_TIMING=1` to print cold-start timing milestones to
-> stderr if you want to profile how fast the overlay appears.
+> stderr if you want to profile how fast the overlay appears. On the daemon it
+> prints them for every overlay it shows.
 
 > **Looking for a floating live mirror?** **`wlr-peek mirror`** keeps a picture-in-picture
 > of a window (or a magnified region) always on top — see the

@@ -10,7 +10,7 @@
 
 use crate::ui::{Live, Mode, Options, View};
 use crate::{FilterArgs, HintRowArg, LayoutArg, OrderArg};
-use crate::{acquire_switch_lock, run_overlay};
+use crate::{acquire_switch_lock, daemon, run_overlay, shell};
 use crate::{i18n, tr};
 use clap::{Parser, ValueEnum};
 use std::time::Instant;
@@ -84,10 +84,35 @@ struct Cli {
     /// Report which capture protocols the current compositor supports, then exit.
     #[arg(long)]
     doctor: bool,
+    /// Run the overlay daemon in the foreground. It holds the Wayland connection
+    /// and the GPU context, so a later `wlr-switcher` puts the overlay on screen in
+    /// a few milliseconds instead of about ninety. Nothing starts one for you: put
+    /// it in your session autostart (sway: `exec_always wlr-switcher --daemon`).
+    /// It captures nothing until an invocation asks for an overlay.
+    #[arg(long, conflicts_with_all = ["no_daemon", "stop_daemon"])]
+    daemon: bool,
+    /// Show the overlay in this process, even if a daemon is running.
+    #[arg(long, conflicts_with = "stop_daemon")]
+    no_daemon: bool,
+    /// Stop the running daemon, then exit.
+    #[arg(long)]
+    stop_daemon: bool,
+}
+
+/// What a run came to.
+enum Ran {
+    /// The overlay was answered: a window picked, and focused if it could be.
+    Switched,
+    /// The user backed out of the overlay.
+    Cancelled,
 }
 
 pub fn main() {
     let t0 = Instant::now();
+    // Kept before clap eats them: what a daemon is handed is the invocation itself,
+    // so `wlr-switcher --layout grid` means the same thing whether the daemon shows
+    // it or this process does.
+    let args: Vec<String> = std::env::args().skip(1).collect();
     let cli = Cli::parse();
     if cli.no_gpu {
         wlr_capture::wl::disable_gpu_globally();
@@ -102,7 +127,34 @@ pub fn main() {
         return;
     }
 
-    crate::reject_hints_on_card(cli.hints, cli.layout);
+    if cli.stop_daemon {
+        if let Err(e) = daemon::quit() {
+            eprintln!("{e:#}");
+            std::process::exit(2);
+        }
+        return;
+    }
+
+    if cli.daemon {
+        if let Err(e) = daemon::run(t0, serve) {
+            eprintln!("{}", tr!("error", error = format!("{e:#}")));
+            std::process::exit(2);
+        }
+        return;
+    }
+
+    // Hand the run to a daemon if the user is running one. None of this starts one:
+    // with nothing listening the invocation shows the overlay itself, below, exactly
+    // as it always has.
+    if !cli.no_daemon
+        && daemon_can_serve(&cli)
+        && let Some(reply) = daemon::request(&args)
+    {
+        if let daemon::Reply::Err(reason) = &reply {
+            eprintln!("{reason}");
+        }
+        std::process::exit(reply.exit_code());
+    }
 
     // Single-instance guard: re-pressing the keybind while we're up is a no-op
     // rather than a stacked overlay (sway runs its bindings over our grab).
@@ -110,6 +162,31 @@ pub fn main() {
         Some(lock) => lock,
         None => return,
     };
+
+    match run(cli, t0, None) {
+        Ok(Ran::Switched) => {}
+        Ok(Ran::Cancelled) => std::process::exit(1),
+        Err(reason) => crate::exit_with(reason),
+    }
+}
+
+/// Whether this invocation is one a daemon could take on.
+///
+/// `--no-gpu` (and `WLR_NO_GPU`) turns off the zero-copy path for the whole process,
+/// including the EGL context the daemon built at startup: a daemon started without it
+/// cannot honour it, and honouring it halfway would be worse than being slow. Such a
+/// run shows its own overlay.
+fn daemon_can_serve(cli: &Cli) -> bool {
+    !cli.no_gpu && std::env::var_os("WLR_NO_GPU").is_none()
+}
+
+/// One switcher run, from the pre-flight to the focus change it was for.
+///
+/// `host` is the daemon's warm host, or `None` to build one for this run alone.
+/// Refusals come back as a message rather than exiting the process: the daemon has to
+/// send them to the client that asked instead of dying on them.
+fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, String> {
+    crate::reject_hints_on_card(cli.hints, cli.layout)?;
 
     let view = View::from(cli.layout);
     // Hold-to-switch defaults on for the strip (a true Alt-Tab) and off for the
@@ -132,51 +209,79 @@ pub fn main() {
         window_filters: cli.filters.into(),
         hints: cli.hints.map(Into::into),
     };
+    preflight(&mut opts)?;
 
-    // Pre-flight: wlr-switcher switches *windows*, which need the foreign-toplevel
-    // capture source (wlroots >= 0.20 / Sway >= 1.12). On older compositors connect()
-    // now succeeds for screen-only capture, but there are no windows to offer — so say
-    // so clearly and exit, instead of showing an empty dimmed overlay (issue #1).
+    let picked = match host {
+        Some(host) => crate::run_overlay_on(host, opts, t0),
+        None => run_overlay(opts, t0),
+    }
+    .map_err(|e| tr!("error", error = format!("{e:#}")))?;
+
+    let Some(sel) = picked else {
+        return Ok(Ran::Cancelled);
+    };
+    // Focus the picked window (outputs aren't focusable, so ignore them).
+    if sel.is_window
+        && let Err(e) = wl::activate_window(&sel.identifier, &sel.identity())
+    {
+        // A compositor with no activation protocol at all is a property of the
+        // setup, not a bug in this run: say what is missing, like the pre-flight
+        // does for window capture, rather than dumping a protocol name.
+        return Err(match e {
+            CaptureError::ActivationUnsupported => tr!("focus-unsupported"),
+            e => tr!("error", error = format!("{e:#}")),
+        });
+    }
+    Ok(Ran::Switched)
+}
+
+/// Settle, before the overlay, everything that decides whether it has anything to
+/// show at all.
+///
+/// wlr-switcher switches *windows*, which need the foreign-toplevel capture source
+/// (wlroots >= 0.20 / Sway >= 1.12). On older compositors connect() still succeeds for
+/// screen-only capture, but there are no windows to offer — so say so clearly instead
+/// of showing an empty dimmed overlay (issue #1).
+fn preflight(opts: &mut Options) -> Result<(), String> {
     match wl::Client::connect() {
-        Ok(client) if !client.can_capture_windows() => {
-            eprintln!("{}", tr!("capture-no-window"));
-            std::process::exit(2);
-        }
+        Ok(client) if !client.can_capture_windows() => Err(tr!("capture-no-window")),
         Ok(client) => {
             // A --pid filter has to be settled here too: it rests on a compositor IPC,
             // and a filter that cannot be applied must not be applied silently.
-            crate::require_window_pids(&mut opts.window_filters, client.toplevels());
+            crate::require_window_pids(&mut opts.window_filters, client.toplevels())?;
             // Same reasoning for a filter that names no open window: the switcher shows
             // windows and nothing else, so it would come up empty.
-            crate::reject_empty_window_filter(client.toplevels(), &opts.window_filters);
+            crate::reject_empty_window_filter(client.toplevels(), &opts.window_filters)
         }
-        Err(e) => {
-            eprintln!("{}", tr!("error", error = format!("{e:#}")));
-            std::process::exit(2);
-        }
+        Err(e) => Err(tr!("error", error = format!("{e:#}"))),
     }
+}
 
-    match run_overlay(opts, t0) {
-        Ok(Some(sel)) => {
-            // Focus the picked window (outputs aren't focusable, so ignore them).
-            if sel.is_window
-                && let Err(e) = wl::activate_window(&sel.identifier, &sel.identity())
-            {
-                // A compositor with no activation protocol at all is a property of the
-                // setup, not a bug in this run: say what is missing, like the pre-flight
-                // does for window capture, rather than dumping a protocol name.
-                let msg = match e {
-                    CaptureError::ActivationUnsupported => tr!("focus-unsupported"),
-                    e => tr!("error", error = format!("{e:#}")),
-                };
-                eprintln!("{msg}");
-                std::process::exit(2);
-            }
-        }
-        Ok(None) => std::process::exit(1), // cancelled
-        Err(e) => {
-            eprintln!("{}", tr!("error", error = format!("{e:#}")));
-            std::process::exit(2);
-        }
+/// Serve one `show` request: the daemon's side of a `wlr-switcher` invocation.
+///
+/// The arguments are parsed with the very same parser the client used, so a daemon
+/// run and a direct run differ in nothing but what they had to build first.
+fn serve(host: &mut shell::Host, args: Vec<String>) -> daemon::Reply {
+    // This overlay's clock starts here — a few hundred microseconds after the
+    // invocation's own, which is all the client spent reaching us.
+    let t0 = Instant::now();
+    let cli = match Cli::try_parse_from(std::iter::once("wlr-switcher".to_string()).chain(args)) {
+        Ok(cli) => cli,
+        Err(e) => return daemon::Reply::Err(e.render().to_string()),
+    };
+    // Runs that are not a daemon's to make. A client settles this before asking (see
+    // `daemon_can_serve`), so only a hand-sent line reaches here.
+    if cli.daemon || cli.no_daemon || cli.stop_daemon || cli.no_gpu || cli.doctor {
+        return daemon::Reply::Err(tr!("daemon-cannot-serve"));
+    }
+    // The same single-instance guard a one-shot run takes, and for the same reason:
+    // it also keeps a `--no-daemon` run from stacking an overlay on the daemon's.
+    let Some(_lock) = acquire_switch_lock() else {
+        return daemon::Reply::Busy;
+    };
+    match run(cli, t0, Some(host)) {
+        Ok(Ran::Switched) => daemon::Reply::Done,
+        Ok(Ran::Cancelled) => daemon::Reply::Cancelled,
+        Err(reason) => daemon::Reply::Err(reason),
     }
 }

@@ -151,14 +151,24 @@ impl DmabufImporter for HostImporter<'_> {
     }
 }
 
-/// EGL/GL state bound to a `wl_surface`, created once the surface has its first
-/// size. Owns the egui_glow painter and the dma-buf texture cache.
+/// EGL/GL state for one host: the display, the context and everything realised on
+/// it — the egui_glow painter with its compiled shaders, the glyph atlas and the
+/// dma-buf texture cache — plus the window surface it currently draws to.
+///
+/// The context outlives the surface. A host that shows one overlay builds both
+/// together and drops both; the switcher's daemon keeps the context for the session
+/// and [`Gpu::bind`]s it to each overlay's own surface in turn, which is what makes
+/// the second overlay cost milliseconds instead of ninety.
 pub struct Gpu {
     egl: Egl,
     display: egl::Display,
-    surface: egl::Surface,
+    /// The framebuffer configuration every window surface is created with.
+    config: egl::Config,
     context: egl::Context,
-    egl_window: wayland_egl::WlEglSurface,
+    /// Where the context draws: the EGL surface wrapping a `wl_surface`, with the
+    /// native window it is built on. `None` between two overlays — a daemon's host
+    /// holds the context long after the surface it last drew to is gone.
+    target: Option<Target>,
     painter: egui_glow::Painter,
     /// dma-buf import entry points, if the driver supports them.
     dmabuf_egl: Option<DmabufEgl>,
@@ -167,8 +177,8 @@ pub struct Gpu {
 }
 
 impl Gpu {
-    /// Build the EGL/GLES context for `surface` at physical size `pw`×`ph`.
-    /// Panics on EGL setup failure (the host can't render without it).
+    /// Build the EGL/GLES context and point it at `surface`, at physical size
+    /// `pw`×`ph`. Panics on EGL setup failure (the host can't render without it).
     pub fn new(conn: &Connection, surface: &WlSurface, pw: i32, ph: i32) -> Gpu {
         let lib = unsafe { egl::DynamicInstance::<egl::EGL1_4>::load_required() }
             .expect("libEGL not found");
@@ -208,26 +218,7 @@ impl Gpu {
             })
             .expect("eglCreateContext");
 
-        let egl_window = wayland_egl::WlEglSurface::new(surface.id(), pw, ph).expect("wl_egl");
-        let egl_surface = unsafe {
-            egl.create_window_surface(
-                display,
-                config,
-                egl_window.ptr() as egl::NativeWindowType,
-                None,
-            )
-            .expect("eglCreateWindowSurface")
-        };
-        egl.make_current(display, Some(egl_surface), Some(egl_surface), Some(context))
-            .expect("eglMakeCurrent");
-
-        // Present without EGL's own throttling: on Wayland the compositor paces us
-        // through `wl_surface.frame`, and a blocking `eglSwapBuffers` on top of that is
-        // not just redundant but dangerous. It waits on the driver's private event queue
-        // for a buffer release that never comes if the output stopped composing — asleep,
-        // blanked or gone — wedging the calling thread for as long as that lasts. Callers
-        // pace themselves on frame callbacks instead.
-        let _ = egl.swap_interval(display, 0);
+        let target = Target::new(&egl, display, config, context, surface, pw, ph);
 
         let gl = unsafe {
             glow::Context::from_loader_function(|s| {
@@ -244,19 +235,92 @@ impl Gpu {
         Gpu {
             egl,
             display,
-            surface: egl_surface,
+            config,
             context,
-            egl_window,
+            target: Some(target),
             painter,
             dmabuf_egl,
             dmabuf_tex: HashMap::new(),
         }
     }
 
+    /// Point the context at another `wl_surface`, releasing the one it was drawing to.
+    ///
+    /// An overlay's layer surface cannot be handed to the next overlay: the compositor
+    /// picks which output it belongs to when it is created, so a host that shows
+    /// several builds a fresh one each time and binds it here. Only the window surface
+    /// follows — the display, the context, the compiled shaders and the glyph atlas
+    /// are what cost, and they stay.
+    pub fn bind(&mut self, surface: &WlSurface, pw: i32, ph: i32) {
+        self.unbind();
+        self.target = Some(Target::new(
+            &self.egl,
+            self.display,
+            self.config,
+            self.context,
+            surface,
+            pw,
+            ph,
+        ));
+    }
+
+    /// Release the window surface, keeping the context and everything realised on it.
+    ///
+    /// Called before the `wl_surface` it wraps is destroyed: the other order leaves
+    /// EGL talking about an object the compositor has already forgotten.
+    pub fn unbind(&mut self) {
+        let Some(target) = self.target.take() else {
+            return;
+        };
+        // Detach first, then destroy the surface while its native window is still
+        // alive — `target` is dropped, in field order, once this returns.
+        let _ = self.egl.make_current(self.display, None, None, None);
+        let _ = self.egl.destroy_surface(self.display, target.surface);
+    }
+
     /// Resize the EGL window to a new physical size (after a surface configure /
     /// scale change).
     pub fn resize(&self, pw: i32, ph: i32) {
-        self.egl_window.resize(pw, ph, 0, 0);
+        if let Some(target) = self.target.as_ref() {
+            target.egl_window.resize(pw, ph, 0, 0);
+        }
+    }
+
+    /// Rasterise the glyph atlas and upload it, without presenting anything.
+    ///
+    /// The first egui pass parses the font files and turns their glyphs into an atlas
+    /// texture — a few milliseconds paid on the very frame the overlay becomes
+    /// visible. A host that keeps a [`Gpu`] across overlays (the switcher's daemon)
+    /// pays it at startup instead. Only `paint_and_update_textures` runs: no
+    /// primitives and no `swap_buffers`, so nothing is attached to the surface and an
+    /// unmapped one stays unmapped.
+    pub fn prewarm(&mut self, egui_ctx: &egui::Context) {
+        let Some(surface) = self.target.as_ref().map(|t| t.surface) else {
+            return;
+        };
+        self.egl
+            .make_current(
+                self.display,
+                Some(surface),
+                Some(surface),
+                Some(self.context),
+            )
+            .ok();
+        let raw_input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(64.0, 64.0),
+            )),
+            ..Default::default()
+        };
+        // Text has to be laid out for any glyph to reach the atlas.
+        let mut delta = egui_ctx
+            .run_ui(raw_input, |ui| {
+                ui.label("Ag");
+            })
+            .textures_delta;
+        self.painter
+            .paint_and_update_textures([64, 64], 1.0, &[], &mut delta);
     }
 
     /// Run one egui frame and present it. `run_ui` builds the UI; it is handed the
@@ -282,11 +346,15 @@ impl Gpu {
             .native_pixels_per_point = Some(ppp);
 
         let (pw, ph) = size_px;
+        // Nothing to draw to between two overlays; a host only paints while one is up.
+        let Some(surface) = self.target.as_ref().map(|t| t.surface) else {
+            return;
+        };
         self.egl
             .make_current(
                 self.display,
-                Some(self.surface),
-                Some(self.surface),
+                Some(surface),
+                Some(surface),
                 Some(self.context),
             )
             .ok();
@@ -317,7 +385,55 @@ impl Gpu {
         }
         self.painter
             .paint_and_update_textures([pw, ph], ppp, &prims, &mut textures_delta);
-        self.egl.swap_buffers(self.display, self.surface).ok();
+        self.egl.swap_buffers(self.display, surface).ok();
+    }
+}
+
+/// An EGL window surface and the native window it wraps.
+struct Target {
+    surface: egl::Surface,
+    /// Declared after the surface so it is dropped after it: `eglDestroySurface` must
+    /// run while the native window it was built on is still there.
+    egl_window: wayland_egl::WlEglSurface,
+}
+
+impl Target {
+    /// Wrap `surface` in a native window and make the EGL surface over it current.
+    fn new(
+        egl: &Egl,
+        display: egl::Display,
+        config: egl::Config,
+        context: egl::Context,
+        surface: &WlSurface,
+        pw: i32,
+        ph: i32,
+    ) -> Target {
+        let egl_window =
+            wayland_egl::WlEglSurface::new(surface.id(), pw.max(1), ph.max(1)).expect("wl_egl");
+        let egl_surface = unsafe {
+            egl.create_window_surface(
+                display,
+                config,
+                egl_window.ptr() as egl::NativeWindowType,
+                None,
+            )
+            .expect("eglCreateWindowSurface")
+        };
+        egl.make_current(display, Some(egl_surface), Some(egl_surface), Some(context))
+            .expect("eglMakeCurrent");
+
+        // Present without EGL's own throttling: on Wayland the compositor paces us
+        // through `wl_surface.frame`, and a blocking `eglSwapBuffers` on top of that is
+        // not just redundant but dangerous. It waits on the driver's private event queue
+        // for a buffer release that never comes if the output stopped composing — asleep,
+        // blanked or gone — wedging the calling thread for as long as that lasts. Callers
+        // pace themselves on frame callbacks instead.
+        let _ = egl.swap_interval(display, 0);
+
+        Target {
+            surface: egl_surface,
+            egl_window,
+        }
     }
 }
 
@@ -329,8 +445,7 @@ impl Drop for Gpu {
     /// `EGL_BAD_ALLOC`. Detach the context first, then destroy the surface while its
     /// `WlEglSurface` native window is still alive — that field is dropped afterwards.
     fn drop(&mut self) {
-        let _ = self.egl.make_current(self.display, None, None, None);
-        let _ = self.egl.destroy_surface(self.display, self.surface);
+        self.unbind();
         let _ = self.egl.destroy_context(self.display, self.context);
     }
 }

@@ -16,3 +16,7 @@ filter-no-match = No open window matches { $filter }. Nothing to show.
 pid-unsupported = This compositor does not report the process behind a window, so --pid cannot be applied. It needs the IPC of sway, Hyprland or niri. Run `wlr-peek doctor` to see whether a focus backend was detected.
 hints-need-keyboard = --hints needs a layout that has no filter field: use --layout strip or --layout grid.
 grid-needs-card = --grid sizes the card, so it needs --layout card (the default). The exposé and the strip lay themselves out.
+daemon-already-running = A wlr-switcher daemon is already running.
+daemon-none = No wlr-switcher daemon is running.
+daemon-gone = The wlr-switcher daemon stopped without answering; nothing was switched.
+daemon-cannot-serve = A daemon cannot take this run on: --no-gpu and --doctor change what the whole process does. Run it with --no-daemon.

@@ -14,7 +14,7 @@ Five graphical tools for **wlroots and derivatives**.
 | Tool | What it does | crate |
 | --- | --- | --- |
 | **[wlr-chooser](crates/wlr-chooser)** | Window & screen picker for screencast portals (`xdg-desktop-portal-wlr`) — a rofi-like overlay with live thumbnails. | [![v](https://img.shields.io/crates/v/wlr-chooser.svg)](https://crates.io/crates/wlr-chooser) |
-| **[wlr-switcher](crates/wlr-chooser)** | Live **Alt-Tab / exposé** window switcher (macOS-style strip, full-screen grid, or card) with hold-to-switch and live previews. Ships with `wlr-chooser`. | [![v](https://img.shields.io/crates/v/wlr-chooser.svg)](https://crates.io/crates/wlr-chooser) |
+| **[wlr-switcher](crates/wlr-chooser)** | Live **Alt-Tab / exposé** window switcher (macOS-style strip, full-screen grid, or card) with hold-to-switch and live previews. An optional daemon puts the overlay on screen in milliseconds. Ships with `wlr-chooser`. | [![v](https://img.shields.io/crates/v/wlr-chooser.svg)](https://crates.io/crates/wlr-chooser) |
 | **[wlr-peek](crates/wlr-peek)** | **Inspect the screen** — colour picker, loupe, OCR, live picture-in-picture **mirror** (window or region), **change monitor** (`watch`), and **visual grep**. | [![v](https://img.shields.io/crates/v/wlr-peek.svg)](https://crates.io/crates/wlr-peek) |
 | **[wlr-shot](crates/wlr-shot)** | **Screen capture** — screenshots of an output/region/window (PNG/JPEG/PPM), copy to clipboard; plus **recording** (H.264, or animated GIF/WebP) with **system audio** & **timelapse** (NVENC/VAAPI/libx264). Shoots and records **windows, even those you can't see** — occluded behind others, or on another workspace — by name, with no clicking. | [![v](https://img.shields.io/crates/v/wlr-shot.svg)](https://crates.io/crates/wlr-shot) |
 | **[wlr-draw](crates/wlr-draw)** | **Draw on screen** — a transparent annotation overlay (gromit-mpx-style): freehand, shapes, arrows, text, dwell-to-snap, element move, plus presenter **spotlight**, **freeze-frame** and **save**. Daemon + control socket. | [![v](https://img.shields.io/crates/v/wlr-draw.svg)](https://crates.io/crates/wlr-draw) |
@@ -179,7 +179,7 @@ rm -f ~/.config/systemd/user/wlr-draw.service
 ## Documentation
 
 - **[wlr-chooser README](crates/wlr-chooser/README.md)** — portal setup, options,
-  the `wlr-switcher` Alt-Tab/exposé, theming and localisation.
+  the `wlr-switcher` Alt-Tab/exposé and its daemon, theming and localisation.
 - **[wlr-peek README](crates/wlr-peek/README.md)** — colour picker, loupe, OCR, live
   mirror, change monitor and visual grep.
 - **[wlr-shot README](crates/wlr-shot/README.md)** — screenshots, recording and

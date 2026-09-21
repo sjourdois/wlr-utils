@@ -16,3 +16,7 @@ filter-no-match = { $filter }와(과) 일치하는 열린 창이 없습니다. �
 pid-unsupported = 이 컴포지터는 창이 속한 프로세스를 알려주지 않으므로 --pid를 적용할 수 없습니다. sway, Hyprland 또는 niri의 IPC가 필요합니다. `wlr-peek doctor`를 실행하여 포커스 백엔드가 감지되었는지 확인하세요.
 hints-need-keyboard = --hints는 필터 입력란이 없는 레이아웃이 필요합니다. --layout strip 또는 --layout grid를 사용하세요.
 grid-needs-card = --grid는 카드 크기를 정하므로 --layout card(기본값)가 필요합니다. 엑스포제와 스트립은 스스로 배치됩니다.
+daemon-already-running = wlr-switcher 데몬이 이미 실행 중입니다.
+daemon-none = 실행 중인 wlr-switcher 데몬이 없습니다.
+daemon-gone = wlr-switcher 데몬이 응답하지 않고 종료되었습니다. 창이 전환되지 않았습니다.
+daemon-cannot-serve = 데몬은 이 실행을 맡을 수 없습니다. --no-gpu와 --doctor는 프로세스 전체의 동작을 바꿉니다. --no-daemon으로 실행하세요.

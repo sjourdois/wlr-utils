@@ -5,8 +5,13 @@
 //! `egui_glow` on an EGL/GLES context bound to the layer surface). Only this
 //! windowing layer differs from a normal app; the whole UI (`ui::App`) is reused
 //! unchanged.
+//!
+//! The host is [`Host`], and it outlives the overlay it shows: a one-shot run
+//! ([`run`]) builds one, shows one overlay and drops it, while the switcher's daemon
+//! keeps one for the whole session and shows every overlay on it.
 
 use crate::ui::App;
+use rustix::event::{PollFd, PollFlags, poll};
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState, FrameCallbackData},
     delegate_dispatch2, delegate_registry,
@@ -26,9 +31,10 @@ use smithay_client_toolkit::{
         },
     },
 };
+use std::os::fd::{AsFd, BorrowedFd};
 use std::time::Instant;
 use wayland_client::{
-    Connection, Dispatch, Proxy, QueueHandle,
+    Connection, Dispatch, EventQueue, Proxy, QueueHandle,
     globals::registry_queue_init,
     protocol::{wl_keyboard, wl_output, wl_pointer, wl_seat, wl_surface},
 };
@@ -37,15 +43,27 @@ use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::{
     zwp_keyboard_shortcuts_inhibitor_v1::ZwpKeyboardShortcutsInhibitorV1,
 };
 use wlr_capture::render::Gpu;
+use wlr_capture::theme;
 
 struct State {
     registry_state: RegistryState,
     seat_state: SeatState,
     output_state: OutputState,
 
-    layer: LayerSurface,
+    compositor: CompositorState,
+    layer_shell: LayerShell,
+    /// The overlay's surface, built for it and destroyed with it. The compositor
+    /// picks which output a layer surface belongs to when it is created, so the next
+    /// overlay — which may want another output — gets one of its own.
+    layer: Option<LayerSurface>,
+    /// A surface with no role, never committed, kept only so a prewarmed host has
+    /// somewhere to realise its EGL context before any overlay exists.
+    scratch: Option<wl_surface::WlSurface>,
     keyboard: Option<wl_keyboard::WlKeyboard>,
     pointer: Option<wl_pointer::WlPointer>,
+    /// The seat the keyboard came from, to inhibit its shortcuts on each overlay's
+    /// own surface.
+    seat: Option<wl_seat::WlSeat>,
 
     /// Compositor-shortcuts inhibitor: while the overlay is focused, the compositor
     /// forwards every key (incl. the `Mod1+Tab` chord) to us instead of running its
@@ -54,8 +72,13 @@ struct State {
     shortcuts_inhibitor: Option<ZwpKeyboardShortcutsInhibitorV1>,
 
     egui_ctx: egui::Context,
-    app: App,
+    /// The overlay being shown, or `None` while the host sits idle between two.
+    app: Option<App>,
     gpu: Option<Gpu>,
+    /// The seat's keymap, as last announced. Kept because it is announced once, with
+    /// the keyboard: an overlay created later would otherwise never learn what the
+    /// physical keys its hints name actually print.
+    keymap: Option<String>,
 
     // logical size (points) and integer scale.
     width: u32,
@@ -117,83 +140,270 @@ fn is_logo(k: Keysym) -> bool {
 /// Run the picker as a layer-shell overlay until the user picks or cancels.
 /// `t0` is the process start, for cold-start timing (see [`tlog`]).
 pub fn run(app: App, t0: Instant) -> anyhow::Result<()> {
-    let conn = Connection::connect_to_env()?;
-    let (globals, mut event_queue) = registry_queue_init(&conn)?;
-    let qh = event_queue.handle();
-    tlog(t0, "wayland connected + globals");
+    Host::new()?.show(app, t0)
+}
 
-    let compositor =
-        CompositorState::bind(&globals, &qh).map_err(|e| anyhow::anyhow!("wl_compositor: {e}"))?;
-    let layer_shell =
-        LayerShell::bind(&globals, &qh).map_err(|e| anyhow::anyhow!("layer-shell missing: {e}"))?;
-    // Optional: present on sway and most wlroots compositors.
-    let shortcuts_mgr: Option<ZwpKeyboardShortcutsInhibitManagerV1> =
-        globals.bind(&qh, 1..=1, ()).ok();
+/// A layer-shell host, reusable across overlays.
+///
+/// Building one is most of the cold start: the Wayland connection and — some sixty
+/// milliseconds of it on an NVIDIA driver — the EGL context with its compiled
+/// shaders. [`run`] builds one, shows one overlay and drops it; the
+/// switcher's daemon builds one at startup and shows every overlay on it, so each
+/// costs no more than building a surface and painting a frame.
+///
+/// The surface is what does *not* carry over. A compositor settles which output a
+/// layer surface belongs to when it is created, so a host that kept one would pin
+/// every overlay to whichever screen was in front when it started; each overlay
+/// builds its own and the context is bound to it in turn. Between two, the host holds
+/// no surface at all — nothing on screen, no keyboard held, and outputs free to come
+/// and go.
+pub struct Host {
+    // Declaration order is drop order, and it matters here: the state owns the `Gpu`,
+    // whose destructor calls into EGL, which reaches the compositor through this
+    // connection. Drop the connection first and those calls land on a closed display —
+    // a segfault on the way out. The state goes first, the connection last.
+    state: State,
+    queue: EventQueue<State>,
+    conn: Connection,
+}
 
-    let surface = compositor.create_surface(&qh);
-    let layer = layer_shell.create_layer_surface(
-        &qh,
-        surface,
-        Layer::Overlay,
-        Some(crate::ui::APP_ID),
-        None,
-    );
-    layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
-    layer.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
-    layer.set_exclusive_zone(-1); // cover everything, including bars
-    layer.commit();
+impl Host {
+    /// Connect and bind the globals. No surface yet: each overlay builds its own.
+    pub fn new() -> anyhow::Result<Host> {
+        let conn = Connection::connect_to_env()?;
+        let (globals, queue) = registry_queue_init(&conn)?;
+        let qh = queue.handle();
 
-    let egui_ctx = egui::Context::default();
-    app.apply_theme(&egui_ctx);
+        let compositor = CompositorState::bind(&globals, &qh)
+            .map_err(|e| anyhow::anyhow!("wl_compositor: {e}"))?;
+        let layer_shell = LayerShell::bind(&globals, &qh)
+            .map_err(|e| anyhow::anyhow!("layer-shell missing: {e}"))?;
+        // Optional: present on sway and most wlroots compositors.
+        let shortcuts_mgr: Option<ZwpKeyboardShortcutsInhibitManagerV1> =
+            globals.bind(&qh, 1..=1, ()).ok();
 
-    let hold = app.hold();
-    let mut state = State {
-        registry_state: RegistryState::new(&globals),
-        seat_state: SeatState::new(&globals, &qh),
-        output_state: OutputState::new(&globals, &qh),
-        layer,
-        keyboard: None,
-        pointer: None,
-        shortcuts_mgr,
-        shortcuts_inhibitor: None,
-        egui_ctx,
-        app,
-        gpu: None,
-        width: 0,
-        height: 0,
-        scale: 1,
-        start: Instant::now(),
-        events: Vec::new(),
-        modifiers: egui::Modifiers::default(),
-        pointer_pos: egui::Pos2::ZERO,
-        hold,
-        armed: false,
-        alt_down: false,
-        logo_down: false,
-        armed_alt: false,
-        armed_logo: false,
-        prev_held: false,
-        awaiting_enter_modifiers: false,
-        t0,
-        first_paint_logged: false,
-    };
-
-    while !state.app.closing() {
-        event_queue.blocking_dispatch(&mut state)?;
+        let state = State {
+            registry_state: RegistryState::new(&globals),
+            seat_state: SeatState::new(&globals, &qh),
+            output_state: OutputState::new(&globals, &qh),
+            compositor,
+            layer_shell,
+            layer: None,
+            scratch: None,
+            keyboard: None,
+            pointer: None,
+            seat: None,
+            shortcuts_mgr,
+            shortcuts_inhibitor: None,
+            egui_ctx: egui::Context::default(),
+            app: None,
+            gpu: None,
+            keymap: None,
+            width: 0,
+            height: 0,
+            scale: 1,
+            start: Instant::now(),
+            events: Vec::new(),
+            modifiers: egui::Modifiers::default(),
+            pointer_pos: egui::Pos2::ZERO,
+            hold: false,
+            armed: false,
+            alt_down: false,
+            logo_down: false,
+            armed_alt: false,
+            armed_logo: false,
+            prev_held: false,
+            awaiting_enter_modifiers: false,
+            t0: Instant::now(),
+            first_paint_logged: false,
+        };
+        Ok(Host { state, queue, conn })
     }
-    Ok(())
+
+    /// Build up front everything the first overlay would otherwise build while the
+    /// user waits: the seat (and its keymap), the EGL context, the compiled shaders
+    /// and the glyph atlas. For a host that will show more than one overlay; a
+    /// one-shot run has nothing to gain from it.
+    pub fn prewarm(&mut self, t0: Instant) -> anyhow::Result<()> {
+        // The seat and output globals, and with the keyboard the keymap the tile
+        // hints are named from.
+        self.queue.roundtrip(&mut self.state)?;
+        tlog(t0, "seat + outputs bound");
+        // The theme the overlays will use: its fonts are what the atlas is made of,
+        // and resolving them is cached process-wide for the ones that follow.
+        theme::Theme::load().apply(&self.state.egui_ctx);
+        tlog(t0, "theme applied (fonts)");
+        // The context has to be realised on *some* surface, and no overlay exists yet
+        // — nor would its surface outlive it. A role-less `wl_surface`, never
+        // committed and so never shown, is enough to build it on; each overlay then
+        // takes it over with `Gpu::bind`.
+        let scratch = self.state.compositor.create_surface(&self.queue.handle());
+        self.state.ensure_gpu(&self.conn, &scratch);
+        self.state.scratch = Some(scratch);
+        let ctx = self.state.egui_ctx.clone();
+        if let Some(gpu) = self.state.gpu.as_mut() {
+            gpu.prewarm(&ctx);
+        }
+        tlog(t0, "glyph atlas uploaded");
+        Ok(())
+    }
+
+    /// Wait until `other` has something to read, keeping the Wayland connection
+    /// alive meanwhile.
+    ///
+    /// How a host with no overlay on it waits for the next one. Nothing of ours is on
+    /// screen, but the compositor keeps talking — outputs come and go, scales change,
+    /// and it pings — and a connection left unread fills its buffer and wedges, so
+    /// the two are waited on together rather than the socket alone.
+    pub fn idle_until_readable(&mut self, other: BorrowedFd<'_>) -> anyhow::Result<()> {
+        loop {
+            self.queue.dispatch_pending(&mut self.state)?;
+            self.queue.flush()?;
+            // `None` means events arrived between the dispatch and here: go round and
+            // hand them over before sleeping on the fd.
+            let Some(guard) = self.queue.prepare_read() else {
+                continue;
+            };
+            let wayland = self.conn.as_fd();
+            let mut fds = [
+                PollFd::new(&wayland, PollFlags::IN),
+                PollFd::new(&other, PollFlags::IN),
+            ];
+            poll(&mut fds, None)?;
+            let (wayland_ready, other_ready) =
+                (!fds[0].revents().is_empty(), !fds[1].revents().is_empty());
+            if wayland_ready {
+                // Also how the daemon learns the compositor is gone: the read fails
+                // and the error takes it down, rather than leaving it on a dead
+                // connection answering keybindings with nothing.
+                guard.read()?;
+            } else {
+                drop(guard);
+            }
+            if other_ready {
+                return Ok(());
+            }
+        }
+    }
+
+    /// Show one overlay: build its surface, run until the user picks or cancels,
+    /// then take it down and hand the host back for the next one. `t0` is the start
+    /// of *this* overlay, for timing (see [`tlog`]).
+    pub fn show(&mut self, app: App, t0: Instant) -> anyhow::Result<()> {
+        self.state.begin(app, t0, &self.queue.handle());
+        // A commit with no buffer attached is what asks for a configure; the frame
+        // painted in answer is what maps the surface.
+        if let Some(layer) = self.state.layer.as_ref() {
+            layer.commit();
+        }
+        while !self.state.closing() {
+            self.queue.blocking_dispatch(&mut self.state)?;
+        }
+        self.state.end();
+        // Let the teardown reach the compositor before the caller moves on — focusing
+        // the window it picked, answering a client.
+        self.queue.roundtrip(&mut self.state)?;
+        Ok(())
+    }
 }
 
 impl State {
-    fn ensure_gpu(&mut self, conn: &Connection) {
-        if self.gpu.is_some() || self.width == 0 {
+    /// Whether the run is over — no overlay installed, or the one installed is done.
+    fn closing(&self) -> bool {
+        self.app.as_ref().is_none_or(|a| a.closing())
+    }
+
+    /// Install the overlay for one run, resetting everything the previous one left
+    /// behind so a reused host opens exactly like a fresh process would.
+    fn begin(&mut self, app: App, t0: Instant, qh: &QueueHandle<Self>) {
+        // egui's memory is where widget state lives — scroll offsets, which field
+        // holds the focus, animation clocks. Wiping it is what keeps the second
+        // overlay from inheriting the first one's; the fonts and the glyph atlas live
+        // elsewhere and survive, which is the whole point of reusing the context.
+        self.egui_ctx.memory_mut(|m| *m = Default::default());
+        app.apply_theme(&self.egui_ctx);
+        tlog(t0, "theme applied (fonts)");
+        self.hold = app.hold();
+        self.app = Some(app);
+        if let (Some(app), Some(keymap)) = (self.app.as_mut(), self.keymap.as_ref()) {
+            app.set_keymap(keymap);
+        }
+        self.start = Instant::now();
+        self.events.clear();
+        self.modifiers = egui::Modifiers::default();
+        self.pointer_pos = egui::Pos2::ZERO;
+        self.armed = false;
+        self.alt_down = false;
+        self.logo_down = false;
+        self.armed_alt = false;
+        self.armed_logo = false;
+        self.prev_held = false;
+        self.awaiting_enter_modifiers = false;
+        self.t0 = t0;
+        self.first_paint_logged = false;
+
+        // The surface comes last, and it is this overlay's own: the compositor reads
+        // the focused output when the layer surface is created, so one built at
+        // daemon startup would pin every overlay to whichever screen was in front
+        // back then.
+        let surface = self.compositor.create_surface(qh);
+        let layer = self.layer_shell.create_layer_surface(
+            qh,
+            surface,
+            Layer::Overlay,
+            Some(crate::ui::APP_ID),
+            None,
+        );
+        layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
+        layer.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
+        layer.set_exclusive_zone(-1); // cover everything, including bars
+        // Stop the compositor from eating our own keybinding chord (e.g. `Mod1+Tab`)
+        // while we're up, so Tab reaches us to cycle. Tied to the surface, so it is
+        // asked for again with every overlay.
+        if let (Some(mgr), Some(seat)) = (&self.shortcuts_mgr, &self.seat) {
+            self.shortcuts_inhibitor =
+                Some(mgr.inhibit_shortcuts(layer.wl_surface(), seat, qh, ()));
+        }
+        // A context built earlier draws to the new surface from here on; at the last
+        // size we knew, which the first configure corrects.
+        if let Some(gpu) = self.gpu.as_mut() {
+            gpu.bind(
+                layer.wl_surface(),
+                (self.width * self.scale) as i32,
+                (self.height * self.scale) as i32,
+            );
+        }
+        self.layer = Some(layer);
+    }
+
+    /// Take the overlay down: the surface goes, which hands the keyboard back and
+    /// clears the screen, while the host — and the EGL context the next overlay
+    /// reuses — stays.
+    fn end(&mut self) {
+        self.app = None;
+        if let Some(inhibitor) = self.shortcuts_inhibitor.take() {
+            inhibitor.destroy();
+        }
+        // In this order: EGL must let go of the surface before the compositor is told
+        // to forget it.
+        if let Some(gpu) = self.gpu.as_mut() {
+            gpu.unbind();
+        }
+        self.layer = None;
+    }
+
+    fn ensure_gpu(&mut self, conn: &Connection, surface: &wl_surface::WlSurface) {
+        if self.gpu.is_some() {
             return;
         }
+        // A host built ahead of any overlay has no configure yet, so no size: build
+        // at 1×1 and let the first `configure` resize. What costs is realising the
+        // context, not the size it is realised at.
         let (pw, ph) = (
-            (self.width * self.scale) as i32,
-            (self.height * self.scale) as i32,
+            (self.width * self.scale).max(1) as i32,
+            (self.height * self.scale).max(1) as i32,
         );
-        self.gpu = Some(Gpu::new(conn, self.layer.wl_surface(), pw, ph));
+        self.gpu = Some(Gpu::new(conn, surface, pw, ph));
         tlog(self.t0, "gpu ready (egl init + shader compile)");
     }
 
@@ -209,8 +419,10 @@ impl State {
             focused: true,
             ..Default::default()
         };
-        let backdrop = self.app.backdrop();
-        let app = &mut self.app;
+        let Some(app) = self.app.as_mut() else {
+            return;
+        };
+        let backdrop = app.backdrop();
         let Some(gpu) = self.gpu.as_mut() else {
             return;
         };
@@ -226,19 +438,37 @@ impl State {
 
     fn draw_frame(&mut self, conn: &Connection, qh: &QueueHandle<Self>) {
         // Once closing, don't paint: a frame now would flash the overlay a quick tap
-        // kept blank.
-        if self.app.closing() {
+        // kept blank. Idle between two overlays, there is nothing to paint at all.
+        if self.closing() {
             return;
         }
-        self.ensure_gpu(conn);
+        let Some(surface) = self.layer.as_ref().map(|l| l.wl_surface().clone()) else {
+            return;
+        };
+        self.ensure_gpu(conn, &surface);
         // ask for the next frame so we keep draining the capture channel.
-        let surface = self.layer.wl_surface().clone();
         surface.frame(qh, FrameCallbackData(surface.clone()));
         self.render();
-        self.layer.commit();
+        surface.commit();
         if !self.first_paint_logged {
             self.first_paint_logged = true;
             tlog(self.t0, "first frame committed (overlay visible)");
+        }
+    }
+}
+
+impl Drop for State {
+    /// Let EGL go of the overlay's surface before anything else is torn down.
+    ///
+    /// Fields are dropped in declaration order, and the layer surface is declared
+    /// well before the `Gpu`: without this, `eglDestroySurface` would run against a
+    /// `wl_surface` the compositor has already forgotten.
+    fn drop(&mut self) {
+        if let Some(gpu) = self.gpu.as_mut() {
+            gpu.unbind();
+        }
+        if let Some(scratch) = self.scratch.take() {
+            scratch.destroy();
         }
     }
 }
@@ -252,7 +482,9 @@ impl CompositorHandler for State {
         new_factor: i32,
     ) {
         self.scale = new_factor.max(1) as u32;
-        self.layer.wl_surface().set_buffer_scale(new_factor.max(1));
+        if let Some(layer) = self.layer.as_ref() {
+            layer.wl_surface().set_buffer_scale(new_factor.max(1));
+        }
         if let (Some(gpu), true) = (self.gpu.as_ref(), self.width > 0) {
             gpu.resize(
                 (self.width * self.scale) as i32,
@@ -300,7 +532,9 @@ impl CompositorHandler for State {
 
 impl LayerShellHandler for State {
     fn closed(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &LayerSurface) {
-        self.app.cancel();
+        if let Some(app) = self.app.as_mut() {
+            app.cancel();
+        }
     }
 
     fn configure(
@@ -343,15 +577,10 @@ impl SeatHandler for State {
     ) {
         if cap == Capability::Keyboard && self.keyboard.is_none() {
             self.keyboard = self.seat_state.get_keyboard(qh, &seat, None).ok();
-            // Stop the compositor from eating our own keybinding chord (e.g.
-            // `Mod1+Tab`) while we're up, so Tab reaches us to cycle. Held until
-            // the surface (and inhibitor) is dropped at exit.
-            if self.shortcuts_inhibitor.is_none()
-                && let Some(mgr) = &self.shortcuts_mgr
-            {
-                self.shortcuts_inhibitor =
-                    Some(mgr.inhibit_shortcuts(self.layer.wl_surface(), &seat, qh, ()));
-            }
+            // Kept for the shortcuts inhibitor, which is asked for per overlay: it
+            // names a surface, and every overlay brings a new one (see
+            // [`State::begin`]).
+            self.seat = Some(seat.clone());
         }
         if cap == Capability::Pointer && self.pointer.is_none() {
             self.pointer = self.seat_state.get_pointer(qh, &seat).ok();
@@ -439,8 +668,14 @@ impl KeyboardHandler for State {
     ) {
         // The tile hints name physical keys; only the keymap says what this layout
         // prints on them. It arrives before focus does, so the labels are right from
-        // the first frame, and again whenever the user switches layout.
-        self.app.set_keymap(&keymap.as_string());
+        // the first frame, and again whenever the user switches layout. Kept as well
+        // as forwarded: on a reused host it is announced long before the overlay that
+        // needs it exists (see [`State::begin`]).
+        let keymap = keymap.as_string();
+        if let Some(app) = self.app.as_mut() {
+            app.set_keymap(&keymap);
+        }
+        self.keymap = Some(keymap);
     }
 
     fn update_modifiers(
@@ -486,20 +721,27 @@ impl State {
         if !self.hold {
             return;
         }
-        if !self.armed && (self.alt_down || self.logo_down) {
+        if !self.armed
+            && (self.alt_down || self.logo_down)
+            && let Some(app) = self.app.as_mut()
+        {
             self.armed = true;
             self.armed_alt = self.alt_down;
             self.armed_logo = self.logo_down;
-            self.app.arm();
+            app.arm();
             // A held modifier means a switch the user is steering, not a tap passing
             // through.
-            self.app.reveal();
+            app.reveal();
         }
         // Confirm on the release edge, without waiting for a painted frame: a quick
         // release deserves the switch it asked for.
         let held = self.any_armed_held();
-        if self.armed && self.prev_held && !held {
-            self.app.confirm_release();
+        if self.armed
+            && self.prev_held
+            && !held
+            && let Some(app) = self.app.as_mut()
+        {
+            app.confirm_release();
         }
         self.prev_held = held;
     }
@@ -507,9 +749,11 @@ impl State {
     /// Confirm if no launch modifier is held once focus-in's modifier state is known:
     /// it was released before we got focus, so no release event will come.
     fn infer_release(&mut self) {
-        if !self.armed {
-            self.app.arm();
-            self.app.confirm_release();
+        if !self.armed
+            && let Some(app) = self.app.as_mut()
+        {
+            app.arm();
+            app.confirm_release();
         }
     }
 
@@ -528,15 +772,24 @@ impl State {
         // egui (its TextEdit would otherwise eat Tab for focus traversal). Some
         // compositors send `ISO_Left_Tab` for Shift+Tab.
         let is_tab = event.keysym == Keysym::Tab || event.keysym == Keysym::ISO_Left_Tab;
-        if self.armed && pressed && is_tab {
+        if self.armed
+            && pressed
+            && is_tab
+            && let Some(app) = self.app.as_mut()
+        {
             let forward = event.keysym == Keysym::Tab && !self.modifiers.shift;
-            self.app.cycle(forward);
+            app.cycle(forward);
             return;
         }
         // A tile hint is a physical key, so it is matched on the evdev code rather than
         // on the keysym the layout derives from it. It picks straight away; the
         // keystroke stops here so it can't also land in the UI.
-        if pressed && self.app.press_hint(event.raw_code) {
+        if pressed
+            && self
+                .app
+                .as_mut()
+                .is_some_and(|app| app.press_hint(event.raw_code))
+        {
             return;
         }
         if let Some(key) = map_key(event.keysym) {

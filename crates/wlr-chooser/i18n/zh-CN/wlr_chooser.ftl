@@ -16,3 +16,7 @@ filter-no-match = 没有打开的窗口匹配 { $filter }。没有可显示的�
 pid-unsupported = 此合成器不报告窗口所属的进程，因此无法应用 --pid。这需要 sway、Hyprland 或 niri 的 IPC。运行 `wlr-peek doctor` 查看是否检测到焦点后端。
 hints-need-keyboard = --hints 需要没有筛选输入框的布局：请使用 --layout strip 或 --layout grid。
 grid-needs-card = --grid 用于确定卡片大小，因此需要 --layout card（默认）。总览和横排会自行排布。
+daemon-already-running = wlr-switcher 守护进程已在运行。
+daemon-none = 没有正在运行的 wlr-switcher 守护进程。
+daemon-gone = wlr-switcher 守护进程未作应答便已退出；没有切换任何窗口。
+daemon-cannot-serve = 守护进程无法承接此次运行：--no-gpu 和 --doctor 会改变整个进程的行为。请加上 --no-daemon 运行。

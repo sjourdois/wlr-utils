@@ -16,3 +16,7 @@ filter-no-match = Aucune fenêtre ouverte ne correspond à { $filter }. Rien à 
 pid-unsupported = Ce compositeur n’indique pas le processus auquel appartient une fenêtre, --pid ne peut donc pas être appliqué. Cela nécessite l’IPC de sway, Hyprland ou niri. Lancez `wlr-peek doctor` pour voir si un backend de focus a été détecté.
 hints-need-keyboard = --hints nécessite une présentation sans champ de filtre : utilisez --layout strip ou --layout grid.
 grid-needs-card = --grid dimensionne la carte : il nécessite --layout card (le défaut). L’exposé et la bande se disposent d’eux-mêmes.
+daemon-already-running = Un démon wlr-switcher tourne déjà.
+daemon-none = Aucun démon wlr-switcher ne tourne.
+daemon-gone = Le démon wlr-switcher s'est arrêté sans répondre ; aucune fenêtre n'a été activée.
+daemon-cannot-serve = Un démon ne peut pas prendre en charge cette exécution : --no-gpu et --doctor changent le comportement de tout le processus. Lancez-la avec --no-daemon.

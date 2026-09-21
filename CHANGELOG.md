@@ -4,6 +4,39 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **A daemon, so the switcher's overlay appears at once**
+  ([#11](https://github.com/sjourdois/wlr-utils/issues/11), requested by
+  [@aoterman12365](https://github.com/aoterman12365)) — `wlr-switcher --daemon` stays
+  in the background holding the Wayland connection, the EGL context and its compiled
+  shaders, and the glyph atlas: the initialisation an overlay spent about ninety
+  milliseconds on and then threw away. With one running, an ordinary `wlr-switcher`
+  hands it the run and the overlay is on screen in roughly ten — measured on an
+  NVIDIA driver at 2560×1440, where a cold start takes 93 to 109 ms.
+  - Nothing starts a daemon for you: put `exec_always wlr-switcher --daemon` in your
+    session autostart. With none listening, `wlr-switcher` shows the overlay itself
+    exactly as before, so existing keybindings need no change either way.
+  - **Nothing is captured while it idles.** The capture thread is spawned for each
+    overlay and dies with it; between two, the daemon holds a connection and a GPU
+    context and reads no window contents.
+  - Each overlay gets its own layer surface, so it still opens on the screen you are
+    working on, and outputs can come and go under an idle daemon.
+  - `--no-daemon` shows the overlay in the calling process even when a daemon is
+    running; `--stop-daemon` stops one. A run that asks for `--no-gpu` or `--doctor`
+    never goes through the daemon: they change what the whole process does.
+  - Exit statuses are what they always were: `0` for a switch, `1` for a cancel, `2`
+    for a failure, and `0` again for a keybinding pressed while an overlay is already
+    up (still a no-op, never a second overlay).
+
+### Fixed
+
+- **An overlay no longer resolves its fonts twice** — the font set a theme asks for
+  is resolved once per process and reused, which takes about twenty milliseconds off
+  every overlay after the first in a daemon, and changes nothing for a one-shot run.
+
 ## 1.9.0 — 2026-09-21
 
 ### Added

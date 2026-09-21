@@ -5,6 +5,7 @@
 //! they do with the picked source (print a token vs. focus the window).
 
 pub mod chooser_cli;
+pub mod daemon;
 pub mod hints;
 mod i18n;
 pub mod shell;
@@ -69,11 +70,24 @@ impl From<HintRowArg> for hints::HintRow {
 ///
 /// The card has a filter field the user types into, where a letter is a letter. Saying
 /// so beats accepting a flag that would then do nothing.
-pub(crate) fn reject_hints_on_card(hints: Option<HintRowArg>, layout: LayoutArg) {
+pub(crate) fn reject_hints_on_card(
+    hints: Option<HintRowArg>,
+    layout: LayoutArg,
+) -> Result<(), String> {
     if hints.is_some() && layout == LayoutArg::Card {
-        eprintln!("{}", crate::tr!("hints-need-keyboard"));
-        std::process::exit(2);
+        return Err(crate::tr!("hints-need-keyboard"));
     }
+    Ok(())
+}
+
+/// Report a pre-flight refusal the way a one-shot run does: on stderr, exit 2.
+///
+/// The refusals answer rather than exit because the switcher's daemon has to send
+/// them back to the client that asked; a binary running the overlay itself turns them
+/// back into an exit status here.
+pub(crate) fn exit_with(reason: String) -> ! {
+    eprintln!("{reason}");
+    std::process::exit(2);
 }
 
 impl From<OrderArg> for ui::Order {
@@ -122,12 +136,11 @@ impl From<FilterArgs> for ui::WindowFilters {
 pub(crate) fn require_window_pids(
     filters: &mut ui::WindowFilters,
     toplevels: &[wlr_capture::wl::Toplevel],
-) {
+) -> Result<(), String> {
     if filters.refresh_pids(toplevels) {
-        return;
+        return Ok(());
     }
-    eprintln!("{}", crate::tr!("pid-unsupported"));
-    std::process::exit(2);
+    Err(crate::tr!("pid-unsupported"))
 }
 
 /// Say so and exit when the window filter matches none of the open windows. The caller
@@ -136,19 +149,15 @@ pub(crate) fn require_window_pids(
 pub(crate) fn reject_empty_window_filter(
     toplevels: &[wlr_capture::wl::Toplevel],
     filters: &ui::WindowFilters,
-) {
+) -> Result<(), String> {
     if filters.is_empty()
         || toplevels
             .iter()
             .any(|w| filters.admits(ui::Candidate::from(w)))
     {
-        return;
+        return Ok(());
     }
-    eprintln!(
-        "{}",
-        crate::tr!("filter-no-match", filter = filters.describe())
-    );
-    std::process::exit(2);
+    Err(crate::tr!("filter-no-match", filter = filters.describe()))
 }
 
 /// Parse a `COLSxROWS` grid spec (e.g. `4x3`).
@@ -183,10 +192,36 @@ pub fn acquire_switch_lock() -> Option<std::fs::File> {
     Some(f)
 }
 
-/// Spawn the capture thread, build the overlay for `opts`, run it to completion,
-/// and return the picked source (if any). `t0` is the process start, for
-/// cold-start timing (see [`shell::tlog`]).
-pub fn run_overlay(mut opts: ui::Options, t0: Instant) -> anyhow::Result<Option<ui::Selection>> {
+/// Spawn the capture thread, build the overlay for `opts`, run it to completion on a
+/// host of its own, and return the picked source (if any). `t0` is the process start,
+/// for cold-start timing (see [`shell::tlog`]).
+pub fn run_overlay(opts: ui::Options, t0: Instant) -> anyhow::Result<Option<ui::Selection>> {
+    // The capture thread first, the host second: connecting, enumerating and opening
+    // sessions is the long pole for the thumbnails, and the host's own connection
+    // takes a millisecond it may as well spend in parallel.
+    let (app, out) = build_overlay(opts, t0);
+    let mut host = shell::Host::new()?;
+    shell::tlog(t0, "ui ready, entering overlay");
+    host.show(app, t0)?;
+    Ok(out.lock().unwrap().take())
+}
+
+/// Show one overlay on a host that is already up — the switcher's daemon reusing its
+/// warm Wayland connection and EGL context. `t0` is the start of *this* run.
+pub fn run_overlay_on(
+    host: &mut shell::Host,
+    opts: ui::Options,
+    t0: Instant,
+) -> anyhow::Result<Option<ui::Selection>> {
+    let (app, out) = build_overlay(opts, t0);
+    shell::tlog(t0, "ui ready, entering overlay");
+    host.show(app, t0)?;
+    Ok(out.lock().unwrap().take())
+}
+
+/// Spawn the capture thread and build the overlay it feeds, with the slot the picked
+/// source lands in.
+fn build_overlay(mut opts: ui::Options, t0: Instant) -> (ui::App, ui::Outcome) {
     // Before the overlay is up: once it holds the keyboard, no window has focus.
     let (order, focused) = opts.order.resolve();
     // The capture thread owns the window filter: it decides which windows exist at all,
@@ -206,11 +241,7 @@ pub fn run_overlay(mut opts: ui::Options, t0: Instant) -> anyhow::Result<Option<
     let out: ui::Outcome = Arc::new(Mutex::new(None));
     let theme = theme::Theme::load();
     let app = ui::App::new(rx, out.clone(), opts, focused, theme, gpu_failed);
-    shell::tlog(t0, "ui ready, entering overlay");
-    shell::run(app, t0)?;
-
-    let sel = out.lock().unwrap().take();
-    Ok(sel)
+    (app, out)
 }
 
 #[cfg(test)]

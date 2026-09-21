@@ -16,3 +16,7 @@ filter-no-match = Kein offenes Fenster entspricht { $filter }. Nichts anzuzeigen
 pid-unsupported = Dieser Compositor nennt den Prozess hinter einem Fenster nicht, daher kann --pid nicht angewendet werden. Dafür wird die IPC von sway, Hyprland oder niri benötigt. Führe `wlr-peek doctor` aus, um zu sehen, ob ein Fokus-Backend erkannt wurde.
 hints-need-keyboard = --hints benötigt eine Darstellung ohne Filterfeld: Verwenden Sie --layout strip oder --layout grid.
 grid-needs-card = --grid bemisst die Karte und benötigt daher --layout card (die Voreinstellung). Exposé und Leiste ordnen sich selbst an.
+daemon-already-running = Ein wlr-switcher-Daemon läuft bereits.
+daemon-none = Es läuft kein wlr-switcher-Daemon.
+daemon-gone = Der wlr-switcher-Daemon hat sich ohne Antwort beendet; es wurde nichts umgeschaltet.
+daemon-cannot-serve = Ein Daemon kann diesen Lauf nicht übernehmen: --no-gpu und --doctor ändern das Verhalten des gesamten Prozesses. Führe ihn mit --no-daemon aus.

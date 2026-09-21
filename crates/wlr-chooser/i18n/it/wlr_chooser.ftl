@@ -16,3 +16,7 @@ filter-no-match = Nessuna finestra aperta corrisponde a { $filter }. Niente da m
 pid-unsupported = Questo compositor non indica il processo a cui appartiene una finestra, quindi --pid non può essere applicato. Richiede l’IPC di sway, Hyprland o niri. Esegui `wlr-peek doctor` per vedere se è stato rilevato un backend di focus.
 hints-need-keyboard = --hints richiede una presentazione senza campo di filtro: usa --layout strip o --layout grid.
 grid-needs-card = --grid dimensiona la scheda, quindi richiede --layout card (il valore predefinito). L’exposé e la striscia si dispongono da soli.
+daemon-already-running = Un demone wlr-switcher è già in esecuzione.
+daemon-none = Nessun demone wlr-switcher è in esecuzione.
+daemon-gone = Il demone wlr-switcher si è fermato senza rispondere; non è stata attivata alcuna finestra.
+daemon-cannot-serve = Un demone non può farsi carico di questa esecuzione: --no-gpu e --doctor cambiano il comportamento dell'intero processo. Eseguila con --no-daemon.

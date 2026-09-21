@@ -16,3 +16,7 @@ filter-no-match = Geen enkel geopend venster komt overeen met { $filter }. Niets
 pid-unsupported = Deze compositor meldt niet welk proces bij een venster hoort, dus --pid kan niet worden toegepast. Daarvoor is de IPC van sway, Hyprland of niri nodig. Voer `wlr-peek doctor` uit om te zien of er een focus-backend is gevonden.
 hints-need-keyboard = --hints vereist een weergave zonder filterveld: gebruik --layout strip of --layout grid.
 grid-needs-card = --grid bepaalt de grootte van de kaart en vereist dus --layout card (de standaard). De exposé en de strip delen zichzelf in.
+daemon-already-running = Er draait al een wlr-switcher-daemon.
+daemon-none = Er draait geen wlr-switcher-daemon.
+daemon-gone = De wlr-switcher-daemon is gestopt zonder te antwoorden; er is niet van venster gewisseld.
+daemon-cannot-serve = Een daemon kan deze uitvoering niet overnemen: --no-gpu en --doctor veranderen het gedrag van het hele proces. Voer haar uit met --no-daemon.

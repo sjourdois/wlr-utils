@@ -19,6 +19,7 @@
 
 use egui::Color32;
 use serde::Deserialize;
+use std::sync::Mutex;
 
 /// Colours and fonts for the overlay UI, with generic-dark defaults (see [`Default`])
 /// overridable from `theme.toml`.
@@ -175,6 +176,40 @@ impl Theme {
     /// defaults, then a CJK fallback (so Japanese/Chinese/Korean render when a CJK
     /// font is installed).
     fn install_fonts(&self, ctx: &egui::Context) {
+        ctx.set_fonts(self.font_definitions());
+    }
+
+    /// The font set this theme asks for, resolved once per process.
+    ///
+    /// Building it costs about twenty milliseconds — fontconfig lookups plus reading
+    /// the font files off disk — and a tool that shows its overlay once pays that
+    /// once. The switcher's daemon shows many, from the same theme, and would pay it
+    /// at every one; egui then compares the result with what it already has and
+    /// throws the copy away. So the answer is cached under the three fields it
+    /// depends on, and a theme edit that changes any of them still rebuilds it.
+    fn font_definitions(&self) -> egui::FontDefinitions {
+        type Key = (Option<String>, Option<String>, Option<String>);
+        static CACHE: Mutex<Option<(Key, egui::FontDefinitions)>> = Mutex::new(None);
+
+        let key = (
+            self.font_path.clone(),
+            self.font.clone(),
+            self.cjk_font.clone(),
+        );
+        let mut slot = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((cached, fonts)) = slot.as_ref()
+            && *cached == key
+        {
+            return fonts.clone();
+        }
+        let fonts = self.build_fonts();
+        *slot = Some((key, fonts.clone()));
+        fonts
+    }
+
+    /// Resolve the configured families into an egui font set (the uncached half of
+    /// [`Self::font_definitions`]).
+    fn build_fonts(&self) -> egui::FontDefinitions {
         let mut fonts = egui::FontDefinitions::default();
         // `None` if libfontconfig.so.1 isn't loadable.
         let fc = fontconfig::Fontconfig::new();
@@ -219,7 +254,7 @@ impl Theme {
             }
         }
 
-        ctx.set_fonts(fonts);
+        fonts
     }
 }
 

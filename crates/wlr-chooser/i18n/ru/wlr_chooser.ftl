@@ -16,3 +16,7 @@ filter-no-match = Ни одно открытое окно не соответс�
 pid-unsupported = Этот композитор не сообщает, какому процессу принадлежит окно, поэтому --pid неприменим. Для этого нужен IPC sway, Hyprland или niri. Запустите `wlr-peek doctor`, чтобы узнать, обнаружен ли бэкенд фокуса.
 hints-need-keyboard = --hints требует режима без поля фильтра: используйте --layout strip или --layout grid.
 grid-needs-card = --grid задаёт размер карточки, поэтому требует --layout card (по умолчанию). Экспозе и полоса располагаются сами.
+daemon-already-running = Демон wlr-switcher уже запущен.
+daemon-none = Демон wlr-switcher не запущен.
+daemon-gone = Демон wlr-switcher завершился, не ответив; переключение не выполнено.
+daemon-cannot-serve = Демон не может обслужить этот запуск: --no-gpu и --doctor меняют поведение всего процесса. Запустите его с --no-daemon.

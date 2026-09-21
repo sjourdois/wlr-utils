@@ -153,7 +153,8 @@ pub fn main() {
         return;
     }
 
-    crate::reject_hints_on_card(cli.hints, cli.layout);
+    crate::reject_hints_on_card(cli.hints, cli.layout)
+        .unwrap_or_else(|reason| crate::exit_with(reason));
     // --grid sizes the card and nothing else: the exposé lays itself out to fill the
     // screen, the strip is one row by definition. A flag with no effect would look
     // applied.
@@ -199,9 +200,11 @@ pub fn main() {
     {
         match wlr_capture::wl::Client::connect() {
             Ok(client) => {
-                crate::require_window_pids(&mut opts.window_filters, client.toplevels());
+                crate::require_window_pids(&mut opts.window_filters, client.toplevels())
+                    .unwrap_or_else(|reason| crate::exit_with(reason));
                 if mode == Mode::Windows {
-                    crate::reject_empty_window_filter(client.toplevels(), &opts.window_filters);
+                    crate::reject_empty_window_filter(client.toplevels(), &opts.window_filters)
+                        .unwrap_or_else(|reason| crate::exit_with(reason));
                 }
             }
             Err(e) => {
