@@ -100,6 +100,11 @@ All notable changes to this project are documented here. The format is based on
   [@bR3iN](https://github.com/bR3iN)) — releasing Alt before the first frame, or
   before the overlay had the keyboard, used to leave the overlay open. The overlay no
   longer flashes on screen during a quick tap either.
+- **Window tiles show the right application icon** — an application id was matched
+  against any `.desktop` file name containing it, so `thunar` picked up
+  `thunar-volman-settings.desktop` and a window without an id took the first icon on
+  disk. Matching now follows the file name, then `StartupWMClass`; a window without
+  an id gets no icon.
 
 ## 1.8.0 — 2026-09-11
 
