@@ -8,6 +8,7 @@
 
 use crate::capture::OutputCapture;
 use crate::error::{CaptureError, Context, Result};
+use crate::pointer::{Pointer, Shape};
 use crate::render::Gpu;
 use crate::wl::Region;
 use smithay_client_toolkit::{
@@ -469,7 +470,7 @@ struct State {
     seat_state: SeatState,
     output_state: OutputState,
     keyboard: Option<wl_keyboard::WlKeyboard>,
-    pointer: Option<wl_pointer::WlPointer>,
+    pointer: Pointer,
     surfaces: Vec<Surface>,
     /// Which interaction the overlay is running.
     mode: Mode,
@@ -605,7 +606,7 @@ fn run(
         seat_state: SeatState::new(&globals, &qh),
         output_state: OutputState::new(&globals, &qh),
         keyboard: None,
-        pointer: None,
+        pointer: Pointer::new(&globals, &qh),
         surfaces: Vec::new(),
         mode,
         hint: hint.to_string(),
@@ -617,6 +618,8 @@ fn run(
         result: None,
         done: false,
     };
+    // Every mode picks a point or a rectangle off the frozen screen.
+    state.pointer.set_cursor(Some(Shape::Crosshair));
 
     // Let outputs (and their logical geometry) come in, then build one overlay per
     // output that we have a frozen capture for.
@@ -809,8 +812,8 @@ impl SeatHandler for State {
         if cap == Capability::Keyboard && self.keyboard.is_none() {
             self.keyboard = self.seat_state.get_keyboard(qh, &seat, None).ok();
         }
-        if cap == Capability::Pointer && self.pointer.is_none() {
-            self.pointer = self.seat_state.get_pointer(qh, &seat).ok();
+        if cap == Capability::Pointer {
+            self.pointer.create(&mut self.seat_state, &seat, qh);
         }
     }
     fn remove_capability(
@@ -921,6 +924,9 @@ impl PointerHandler for State {
     ) {
         let mode = self.mode;
         for e in events {
+            if let PointerEventKind::Enter { serial } = e.kind {
+                self.pointer.enter(serial);
+            }
             match e.kind {
                 PointerEventKind::Enter { .. } => {
                     self.pointer_pos = self.to_global(&e.surface, e.position);

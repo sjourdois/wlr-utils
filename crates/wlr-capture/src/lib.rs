@@ -20,6 +20,10 @@
 //! - [`video`]: a [`sink::FrameSink`] that encodes a capture stream to a file with a
 //!   pluggable hardware/software backend (NVENC / VAAPI / libx264).
 //!
+//! Behind the `pointer` feature (needs a windowing host, sctk):
+//! - [`pointer`](mod@pointer): a seat's pointer and the cursor image it sets — the `wl_pointer`
+//!   plus its `cursor-shape-v1` device.
+//!
 //! Behind the `focus` feature (compositor IPC, pulls `serde_json`):
 //! - [`focus`]: "the active window" / "the current output" via the compositor's own
 //!   IPC (Sway today). Wayland gives no portable way to query focus.
@@ -67,6 +71,10 @@ pub mod capture;
 #[cfg(feature = "focus")]
 #[cfg_attr(docsrs, doc(cfg(feature = "focus")))]
 pub mod focus;
+
+#[cfg(feature = "pointer")]
+#[cfg_attr(docsrs, doc(cfg(feature = "pointer")))]
+pub mod pointer;
 
 #[cfg(feature = "overlay")]
 #[cfg_attr(docsrs, doc(cfg(feature = "overlay")))]
