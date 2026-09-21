@@ -11,7 +11,6 @@ All notable changes to this project are documented here. The format is based on
 - **`--cursor` on `wlr-shot`** — `screenshot` and `record` can composite the mouse
   cursor into the capture. It stays out by default. Works on both capture
   protocols.
-
 - **Screen capture over `wlr-screencopy`** — the capture engine uses
   `zwlr_screencopy_manager_v1` v3 where `ext-image-copy-capture-v1` is absent, so
   screenshots, recording, the loupe/colour picker, region select and wlr-draw's

@@ -23,10 +23,10 @@ strides, occlusion-independent).
 
 ```sh
 wlr-shot screenshot [-o NAME | -g GEOM | -w ID | --app-id ID | --pick-window]
-                    [-t png|jpeg|ppm] [-q QUALITY] [-c] [FILE|-]
+                    [--cursor] [-t png|jpeg|ppm] [-q QUALITY] [-c] [FILE|-]
 wlr-shot screenshot --list-outputs | --list-windows
 wlr-shot record [-o NAME | -g GEOM | -w ID | --app-id ID | --pick-window | -s | -a]
-                [--encoder auto|nvenc|vaapi|software] [--fps N]
+                [--cursor] [--encoder auto|nvenc|vaapi|software] [--fps N]
                 [--timelapse INTERVAL] [-d SECS] FILE
 ```
 
@@ -55,6 +55,12 @@ The last two need the compositor's focus info. Wayland exposes no portable way t
 query focus, so these use compositor IPC: **Sway** (`$SWAYSOCK`) is supported today;
 Hyprland / niri are natural future additions. Without a supported compositor they
 error with a hint (use `--pick-window` / `-o NAME` instead).
+
+Contents:
+
+- `--cursor` — composite the mouse cursor into the capture. It is left out by
+  default, so a screenshot shows the screen rather than where the pointer happened
+  to rest.
 
 Encoding & destination:
 
@@ -111,6 +117,8 @@ wlr-shot record -o DP-4 --timelapse 2s day.mp4  # a frame every 2s, played at --
 wlr-shot record -o DP-4 --no-audio clip.mp4     # video only (audio is on by default)
 ```
 
+- `--cursor` — composite the mouse cursor into the recording (left out by default).
+  A demo of a pointer-driven interaction needs it.
 - `--encoder` — `auto` (default) prefers hardware (NVENC, then VAAPI) and falls back
   to software `libx264`. Force one with `nvenc`/`vaapi`/`software`.
 - `--device PATH` — DRM render node for VAAPI (default `/dev/dri/renderD128`).

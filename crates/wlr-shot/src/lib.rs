@@ -88,6 +88,9 @@ struct ShotArgs {
     /// Capture the focused output — needs compositor focus info.
     #[arg(long, group = "source")]
     current_output: bool,
+    /// Composite the mouse cursor into the capture (it is left out by default).
+    #[arg(long)]
+    cursor: bool,
     /// Output image format.
     #[arg(short = 't', long, value_enum, default_value_t = Fmt::Png)]
     r#type: Fmt,
@@ -144,6 +147,7 @@ pub fn main() {
 
 fn screenshot(args: ShotArgs) -> Result<()> {
     let mut client = wl::Client::connect().context("Wayland connection")?;
+    client.set_paint_cursors(args.cursor);
     client.refresh().ok();
 
     if args.list_outputs {
@@ -539,6 +543,10 @@ mod record_impl {
         /// DRM render node for the VAAPI backend.
         #[arg(long, value_name = "PATH", default_value = "/dev/dri/renderD128")]
         device: String,
+        /// Composite the mouse cursor into the recording (it is left out by default).
+        /// A demo of a pointer-driven interaction needs it.
+        #[arg(long)]
+        cursor: bool,
         /// Output frame rate (playback rate; also the rate-control hint).
         #[arg(long, default_value_t = 30)]
         fps: u32,
@@ -732,6 +740,7 @@ mod record_impl {
 
     pub fn record(args: RecordArgs) -> Result<()> {
         let mut client = wl::Client::connect().context("Wayland connection")?;
+        client.set_paint_cursors(args.cursor);
         client.refresh().ok();
 
         let target = resolve_target(&mut client, &args)?;

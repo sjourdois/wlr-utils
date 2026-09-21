@@ -120,10 +120,11 @@ pub fn select_protocol(globals: &[(String, u32)]) -> Option<Protocol> {
 #[cfg(feature = "gpu")]
 const MAX_DMABUF_PLANES: u32 = 4;
 
-/// `zwlr_screencopy_manager_v1.capture_output`'s `overlay_cursor`, off. The
-/// `ext-image-copy-capture` sessions are opened with `Options::empty()` (no
-/// `paint_cursors`), so both protocols capture the same thing.
+/// `zwlr_screencopy_manager_v1.capture_output`'s `overlay_cursor`. The
+/// `ext-image-copy-capture` counterpart is `Options::PaintCursors`, so both
+/// protocols capture the same thing either way.
 const CURSOR_OFF: i32 = 0;
+const CURSOR_ON: i32 = 1;
 use wayland_protocols::ext::{
     foreign_toplevel_list::v1::client::{
         ext_foreign_toplevel_handle_v1::{self, ExtForeignToplevelHandleV1},
@@ -752,6 +753,10 @@ pub struct Client {
     /// set or because an import failed and [`Client::disable_gpu`] dropped us to
     /// shm. Present in every build so callers need no `cfg`.
     gpu_disabled: bool,
+    /// Whether the compositor composites the mouse cursor into captured frames.
+    /// Off by default: a screenshot should show the screen, not where the pointer
+    /// happened to rest. Read when a session is opened, so it must be set before.
+    paint_cursors: bool,
 }
 
 impl Client {
@@ -879,7 +884,37 @@ impl Client {
             gbm: None,
             gpu_disabled: GPU_DISABLED.load(std::sync::atomic::Ordering::Relaxed)
                 || std::env::var_os("WLR_NO_GPU").is_some(),
+            paint_cursors: false,
         })
+    }
+
+    /// Ask the compositor to composite the mouse cursor into captured frames.
+    /// Sessions read this when they open, so set it before the first capture.
+    pub fn set_paint_cursors(&mut self, on: bool) {
+        self.paint_cursors = on;
+    }
+
+    /// Whether captures include the mouse cursor (see [`Client::set_paint_cursors`]).
+    pub fn paint_cursors(&self) -> bool {
+        self.paint_cursors
+    }
+
+    /// The `ext-image-copy-capture` session options matching the cursor setting.
+    fn capture_options(&self) -> Options {
+        if self.paint_cursors {
+            Options::PaintCursors
+        } else {
+            Options::empty()
+        }
+    }
+
+    /// The `zwlr-screencopy` `overlay_cursor` argument matching the cursor setting.
+    fn overlay_cursor(&self) -> i32 {
+        if self.paint_cursors {
+            CURSOR_ON
+        } else {
+            CURSOR_OFF
+        }
     }
 
     /// Stop using the dma-buf path and capture into shm from now on. Call this when
@@ -944,7 +979,7 @@ impl Client {
         };
         let id = self.new_session();
         let src = tl_src.create_source(&t.handle, &self.qh, ());
-        let session = copy.create_session(&src, Options::empty(), &self.qh, id);
+        let session = copy.create_session(&src, self.capture_options(), &self.qh, id);
         self.await_constraints(
             id,
             SessionObjects::ImageCopy {
@@ -971,7 +1006,7 @@ impl Client {
                     .clone()
                     .context("ext_image_copy_capture_manager_v1 missing")?;
                 let src = out_src.create_source(&o.wl_output, &self.qh, ());
-                let session = copy.create_session(&src, Options::empty(), &self.qh, id);
+                let session = copy.create_session(&src, self.capture_options(), &self.qh, id);
                 SessionObjects::ImageCopy {
                     frame: None,
                     session,
@@ -987,7 +1022,7 @@ impl Client {
                 // The first frame doubles as the constraints probe: screencopy only
                 // announces them from a frame, and the frame we learn them from is
                 // the one `poll` then copies into.
-                let frame = mgr.capture_output(CURSOR_OFF, &o.wl_output, &self.qh, id);
+                let frame = mgr.capture_output(self.overlay_cursor(), &o.wl_output, &self.qh, id);
                 SessionObjects::Screencopy {
                     frame: Some(frame),
                     output: o.wl_output.clone(),
@@ -1151,6 +1186,8 @@ impl Client {
     fn arm_sessions(&mut self) {
         let qh = self.qh.clone();
         let screencopy = self.state.screencopy.clone();
+        // Read before the loop: re-arming borrows `self` mutably per session.
+        let overlay_cursor = self.overlay_cursor();
         for id in self.open.keys().copied().collect::<Vec<_>>() {
             let awaiting_copy = match self.state.sessions.get(&id) {
                 Some(d) if !d.stopped => d.awaiting_copy,
@@ -1184,7 +1221,7 @@ impl Client {
                 if let Some(os) = self.open.get_mut(&id)
                     && let SessionObjects::Screencopy { frame, output } = &mut os.objects
                 {
-                    *frame = Some(mgr.capture_output(CURSOR_OFF, output, &qh, id));
+                    *frame = Some(mgr.capture_output(overlay_cursor, output, &qh, id));
                 }
                 continue;
             }
