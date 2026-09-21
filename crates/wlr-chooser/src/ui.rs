@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use wlr_capture::capture::WindowFilter;
 use wlr_capture::render::DmabufImporter;
 use wlr_capture::theme::Theme;
 use wlr_capture::{focus, icons, wl};
@@ -257,6 +258,168 @@ fn round_budget() -> Duration {
     }
 }
 
+/// A window as the command-line filter sees it.
+#[derive(Clone, Copy)]
+pub struct Candidate<'a> {
+    /// The window's application id.
+    pub app_id: &'a str,
+    /// The window title.
+    pub title: &'a str,
+    /// The `ext-foreign-toplevel-list-v1` identifier, which is how a compositor names
+    /// the process behind a window.
+    pub identifier: &'a str,
+}
+
+impl<'a> From<&'a wl::Toplevel> for Candidate<'a> {
+    fn from(w: &'a wl::Toplevel) -> Self {
+        Self {
+            app_id: &w.app_id,
+            title: &w.title,
+            identifier: &w.identifier,
+        }
+    }
+}
+
+/// Which windows a run offers at all, as narrowed on the command line. Distinct from
+/// the overlay's own filter field, which only hides tiles that are already captured:
+/// this one is applied before a capture session is opened, so an excluded window costs
+/// nothing.
+///
+/// Empty admits every window. A criterion given several times admits a window matching
+/// any of its values; criteria of different kinds must all be satisfied. A new kind of
+/// criterion is a new field here and one more clause in [`WindowFilters::admits`].
+#[derive(Clone, Default)]
+pub struct WindowFilters {
+    /// Application ids, compared exactly and case-insensitively.
+    app_ids: Vec<String>,
+    /// Title substrings, compared case-insensitively.
+    titles: Vec<String>,
+    /// Process ids, compared exactly. A process usually owns several windows and every
+    /// one of them passes.
+    pids: Vec<u32>,
+    /// What the compositor last said about the windows on screen: each one's process by
+    /// identifier, `None` for a window it covered but named no process for. Absent
+    /// means "never asked about", which is the only thing [`Self::refresh_pids`] acts
+    /// on — a window the compositor cannot name is not asked about twice.
+    processes: HashMap<String, Option<u32>>,
+}
+
+impl WindowFilters {
+    /// The filters a command line asked for, before any window is known.
+    pub fn new(app_ids: Vec<String>, titles: Vec<String>, pids: Vec<u32>) -> Self {
+        Self {
+            app_ids,
+            titles,
+            pids,
+            processes: HashMap::new(),
+        }
+    }
+
+    /// Whether nothing was asked for, in which case every window is offered.
+    pub fn is_empty(&self) -> bool {
+        self.app_ids.is_empty() && self.titles.is_empty() && self.pids.is_empty()
+    }
+
+    /// Whether this run has to know the process behind each window.
+    pub fn needs_pids(&self) -> bool {
+        !self.pids.is_empty()
+    }
+
+    /// Learn the process behind the windows in `toplevels` that have not been asked
+    /// about yet, from the compositor's IPC. `false` when nothing could answer — no
+    /// focus backend, or one whose compositor names no process.
+    ///
+    /// Without a `--pid` filter this neither connects nor queries: the flags that do
+    /// not need a pid do not pay for one. With one, it queries only on the round where
+    /// a window it has never seen shows up, so a running overlay costs one query, not
+    /// one per frame.
+    pub fn refresh_pids(&mut self, toplevels: &[wl::Toplevel]) -> bool {
+        if !self.needs_pids()
+            || toplevels
+                .iter()
+                .all(|w| self.processes.contains_key(&w.identifier))
+        {
+            return true;
+        }
+        let Some(pids) = focus::detect().and_then(|b| b.window_pids()) else {
+            return false;
+        };
+        for w in toplevels {
+            self.processes
+                .insert(w.identifier.clone(), pids.get(&w.identifier).copied());
+        }
+        true
+    }
+
+    /// Whether this window passes. The app id and title are handed to
+    /// [`WindowFilter::matches`], the same comparison `wlr-shot --app-id` / `--title`
+    /// uses to name a single window, so the flags mean one thing across the suite.
+    ///
+    /// A window whose process is unknown fails a `--pid` filter: a filter admits what
+    /// it has matched, never what it could not check.
+    pub fn admits(&self, w: Candidate<'_>) -> bool {
+        let app_ok = self.app_ids.is_empty()
+            || self.app_ids.iter().any(|a| {
+                WindowFilter {
+                    app_id: Some(a),
+                    title: None,
+                }
+                .matches(w.app_id, w.title)
+            });
+        let title_ok = self.titles.is_empty()
+            || self.titles.iter().any(|t| {
+                WindowFilter {
+                    app_id: None,
+                    title: Some(t),
+                }
+                .matches(w.app_id, w.title)
+            });
+        let pid_ok = self.pids.is_empty()
+            || self
+                .processes
+                .get(w.identifier)
+                .copied()
+                .flatten()
+                .is_some_and(|pid| self.pids.contains(&pid));
+        app_ok && title_ok && pid_ok
+    }
+
+    /// The filter written back as the flags that produced it, to quote in the message
+    /// shown when it matches nothing.
+    pub fn describe(&self) -> String {
+        self.app_ids
+            .iter()
+            .map(|a| format!("--app-id {a}"))
+            .chain(self.titles.iter().map(|t| format!("--title {t}")))
+            .chain(self.pids.iter().map(|p| format!("--pid {p}")))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
+/// The windows a run offers, as positions in `windows` paired with each one's ordinal
+/// among windows sharing its (app-id, title).
+///
+/// The ordinal counts the windows the filter drops as well: it is how a window is named
+/// for activation (zwlr enumerates them in creation order), so narrowing the list must
+/// not renumber what is left of it.
+pub(crate) fn admitted_windows<'a>(
+    windows: impl IntoIterator<Item = Candidate<'a>>,
+    filters: &WindowFilters,
+) -> Vec<(usize, usize)> {
+    let mut dup: HashMap<(&str, &str), usize> = HashMap::new();
+    let mut kept = Vec::new();
+    for (i, w) in windows.into_iter().enumerate() {
+        let e = dup.entry((w.app_id, w.title)).or_insert(0);
+        let dup_index = *e;
+        *e += 1;
+        if filters.admits(w) {
+            kept.push((i, dup_index));
+        }
+    }
+    kept
+}
+
 /// A source paired with what it takes to (re)open its capture session.
 enum Capturable {
     Output(wl::Output),
@@ -271,7 +434,15 @@ enum Capturable {
 /// Toplevels with an empty app-id are captured but marked `is_system`, so the UI
 /// can hide them by default and reveal them on demand. The loop exits when the UI
 /// drops the channel.
-pub(crate) fn capture_thread(tx: Sender<Msg>, gpu_failed: Arc<AtomicBool>, order: WindowOrder) {
+///
+/// `filters` narrows the window list here, before any session is opened, so a window
+/// left out costs neither a capture nor a thumbnail.
+pub(crate) fn capture_thread(
+    tx: Sender<Msg>,
+    gpu_failed: Arc<AtomicBool>,
+    order: WindowOrder,
+    mut filters: WindowFilters,
+) {
     let mut client = match wl::Client::connect() {
         Ok(c) => c,
         Err(e) => {
@@ -304,13 +475,16 @@ pub(crate) fn capture_thread(tx: Sender<Msg>, gpu_failed: Arc<AtomicBool>, order
         for o in &outputs {
             current.push((output_source(o), Capturable::Output(o.clone())));
         }
-        // Number windows that share an (app_id, title) in creation order, matching
+        // Windows that share an (app_id, title) are numbered in creation order, matching
         // zwlr's enumeration for activation — so before sorting them for display.
-        let mut dup: HashMap<(String, String), usize> = HashMap::new();
-        for w in client.toplevels() {
-            let e = dup.entry((w.app_id.clone(), w.title.clone())).or_insert(0);
-            let dup_index = *e;
-            *e += 1;
+        let toplevels = client.toplevels();
+        // A window opened since the last answer has no process yet, and a `--pid`
+        // filter would drop it. The front-end already established that the compositor
+        // answers, so a failure here leaves the map as it is.
+        let _ = filters.refresh_pids(toplevels);
+        let admitted = admitted_windows(toplevels.iter().map(Candidate::from), &filters);
+        for (i, dup_index) in admitted {
+            let w = &toplevels[i];
             current.push((window_source(w, dup_index), Capturable::Window(w.clone())));
         }
         current[outputs.len()..].sort_by(|(a, _), (b, _)| order.compare(a, b));
@@ -458,7 +632,10 @@ fn quick_hash(rgba: &[u8]) -> u64 {
 /// Headless capture benchmark (debug): no overlay, no keyboard grab. Runs the
 /// capture loop for `secs` seconds and reports, per source, how many frames were
 /// captured and how many actually changed content (proof of "live").
-pub fn bench_capture(secs: u64) {
+///
+/// `filters` narrows the window list the same way the picker does, so the benchmark
+/// measures what a filtered run actually costs.
+pub fn bench_capture(secs: u64, mut filters: WindowFilters) {
     let mut client = match wl::Client::connect() {
         Ok(c) => c,
         Err(e) => {
@@ -472,19 +649,31 @@ pub fn bench_capture(secs: u64) {
     let mut stats: HashMap<String, (u32, u32, u64)> = HashMap::new();
 
     let _ = client.refresh();
+    if !filters.refresh_pids(client.toplevels()) {
+        eprintln!("{}", tr!("pid-unsupported"));
+        return;
+    }
+    let admitted = |c: &wl::Client, f: &WindowFilters| -> Vec<wl::Toplevel> {
+        c.toplevels()
+            .iter()
+            .filter(|w| f.admits(Candidate::from(*w)))
+            .cloned()
+            .collect()
+    };
     eprintln!(
         "bench: {} output(s), {} window(s); capturing for {secs}s…",
         client.outputs().len(),
-        client.toplevels().len()
+        admitted(&client, &filters).len()
     );
 
     let deadline = Instant::now() + Duration::from_secs(secs);
     let mut rounds = 0u32;
     while Instant::now() < deadline {
         let _ = client.refresh();
+        let _ = filters.refresh_pids(client.toplevels());
         let mut outputs = client.outputs().to_vec();
         outputs.sort_by(|a, b| a.name.cmp(&b.name));
-        let windows = client.toplevels().to_vec();
+        let windows = admitted(&client, &filters);
 
         let mut items: Vec<(String, Capturable)> = Vec::new();
         for o in &outputs {
@@ -624,6 +813,8 @@ pub struct Options {
     /// Which Alt-Tab tiles show a live preview (vs. just the icon).
     pub live: Live,
     pub order: Order,
+    /// Which windows the run offers at all; applied before capture.
+    pub window_filters: WindowFilters,
 }
 
 /// How long the tiles stay hidden in hold-to-switch mode if keyboard focus
@@ -1774,7 +1965,66 @@ mod tests {
             hold: false,
             live: Live::All,
             order: Order::ByName,
+            window_filters: WindowFilters::default(),
         }
+    }
+
+    /// A `--app-id` / `--title` filter as the CLI builds it.
+    fn filters(app_ids: &[&str], titles: &[&str]) -> WindowFilters {
+        WindowFilters::new(
+            app_ids.iter().map(|s| (*s).to_string()).collect(),
+            titles.iter().map(|s| (*s).to_string()).collect(),
+            Vec::new(),
+        )
+    }
+
+    /// Put the compositor's answer into a filter: the process of the window at each
+    /// position of the `offered` window list, `None` for a window it named none for.
+    fn with_processes(mut f: WindowFilters, processes: &[Option<u32>]) -> WindowFilters {
+        for (i, pid) in processes.iter().enumerate() {
+            f.processes.insert(identifier(i), *pid);
+        }
+        f
+    }
+
+    /// A `--pid` filter, with the compositor's answer already in it.
+    fn pid_filters(pids: &[u32], processes: &[Option<u32>]) -> WindowFilters {
+        with_processes(
+            WindowFilters::new(Vec::new(), Vec::new(), pids.to_vec()),
+            processes,
+        )
+    }
+
+    /// The `ext-foreign-toplevel-list-v1` identifier `offered` gives the window at
+    /// position `i`.
+    fn identifier(i: usize) -> String {
+        format!("ext-{i}")
+    }
+
+    /// The sources the capture thread hands the overlay for these `(app-id, title)`
+    /// windows under `f` — which are exactly the ones it opens a capture session for.
+    fn offered(windows: &[(&str, &str)], f: &WindowFilters) -> Vec<Source> {
+        let ids: Vec<String> = (0..windows.len()).map(identifier).collect();
+        let candidates = windows
+            .iter()
+            .zip(&ids)
+            .map(|(&(app_id, title), identifier)| Candidate {
+                app_id,
+                title,
+                identifier,
+            });
+        admitted_windows(candidates, f)
+            .into_iter()
+            .map(|(i, dup_index)| {
+                let (app_id, title) = windows[i];
+                Source {
+                    win_title: title.into(),
+                    filter: format!("{app_id} {title}").to_lowercase(),
+                    dup_index,
+                    ..window(&ids[i], app_id)
+                }
+            })
+            .collect()
     }
 
     /// An `App` fed by hand in place of the capture thread, driven one frame at a time.
@@ -2028,5 +2278,188 @@ mod tests {
         // No tap to mistake the first frames for, so nothing is held back.
         let h = Harness::new(options());
         assert_ne!(h.app.backdrop(), [0.0; 4]);
+    }
+
+    #[test]
+    fn a_window_filter_keeps_what_it_names_and_nothing_else() {
+        let open = [("foot", "vim"), ("firefox", "news"), ("foot", "logs")];
+        // Several windows left: both terminals, not the browser.
+        let terminals = offered(&open, &filters(&["foot"], &[]));
+        assert_eq!(terminals.len(), 2);
+        assert!(terminals.iter().all(|s| s.app_id == "foot"));
+        // Repeating a flag widens the set; the two kinds of criteria narrow each other.
+        assert_eq!(offered(&open, &filters(&["foot", "firefox"], &[])).len(), 3);
+        let one = offered(&open, &filters(&["foot"], &["log"]));
+        assert_eq!(one.len(), 1);
+        assert_eq!(one[0].win_title, "logs");
+        // Compared the way wlr-shot compares them: the app id exactly, the title as a
+        // substring, neither minding case.
+        assert_eq!(offered(&open, &filters(&["FOOT"], &["LOG"])).len(), 1);
+        assert!(offered(&open, &filters(&["foo"], &[])).is_empty());
+        // Nothing left: no source at all, so no session, no capture, no thumbnail.
+        assert!(offered(&open, &filters(&["chromium"], &[])).is_empty());
+        // Which is the emptiness the front-ends refuse before raising the overlay.
+        let none = filters(&["chromium"], &[]);
+        assert!(!open.iter().enumerate().any(|(i, &(app_id, title))| {
+            none.admits(Candidate {
+                app_id,
+                title,
+                identifier: &identifier(i),
+            })
+        }));
+        // No filter at all offers every window.
+        assert_eq!(offered(&open, &WindowFilters::default()).len(), 3);
+    }
+
+    #[test]
+    fn a_pid_filter_keeps_every_window_of_the_process() {
+        // Two windows of one terminal, a browser, and a second terminal.
+        let open = [
+            ("foot", "vim"),
+            ("firefox", "news"),
+            ("foot", "logs"),
+            ("foot", "other"),
+        ];
+        let processes = [Some(4242), Some(777), Some(4242), Some(99)];
+
+        // A process with several windows offers all of them, not the first one.
+        let terminal = offered(&open, &pid_filters(&[4242], &processes));
+        assert_eq!(terminal.len(), 2);
+        assert_eq!(
+            terminal
+                .iter()
+                .map(|s| s.win_title.as_str())
+                .collect::<Vec<_>>(),
+            ["vim", "logs"]
+        );
+        // Repeating the flag widens the set, like --app-id and --title.
+        assert_eq!(
+            offered(&open, &pid_filters(&[4242, 777], &processes)).len(),
+            3
+        );
+        // A pid nothing runs under keeps nothing: no source, no session, no capture.
+        assert!(offered(&open, &pid_filters(&[1], &processes)).is_empty());
+
+        // The kinds of criteria narrow each other, as --app-id and --title do.
+        let both = with_processes(
+            WindowFilters::new(vec!["foot".into()], vec!["log".into()], vec![4242]),
+            &processes,
+        );
+        let one = offered(&open, &both);
+        assert_eq!(one.len(), 1);
+        assert_eq!(one[0].win_title, "logs");
+    }
+
+    #[test]
+    fn a_window_whose_process_is_unknown_is_not_offered() {
+        let open = [("foot", "vim"), ("foot", "logs")];
+        // The compositor named a process for the first window and none for the second.
+        let known = pid_filters(&[4242], &[Some(4242), None]);
+        let kept = offered(&open, &known);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].win_title, "vim");
+        // Without a --pid flag the same unnamed window is offered as before: the pid
+        // is only ever a condition when it was asked for.
+        assert_eq!(offered(&open, &WindowFilters::default()).len(), 2);
+    }
+
+    #[test]
+    fn the_overlay_shows_only_the_windows_the_pid_filter_kept() {
+        let open = [("foot", "vim"), ("firefox", "news"), ("foot", "logs")];
+        let mut h = Harness::new(options());
+        h.send(offered(
+            &open,
+            &pid_filters(&[4242], &[Some(4242), Some(777), Some(4242)]),
+        ));
+        h.frame();
+        assert_eq!(h.app.visible().len(), 2);
+        assert!(h.app.visible().iter().all(|s| s.app_id == "foot"));
+    }
+
+    #[test]
+    fn the_message_for_an_empty_filter_quotes_every_flag() {
+        let f = WindowFilters::new(vec!["foot".into()], vec!["log".into()], vec![4242, 777]);
+        assert_eq!(
+            f.describe(),
+            "--app-id foot --title log --pid 4242 --pid 777"
+        );
+        // Only a --pid run has to ask the compositor for anything.
+        assert!(f.needs_pids());
+        assert!(!filters(&["foot"], &[]).needs_pids());
+        assert!(!WindowFilters::default().needs_pids());
+        // And an empty filter is empty whichever flag is missing.
+        assert!(WindowFilters::default().is_empty());
+        assert!(!WindowFilters::new(Vec::new(), Vec::new(), vec![1]).is_empty());
+    }
+
+    #[test]
+    fn a_filtered_list_numbers_identical_windows_as_the_compositor_does() {
+        // The ordinal is how a window is named for activation, so it is counted over
+        // every toplevel, including the ones the filter drops.
+        let open = [("foot", "vim"), ("firefox", "news"), ("foot", "vim")];
+        let kept = offered(&open, &filters(&["foot"], &[]));
+        assert_eq!(kept.iter().map(|s| s.dup_index).collect::<Vec<_>>(), [0, 1]);
+    }
+
+    #[test]
+    fn the_overlay_shows_only_the_windows_the_filter_kept() {
+        let open = [("foot", "vim"), ("firefox", "news"), ("foot", "logs")];
+        let mut h = Harness::new(options());
+        h.send(offered(&open, &filters(&["foot"], &[])));
+        h.frame();
+        assert_eq!(h.app.visible().len(), 2);
+        assert!(h.app.visible().iter().all(|s| s.app_id == "foot"));
+
+        // Down to one window, and it is the one the overlay opens on.
+        let mut h = Harness::new(options());
+        h.send(offered(&open, &filters(&["foot"], &["log"])));
+        h.frame();
+        assert_eq!(h.app.visible().len(), 1);
+        assert_eq!(h.app.visible()[0].win_title, "logs");
+
+        // Down to none: the overlay has nothing to draw.
+        let mut h = Harness::new(options());
+        h.send(offered(&open, &filters(&["chromium"], &[])));
+        h.frame();
+        assert!(h.app.visible().is_empty());
+    }
+
+    #[test]
+    fn the_filter_and_include_system_decide_separately() {
+        // A system surface carries no app-id, so --app-id never keeps one.
+        let open = [("foot", "vim"), ("", "wlr-draw overlay")];
+        assert!(
+            offered(&open, &filters(&["foot"], &[]))
+                .iter()
+                .all(|s| !s.is_system)
+        );
+        // A title can keep one — and --include-system still decides whether it shows.
+        let kept = offered(&open, &filters(&[], &["overlay"]));
+        assert_eq!(kept.len(), 1);
+        assert!(kept[0].is_system);
+        let mut h = Harness::new(options());
+        h.send(kept.clone());
+        h.frame();
+        assert!(h.app.visible().is_empty());
+        let mut h = Harness::new(Options {
+            show_system: true,
+            ..options()
+        });
+        h.send(kept);
+        h.frame();
+        assert_eq!(h.app.visible().len(), 1);
+    }
+
+    #[test]
+    fn the_overlay_filter_field_narrows_what_the_flags_kept() {
+        let open = [("foot", "vim"), ("foot", "logs"), ("firefox", "news")];
+        let mut h = Harness::new(options());
+        h.send(offered(&open, &filters(&["foot"], &[])));
+        h.frame();
+        h.app.filter = "log".into();
+        assert_eq!(h.app.visible().len(), 1);
+        // It narrows; it cannot bring back a window the flags never captured.
+        h.app.filter = "firefox".into();
+        assert!(h.app.visible().is_empty());
     }
 }

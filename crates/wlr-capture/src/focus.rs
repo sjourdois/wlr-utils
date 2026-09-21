@@ -7,6 +7,7 @@
 //! (`niri msg`). cosmic-comp has no IPC socket, so its backend asks the compositor
 //! over Wayland instead, through `zcosmic_toplevel_info_v1`.
 
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use crate::wl::Region;
@@ -60,6 +61,12 @@ impl FocusOrder {
     }
 }
 
+/// The process behind each window, by [`crate::wl::Toplevel::identifier`].
+///
+/// A process commonly owns several windows, so the same pid appears under several
+/// identifiers; the map is never inverted.
+pub type WindowPids = HashMap<String, u32>;
+
 /// A compositor-specific source of focus information.
 pub trait FocusBackend {
     /// Name of the focused output, if any.
@@ -73,6 +80,13 @@ pub trait FocusBackend {
     }
     /// The compositor's window focus history.
     fn focus_order(&self) -> Option<FocusOrder> {
+        None
+    }
+    /// The process behind each window. No Wayland protocol carries a pid —
+    /// `ext-foreign-toplevel-list-v1` names a window and nothing else — so this is
+    /// compositor IPC or nothing. Default `None`: the caller must then say the pid
+    /// cannot be read rather than answer as if every window matched.
+    fn window_pids(&self) -> Option<WindowPids> {
         None
     }
     /// Human-readable backend name, for error messages.
@@ -146,6 +160,10 @@ impl FocusBackend for Sway {
 
     fn focus_order(&self) -> Option<FocusOrder> {
         Some(sway_focus_order(&Self::tree()?))
+    }
+
+    fn window_pids(&self) -> Option<WindowPids> {
+        Some(sway_window_pids(&Self::tree()?))
     }
 }
 
@@ -255,6 +273,29 @@ fn collect_mru_nodes<'a>(node: &'a Node, out: &mut Vec<&'a Node>) {
     }
 }
 
+/// The process behind each window of a sway tree.
+///
+/// Sway carries `pid` on the very node that carries `foreign_toplevel_identifier`, so
+/// the two are read off one node and no correlation by app id and title is needed. A
+/// node with one and not the other is skipped: a window whose process sway does not
+/// name is a window `--pid` must not claim to have matched.
+fn sway_window_pids(root: &Node) -> WindowPids {
+    let mut pids = WindowPids::new();
+    collect_window_pids(root, &mut pids);
+    pids
+}
+
+fn collect_window_pids(node: &Node, out: &mut WindowPids) {
+    if let Some(id) = &node.foreign_toplevel_identifier
+        && let Some(pid) = node.pid.and_then(|p| u32::try_from(p).ok())
+    {
+        out.insert(id.clone(), pid);
+    }
+    for child in children(node) {
+        collect_window_pids(child, out);
+    }
+}
+
 /// Read a sway `rect` into a logical [`Region`].
 fn rect_of(node: &Node) -> Region {
     Region {
@@ -297,6 +338,10 @@ impl FocusBackend for Hyprland {
         // sink the whole history.
         let active = Self::query("activewindow").unwrap_or_default();
         hypr_focus_order(&Self::query("clients")?, &active)
+    }
+
+    fn window_pids(&self) -> Option<WindowPids> {
+        Some(hypr_window_pids(&Self::query("clients")?))
     }
 }
 
@@ -363,6 +408,25 @@ fn hypr_focus_order(clients: &serde_json::Value, active: &serde_json::Value) -> 
     })
 }
 
+/// The process behind each window of `hyprctl -j clients`.
+///
+/// Each client carries `pid` next to the `stableId` that [`hypr_focus_order`] already
+/// uses as the `ext-foreign-toplevel-list-v1` identifier, so the two are read off one
+/// object. Hyprland reports `-1` for a window whose process it does not know (an
+/// XWayland window it never resolved), which is dropped rather than stored.
+fn hypr_window_pids(clients: &serde_json::Value) -> WindowPids {
+    clients
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|c| {
+            let id = c.get("stableId")?.as_str()?;
+            let pid = u32::try_from(c.get("pid")?.as_i64()?).ok()?;
+            Some((id.to_string(), pid))
+        })
+        .collect()
+}
+
 /// niri `niri msg --json` backend.
 struct Niri;
 
@@ -397,6 +461,28 @@ impl FocusBackend for Niri {
     fn focus_order(&self) -> Option<FocusOrder> {
         niri_focus_order(&Self::query("windows")?)
     }
+
+    fn window_pids(&self) -> Option<WindowPids> {
+        Some(niri_window_pids(&Self::query("windows")?))
+    }
+}
+
+/// The process behind each window of `niri msg --json windows`.
+///
+/// `pid` sits next to the `id` whose decimal form [`niri_focus_order`] already uses as
+/// the `ext-foreign-toplevel-list-v1` identifier. It is `null` for a window niri has no
+/// process for, which is dropped rather than stored.
+fn niri_window_pids(windows: &serde_json::Value) -> WindowPids {
+    windows
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|w| {
+            let id = w.get("id")?.as_u64()?;
+            let pid = u32::try_from(w.get("pid")?.as_i64()?).ok()?;
+            Some((id.to_string(), pid))
+        })
+        .collect()
 }
 
 /// Pick the focused output's name from `niri msg --json focused-output` (the Output
@@ -461,6 +547,11 @@ fn niri_focus_order(windows: &serde_json::Value) -> Option<FocusOrder> {
 ///
 /// [`FocusBackend::focus_order`] stays unimplemented: no COSMIC protocol reports a
 /// focus history, so `--window-order mru` falls back to ordering by name.
+///
+/// [`FocusBackend::window_pids`] stays unimplemented too. `zcosmic_toplevel_info_v1`
+/// describes a window by app id, title, state, workspace and geometry, and carries no
+/// process: what the other backends read from an IPC has no COSMIC equivalent, so
+/// `--pid` is refused there rather than answered wrongly.
 struct Cosmic;
 
 impl FocusBackend for Cosmic {
@@ -815,18 +906,20 @@ mod tests {
     // were focused in the order A, C, B, D, B — so `focusHistoryID` ranks them B, D,
     // C, A, then the one opened last and never focused again. The array is in
     // creation order, not rank order, and the last two windows here share an app id
-    // and a title: only `stableId` tells them apart.
+    // and a title: only `stableId` tells them apart. WIN-A and WIN-C are two windows
+    // of one process; the last window's `pid` is `-1`, which Hyprland sends for a
+    // process it has not resolved.
     const HYPR_CLIENTS: &str = r#"[
         {"address":"0x557fa45bb650","class":"foot","title":"WIN-A","mapped":true,
-         "focusHistoryID":3,"stableId":"18000002"},
+         "pid":9001,"focusHistoryID":3,"stableId":"18000002"},
         {"address":"0x557fa6decc90","class":"foot","title":"WIN-B","mapped":true,
-         "focusHistoryID":0,"stableId":"18000003"},
+         "pid":9002,"focusHistoryID":0,"stableId":"18000003"},
         {"address":"0x557fa70d91b0","class":"foot","title":"WIN-C","mapped":true,
-         "focusHistoryID":2,"stableId":"18000004"},
+         "pid":9001,"focusHistoryID":2,"stableId":"18000004"},
         {"address":"0x557fa6e6efc0","class":"foot","title":"twin","mapped":true,
-         "focusHistoryID":1,"stableId":"18000005"},
+         "pid":9004,"focusHistoryID":1,"stableId":"18000005"},
         {"address":"0x557fa739a510","class":"foot","title":"twin","mapped":true,
-         "focusHistoryID":4,"stableId":"18000006"}
+         "pid":-1,"focusHistoryID":4,"stableId":"18000006"}
     ]"#;
 
     // The `activewindow` that goes with `HYPR_CLIENTS`: the head of the history.
@@ -835,17 +928,19 @@ mod tests {
 
     // A trimmed `niri msg --json windows`, from a niri 26.04 run with the same focus
     // sequence: B focused, then D, C, A by `focus_timestamp`, and E last. The array
-    // order is niri's own and matches neither creation nor focus order.
+    // order is niri's own and matches neither creation nor focus order. WIN-D and
+    // WIN-E are two windows of one process; WIN-B's `pid` is null, which niri sends
+    // for a window it has no process for.
     const NIRI_WINDOWS: &str = r#"[
-        {"id":5,"title":"WIN-D","app_id":"foot","is_focused":false,
+        {"id":5,"title":"WIN-D","app_id":"foot","is_focused":false,"pid":8100,
          "focus_timestamp":{"secs":352,"nanos":526156848}},
-        {"id":6,"title":"WIN-E","app_id":"foot","is_focused":false,
+        {"id":6,"title":"WIN-E","app_id":"foot","is_focused":false,"pid":8100,
          "focus_timestamp":{"secs":346,"nanos":526223482}},
-        {"id":2,"title":"WIN-A","app_id":"foot","is_focused":false,
+        {"id":2,"title":"WIN-A","app_id":"foot","is_focused":false,"pid":8200,
          "focus_timestamp":{"secs":349,"nanos":732056369}},
-        {"id":4,"title":"WIN-C","app_id":"foot","is_focused":false,
+        {"id":4,"title":"WIN-C","app_id":"foot","is_focused":false,"pid":8300,
          "focus_timestamp":{"secs":350,"nanos":660808585}},
-        {"id":3,"title":"WIN-B","app_id":"foot","is_focused":true,
+        {"id":3,"title":"WIN-B","app_id":"foot","is_focused":true,"pid":null,
          "focus_timestamp":{"secs":353,"nanos":459040460}}
     ]"#;
 
@@ -896,12 +991,14 @@ mod tests {
                             node(json!({
                                 "id": 12, "app_id": "foot", "name": "term", "visible": true,
                                 "foreign_toplevel_identifier": "ext-foot",
+                                "pid": 4242,
                                 "rect": rect(1000, 100, 800, 600),
                             })),
                             node(json!({
                                 "id": 11, "app_id": "firefox", "name": "Page Title",
                                 "visible": true, "focused": true,
                                 "foreign_toplevel_identifier": "ext-firefox",
+                                "pid": 777,
                                 "rect": rect(100, 100, 800, 600),
                                 // A 20px title bar, so the content rect is not the node's.
                                 "window_rect": rect(0, 20, 800, 580),
@@ -913,9 +1010,12 @@ mod tests {
                         "rect": screen,
                         // Covers the same coordinates as firefox — sway keeps the
                         // geometry of a window even while its workspace is off screen.
+                        // Second window of the terminal on workspace 1: same pid,
+                        // its own identifier.
                         "nodes": [node(json!({
-                            "app_id": "vim", "name": "editor", "visible": false,
-                            "foreign_toplevel_identifier": "ext-vim",
+                            "app_id": "foot", "name": "editor", "visible": false,
+                            "foreign_toplevel_identifier": "ext-editor",
+                            "pid": 4242,
                             "rect": rect(100, 100, 800, 600),
                         }))],
                     })),
@@ -951,12 +1051,23 @@ mod tests {
         let tree = sway_tree();
         let order = sway_focus_order(&tree);
         assert_eq!(order.focused.as_deref(), Some("ext-firefox"));
-        assert_eq!(order.unfocused, ["ext-foot", "ext-vim"]);
+        assert_eq!(order.unfocused, ["ext-foot", "ext-editor"]);
 
         // Workspace 2 alone: its window is ranked, but not focused.
         let order = sway_focus_order(&tree.nodes[0].nodes[1]);
         assert_eq!(order.focused, None);
-        assert_eq!(order.unfocused, ["ext-vim"]);
+        assert_eq!(order.unfocused, ["ext-editor"]);
+    }
+
+    #[test]
+    fn sway_window_pids_names_every_window_of_a_process() {
+        let pids = sway_window_pids(&sway_tree());
+        // Two windows of one terminal: one pid, two identifiers, both kept.
+        assert_eq!(pids.get("ext-foot"), Some(&4242));
+        assert_eq!(pids.get("ext-editor"), Some(&4242));
+        assert_eq!(pids.get("ext-firefox"), Some(&777));
+        // Containers, workspaces and outputs carry no identifier and are not entries.
+        assert_eq!(pids.len(), 3);
     }
 
     #[test]
@@ -1018,6 +1129,21 @@ mod tests {
     }
 
     #[test]
+    fn hypr_window_pids_reads_pid_next_to_stable_id() {
+        let clients: Value = serde_json::from_str(HYPR_CLIENTS).unwrap();
+        let pids = hypr_window_pids(&clients);
+        // Two windows of one process: one pid under two identifiers.
+        assert_eq!(pids.get("18000002"), Some(&9001));
+        assert_eq!(pids.get("18000004"), Some(&9001));
+        assert_eq!(pids.get("18000003"), Some(&9002));
+        // `-1` is not a process; the window has no entry rather than a bogus one.
+        assert!(!pids.contains_key("18000006"));
+        assert_eq!(pids.len(), 4);
+        // Anything that is not an array yields no entry at all.
+        assert!(hypr_window_pids(&json!({})).is_empty());
+    }
+
+    #[test]
     fn niri_focus_order_sorts_by_focus_timestamp() {
         let windows: Value = serde_json::from_str(NIRI_WINDOWS).unwrap();
         let order = niri_focus_order(&windows).expect("an array of windows");
@@ -1040,6 +1166,20 @@ mod tests {
         let order = niri_focus_order(&windows).expect("an array of windows");
         assert_eq!(order.focused, None);
         assert_eq!(order.unfocused, ["9", "8", "7"]);
+    }
+
+    #[test]
+    fn niri_window_pids_reads_pid_next_to_the_window_id() {
+        let windows: Value = serde_json::from_str(NIRI_WINDOWS).unwrap();
+        let pids = niri_window_pids(&windows);
+        // The identifier is the window id in decimal, as the focus order uses it.
+        assert_eq!(pids.get("5"), Some(&8100));
+        assert_eq!(pids.get("6"), Some(&8100));
+        assert_eq!(pids.get("2"), Some(&8200));
+        // A null pid leaves the window out rather than in with a made-up value.
+        assert!(!pids.contains_key("3"));
+        assert_eq!(pids.len(), 4);
+        assert!(niri_window_pids(&json!({})).is_empty());
     }
 
     /// A `zcosmic_toplevel_handle_v1.state` array, as the wire carries it: 32-bit

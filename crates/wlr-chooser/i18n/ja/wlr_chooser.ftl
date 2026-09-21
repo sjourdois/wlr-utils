@@ -12,3 +12,5 @@ error = wlr-chooser: { $error }
 capture-no-window = このコンポジタは個別のウィンドウをキャプチャできません。ウィンドウキャプチャには ext-image-copy-capture-v1 と foreign-toplevel ソース (wlroots >= 0.20 / Sway >= 1.12) が必要です。`wlr-peek doctor` を実行して、お使いのコンポジタが対応している機能を確認してください。
 focus-unsupported = このコンポジタは選択したウィンドウをフォーカスできません。ウィンドウのフォーカスには wlr-foreign-toplevel-management-v1、COSMIC では cosmic-toplevel-management-v1 が必要です。`wlr-peek doctor` を実行して、お使いのコンポジタが対応している機能を確認してください。
 mru-unmatched = このコンポジタのフォーカス履歴は、表示中のどのウィンドウとも対応しないため、--window-order mru は名前順にフォールバックします。
+filter-no-match = { $filter } に一致する開いているウィンドウがありません。表示するものがありません。
+pid-unsupported = このコンポジタはウィンドウの所属プロセスを報告しないため、--pid は適用できません。sway、Hyprland、niri のいずれかの IPC が必要です。`wlr-peek doctor` を実行して、フォーカスバックエンドが検出されたか確認してください。

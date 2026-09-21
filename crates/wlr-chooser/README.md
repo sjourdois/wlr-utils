@@ -119,6 +119,9 @@ focused output. You can pass options in `chooser_cmd`, e.g.
 -o, --outputs          Show only screens          (alias: --screens)
     --both             Show both (default)
     --include-system   Include windows with no app-id (system surfaces)
+    --app-id APP_ID    Show only windows with that app-id (repeatable)
+    --title TEXT       Show only windows whose title contains TEXT (repeatable)
+    --pid PID          Show only windows of that process (repeatable)
     --grid COLSxROWS   Fixed grid of that many thumbnails (e.g. 4x3)
     --window-order by-name|mru
                        Order windows by name (default) or most recently focused
@@ -131,6 +134,18 @@ focused output. You can pass options in `chooser_cmd`, e.g.
 
 In the overlay: type to filter, arrows to move, Enter/click to pick, Escape or
 click-outside to cancel, and the tab bar switches All / Windows / Screens.
+
+`--app-id`, `--title` and `--pid` pick which windows are offered at all. The
+app-id is matched exactly, the title as a substring, both ignoring case — the same
+comparison `wlr-shot --app-id` / `--title` make. `--pid` keeps every window of the
+process. Any flag can be repeated to widen its set; give several kinds and a
+window has to match each. Windows left out are never captured, so a narrow list
+costs less than a full one. Screens are not filtered, so only `--windows` can end
+up with nothing to show: the picker then says so and exits.
+
+`--pid` needs a compositor that names the process behind a window, which Wayland
+itself does not: Sway, Hyprland and niri do, through their IPC. Elsewhere `--pid`
+says so and exits rather than offering every window.
 
 > **Looking for an Alt-Tab / window switcher?** That is a separate binary,
 > **`wlr-switcher`** (shipped alongside this one) — see [its section](#window-switcher--wlr-switcher) below.
@@ -153,6 +168,18 @@ Three presentations via `--layout`:
 Each tile shows a live preview with the app icon as a badge; tune it with
 `--live none|current|all` (default `all`): `current` previews only the highlighted
 window, `none` shows app icons only.
+
+`--app-id`, `--title` and `--pid` restrict the switcher to a subset of the open
+windows, with the same meaning as in `wlr-chooser` above:
+
+```
+bindsym Mod1+grave exec wlr-switcher --app-id foot --app-id firefox
+bindsym $mod+n exec wlr-switcher --title notes
+bindsym $mod+e exec wlr-switcher --pid $(pidof -s emacs)
+```
+
+The windows they leave out are never captured. If no open window matches,
+`wlr-switcher` says so and exits rather than opening an empty overlay.
 
 Windows are listed most recently focused first where the compositor reports it
 (Sway, Hyprland, niri), by name otherwise; `--window-order by-name` always orders

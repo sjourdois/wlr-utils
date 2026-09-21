@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **`--app-id`, `--title` and `--pid` on `wlr-switcher` and `wlr-chooser`**
+  ([#12](https://github.com/sjourdois/wlr-utils/issues/12)) — offer only the windows
+  that match, instead of every open one. The app id is matched exactly, the title as a
+  substring, both ignoring case, like the flags of the same name on `wlr-shot`; `--pid`
+  keeps every window of the process. Any flag can be repeated; given together, a window
+  has to match each kind. The windows they leave out are never captured, so a narrow
+  list costs less than a full one. A filter that matches no window ends the run with a
+  message instead of an empty overlay. Screens are not filtered. `--pid` needs a
+  compositor that names the process behind a window — Sway, Hyprland and niri do, and
+  where none does the run says so and exits.
 - **`--cursor` on `wlr-shot`** — `screenshot` and `record` can composite the mouse
   cursor into the capture. It stays out by default. Works on both capture
   protocols.

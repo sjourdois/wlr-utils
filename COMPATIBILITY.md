@@ -31,7 +31,7 @@ single-tool install can produce it too.
 | `linux-dmabuf` (`zwp_linux_dmabuf_v1`) | zero-copy GPU capture (CPU `wl_shm` is the fallback) | live previews: `wlr-chooser`, `wlr-switcher`, `wlr-peek mirror`, `wlr-shot record` |
 | `xdg-output` (`zxdg_output_manager_v1`) | accurate logical geometry (fractional scale, positions) | recommended; falls back to `wl_output` |
 | `tablet-v2` (`zwp_tablet_manager_v2`) | graphics tablet (stylus) input | optional, `wlr-draw`; without it, mouse only |
-| compositor IPC, or `cosmic-toplevel-info` (`zcosmic_toplevel_info_v1`, v2+) on COSMIC | "the active window" / "the current output" (`-a`, `--current-output`) | a per-compositor focus backend |
+| compositor IPC, or `cosmic-toplevel-info` (`zcosmic_toplevel_info_v1`, v2+) on COSMIC | "the active window" / "the current output" (`-a`, `--current-output`); an IPC also names the process behind a window (`--pid`), which no Wayland protocol does | a per-compositor focus backend |
 
 The engine drives `ext-image-copy-capture-v1` where it is available, and
 `wlr-screencopy` otherwise. `ext-image-capture-source-v1` landed in two steps: the base
@@ -82,20 +82,21 @@ backend (for `-a` / `--current-output`). Run `wlr-peek doctor` to check your own
 
 | Compositor | Screen capture | Window capture | Overlays (layer-shell) | Focus IPC |
 | --- | --- | --- | --- | --- |
-| **Sway** | ✅ ≥ 1.11 (wlroots 0.19) | ✅ ≥ 1.12 (wlroots 0.20) | ✅ | ✅ `$SWAYSOCK` (MRU) |
-| **Hyprland** | ✅ ≥ v0.54 | ✅ ≥ v0.54 | ✅ | ✅ `hyprctl` (MRU) |
+| **Sway** | ✅ ≥ 1.11 (wlroots 0.19) | ✅ ≥ 1.12 (wlroots 0.20) | ✅ | ✅ `$SWAYSOCK` (MRU, pid) |
+| **Hyprland** | ✅ ≥ v0.54 | ✅ ≥ v0.54 | ✅ | ✅ `hyprctl` (MRU, pid) |
 | **labwc** | ✅ ≥ 0.9 (wlroots 0.19) | 🟡 ≥ 0.20 (partial) | ✅ | ❌ |
 | **cosmic-comp** | ✅ | ✅ | ✅ | ✅ `zcosmic_toplevel_info_v1` |
 | **Wayfire** | ✅ ≥ 0.10 (wlroots 0.19) | ❌ (until its 0.20 branch ships) | ✅ | ❌ |
 | **river** | ✅ ≥ 0.3 (wlroots 0.19) | ❌ | ✅ | ❌ |
-| **niri** | ✅ (`wlr-screencopy`) | ❌ | ✅ | 🟡 `niri msg` (MRU, `-a` n/a) |
+| **niri** | ✅ (`wlr-screencopy`) | ❌ | ✅ | 🟡 `niri msg` (MRU, pid, `-a` n/a) |
 | **dwl** | ✅ (`wlr-screencopy`) | ❌ | ✅ | ❌ |
 | **Mutter** (GNOME) | ❌ | ❌ | ❌ | ❌ |
 | **KWin** (KDE) | ❌ | ❌ | ✅ | ❌ |
 
 ✅ full · 🟡 partial · ❌ none. "MRU" marks a backend that also reports the window focus
-history, for `--window-order mru`. Versions are from each project's release notes / merge
-requests (the per-interface numbers on wayland.app are unreliable snapshots).
+history, for `--window-order mru`; "pid" one that names the process behind a window, for
+`--pid`. Versions are from each project's release notes / merge requests (the
+per-interface numbers on wayland.app are unreliable snapshots).
 
 Tested on **Sway** ≥ 1.12 (the development compositor), **Hyprland 0.56.2**,
 **niri 26.04**, **KWin 6.7.5** and **Mutter 50.5**. On **cosmic-comp 1.8.0** the
@@ -127,6 +128,13 @@ Two things vary by compositor:
   from `focus_timestamp`. COSMIC reports no focus history. Elsewhere, and there,
   windows are ordered by name.
 
+  **Filtering the switcher by process** (`--pid`) needs one too, and the same three
+  provide it: no Wayland protocol carries a pid, so the process behind a window comes
+  from the compositor — Sway's tree, `hyprctl clients`, `niri msg windows`.
+  `zcosmic_toplevel_info_v1` names no process, so COSMIC cannot answer. Without it
+  `--pid` says so and exits; `--app-id` and `--title` need nothing of the sort and work
+  wherever windows can be listed.
+
   **Which tile `wlr-switcher` starts on** needs no backend: the window you are on comes
   from `wlr-foreign-toplevel-management`'s `activated` state. A quick `Alt+Tab` therefore
   switches away from that window, in either window order. cosmic-comp does not expose that
@@ -144,7 +152,9 @@ Two things vary by compositor:
 
 Focus backends live in [`crates/wlr-capture/src/focus.rs`](crates/wlr-capture/src/focus.rs):
 implement `FocusBackend` (a `focused_output()` and an `active_window_rect()`, plus an
-optional `focus_order()` for `--window-order mru`) over your compositor's IPC and add a
-detection branch in `detect()`. The Sway, Hyprland and niri backends are short worked
+optional `focus_order()` for `--window-order mru` and `window_pids()` for `--pid`) over
+your compositor's IPC and add a detection branch in `detect()`. Both optional methods
+key their answer by the `ext-foreign-toplevel-list-v1` identifier, which is what the
+capture engine names a window by. The Sway, Hyprland and niri backends are short worked
 examples; the cosmic-comp one shows the same trait over a Wayland protocol instead of a
 socket.

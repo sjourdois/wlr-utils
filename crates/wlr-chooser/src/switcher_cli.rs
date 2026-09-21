@@ -7,8 +7,8 @@
 //!
 //! For the xdg-desktop-portal-wlr picker (prints to stdout), see `wlr-chooser`.
 
-use crate::OrderArg;
 use crate::ui::{Live, Mode, Options, View};
+use crate::{FilterArgs, OrderArg};
 use crate::{acquire_switch_lock, run_overlay};
 use crate::{i18n, tr};
 use clap::{Parser, ValueEnum};
@@ -83,6 +83,8 @@ struct Cli {
     /// Include windows with no app-id (system surfaces)
     #[arg(long)]
     include_system: bool,
+    #[command(flatten)]
+    filters: FilterArgs,
     /// Report which capture protocols the current compositor supports, then exit.
     #[arg(long)]
     doctor: bool,
@@ -125,7 +127,7 @@ pub fn main() {
     } else {
         cli.layout == LayoutArg::Strip
     };
-    let opts = Options {
+    let mut opts = Options {
         mode: Mode::Windows,
         show_system: cli.include_system,
         grid: None,
@@ -133,6 +135,7 @@ pub fn main() {
         hold,
         live: cli.live.into(),
         order: cli.window_order.into(),
+        window_filters: cli.filters.into(),
     };
 
     // Pre-flight: wlr-switcher switches *windows*, which need the foreign-toplevel
@@ -144,7 +147,14 @@ pub fn main() {
             eprintln!("{}", tr!("capture-no-window"));
             std::process::exit(2);
         }
-        Ok(_) => {}
+        Ok(client) => {
+            // A --pid filter has to be settled here too: it rests on a compositor IPC,
+            // and a filter that cannot be applied must not be applied silently.
+            crate::require_window_pids(&mut opts.window_filters, client.toplevels());
+            // Same reasoning for a filter that names no open window: the switcher shows
+            // windows and nothing else, so it would come up empty.
+            crate::reject_empty_window_filter(client.toplevels(), &opts.window_filters);
+        }
         Err(e) => {
             eprintln!("{}", tr!("error", error = format!("{e:#}")));
             std::process::exit(2);

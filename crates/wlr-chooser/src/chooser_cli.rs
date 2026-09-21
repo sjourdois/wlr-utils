@@ -8,7 +8,7 @@
 //! `wlr-switcher` binary.
 
 use crate::ui::{self, Live, Mode, Options, View};
-use crate::{OrderArg, parse_grid, run_overlay};
+use crate::{FilterArgs, OrderArg, parse_grid, run_overlay};
 use crate::{i18n, tr};
 use clap::Parser;
 use std::time::Instant;
@@ -37,6 +37,8 @@ struct Cli {
     /// Include windows with no app-id (system surfaces)
     #[arg(long)]
     include_system: bool,
+    #[command(flatten)]
+    filters: FilterArgs,
     /// Show a fixed COLSxROWS grid of thumbnails (e.g. 4x3)
     #[arg(long, value_name = "COLSxROWS", value_parser = parse_grid)]
     grid: Option<(u32, u32)>,
@@ -69,8 +71,10 @@ pub fn main() {
         return;
     }
 
+    let window_filters: ui::WindowFilters = cli.filters.into();
+
     if let Some(secs) = cli.bench_capture {
-        ui::bench_capture(secs);
+        ui::bench_capture(secs, window_filters);
         return;
     }
 
@@ -82,7 +86,7 @@ pub fn main() {
     } else {
         Mode::All
     };
-    let opts = Options {
+    let mut opts = Options {
         mode,
         show_system: cli.include_system,
         grid: cli.grid,
@@ -90,7 +94,30 @@ pub fn main() {
         hold: false,
         live: Live::All,
         order: cli.window_order.into(),
+        window_filters,
     };
+
+    // Two reasons to connect before the overlay. A --pid filter needs the compositor to
+    // name the process behind each window, whatever the mode, and must say so rather
+    // than come up unapplied. And screens ignore the window filter, so only a
+    // windows-only run can be emptied by it. Anything else opens the overlay straight
+    // away, paying no extra connection.
+    if opts.window_filters.needs_pids()
+        || (mode == Mode::Windows && !opts.window_filters.is_empty())
+    {
+        match wlr_capture::wl::Client::connect() {
+            Ok(client) => {
+                crate::require_window_pids(&mut opts.window_filters, client.toplevels());
+                if mode == Mode::Windows {
+                    crate::reject_empty_window_filter(client.toplevels(), &opts.window_filters);
+                }
+            }
+            Err(e) => {
+                eprintln!("{}", tr!("error", error = format!("{e:#}")));
+                std::process::exit(2);
+            }
+        }
+    }
 
     match run_overlay(opts, t0) {
         Ok(Some(sel)) => {

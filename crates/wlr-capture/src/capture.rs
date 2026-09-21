@@ -114,7 +114,10 @@ impl WindowFilter<'_> {
     /// Whether this filter selects a window with these attributes. An unset field matches
     /// anything, so an empty filter matches every window — callers reject that case before
     /// resolving.
-    fn matches(&self, app_id: &str, title: &str) -> bool {
+    ///
+    /// Public so every tool that takes `--app-id` / `--title` compares the same way,
+    /// whether it resolves one window or narrows a list.
+    pub fn matches(&self, app_id: &str, title: &str) -> bool {
         let app_id_ok = self.app_id.is_none_or(|a| app_id.eq_ignore_ascii_case(a));
         let title_ok = self
             .title
