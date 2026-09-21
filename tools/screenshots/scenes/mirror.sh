@@ -14,6 +14,7 @@ PEEK="$(shots_tool wlr-peek)"
 # sits top-right (per the nested config's float rule), clear of the mirrored area.
 setsid "$PEEK" mirror -g "920,80 440x330" --zoom 2 >/dev/null 2>&1 < /dev/null &
 M_PID=$!
+shots_wait_window '^wlr-peek-mirror '
 shots_settle 3.0
 shots_grab "$(shots_out wlr-peek mirror.png)"
 kill "$M_PID" 2>/dev/null

@@ -17,7 +17,7 @@ color_demo() {
   setsid "$PEEK" color >/dev/null 2>&1 < /dev/null &
   P_PID=$!
   shots_settle 2.2
-  shots_cursor 1270 360;  shots_settle 1.4        # land on the Factorio video (middle)
+  shots_cursor 1270 360;  shots_settle 1.4        # land on the video (middle)
   shots_glide 1270 360 1430 280 26; shots_settle 1.4
   shots_glide 1430 280 1130 470 26; shots_settle 1.4
   shots_glide 1130 470 2080 480 36; shots_settle 1.4   # over to phoronix (right)

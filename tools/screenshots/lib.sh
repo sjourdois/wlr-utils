@@ -171,6 +171,43 @@ shots_wait_window() {
   return 1
 }
 
+# PIDs of wlr-draw daemons attached to a given WAYLAND_DISPLAY ("" = any other
+# session than ours). Args: display
+shots_draw_pids() {
+  local p d
+  for p in $(pgrep -x wlr-draw 2>/dev/null); do
+    d="$(tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | sed -n 's/^WAYLAND_DISPLAY=//p')"
+    if [ -n "$1" ]; then [ "$d" = "$1" ] && printf '%s\n' "$p"
+    else [ "$d" != "$WAYLAND_DISPLAY" ] && printf '%s\n' "$p"; fi
+  done
+}
+
+# Start the scene's wlr-draw daemon and return only once OUR daemon answers.
+#
+# The control socket lives in $XDG_RUNTIME_DIR, which the nested session shares
+# with the live one. A daemon already listening there — the user's own, say —
+# keeps ours from binding, and every control command the scene then sends lands
+# in the LIVE session: the capture comes out with no annotation on it and the
+# real screen gets the commands. Refuse instead of shooting that. Args: binary
+shots_draw_start() {
+  local draw="$1" foreign i
+  foreign="$(shots_draw_pids "" | tr '\n' ' ')"
+  if [ -n "${foreign// /}" ]; then
+    shots_msg "FOREIGN wlr-draw DAEMON (pid ${foreign% }) owns $XDG_RUNTIME_DIR/wlr-draw.sock; stop it before capturing"
+    return 1
+  fi
+  shots_spawn "$draw"
+  for i in $(seq 1 100); do
+    if [ -n "$(shots_draw_pids "$WAYLAND_DISPLAY")" ] && [ -S "$XDG_RUNTIME_DIR/wlr-draw.sock" ]; then
+      shots_settle 0.8      # the socket is bound before the overlay is mapped
+      return 0
+    fi
+    sleep 0.1
+  done
+  shots_msg "NO wlr-draw DAEMON: the nested daemon never came up"
+  return 1
+}
+
 # Open a styled foot terminal running a command (kept alive afterwards).
 # Args: title cmd
 shots_term() {

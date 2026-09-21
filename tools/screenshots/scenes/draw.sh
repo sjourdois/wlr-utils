@@ -11,8 +11,7 @@ shots_start 2560x1440
 shots_visible_desktop
 
 DRAW="$(shots_tool wlr-draw)"
-shots_spawn "$DRAW"
-shots_settle 1.4
+shots_draw_start "$DRAW" || shots_die "no wlr-draw daemon of our own"
 "$DRAW" on >/dev/null 2>&1
 shots_settle 0.5
 
