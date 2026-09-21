@@ -269,9 +269,9 @@ cargo build --release -p wlr-draw
   for the always-on-top overlay. Plain annotation needs only that, at any version.
 - **Screen capture** (freeze-frame `Space`, save `w`) — additionally needs
   `ext-image-copy-capture-v1` with the **output** source, i.e. **Sway ≥ 1.11 /
-  wlroots ≥ 0.19**. Where it's missing, freeze and save are hidden from the help/tray and
-  plain annotation still works. Run `wlr-draw doctor` to check your own; see
-  [COMPATIBILITY.md](../../COMPATIBILITY.md).
+  wlroots ≥ 0.19**, or `wlr-screencopy`. Where neither is exposed, freeze and save are
+  hidden from the help/tray and plain annotation still works. Run `wlr-draw doctor` to
+  check your own; see [COMPATIBILITY.md](../../COMPATIBILITY.md).
 - **Stylus** (optional) — `tablet-v2` (`zwp_tablet_manager_v2`); without it the stylus
   isn't seen and everything else works.
 - **Tray** (`tray` feature, on by default) — a StatusNotifierItem host and `libdbus`.

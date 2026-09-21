@@ -179,14 +179,15 @@ silently incompatible with the rest of the output. Use `ocr --app-id` for the te
 
 ## Requirements
 
-A wlroots compositor exposing `ext-image-copy-capture-v1`. Screen inspection (`color`,
-`loupe`, `region`, screen `mirror`/`watch`) needs the **output** source — **Sway ≥ 1.11 /
-wlroots ≥ 0.19**; targeting a **window** (`-w`, window mirror) additionally needs the
-**foreign-toplevel** source + `ext-foreign-toplevel-list-v1` — **Sway ≥ 1.12 / wlroots ≥
-0.20**. The frozen overlays (`color`, `loupe`, `region`) use `zwlr-layer-shell`, `mirror`
-uses `xdg-shell`, and `color --clipboard` needs `zwlr_data_control_manager_v1`. `wlr-peek
-doctor` prints exactly what your compositor advertises; see
-[COMPATIBILITY.md](../../COMPATIBILITY.md) for the full matrix.
+A wlroots compositor exposing a capture protocol. Screen inspection (`color`, `loupe`,
+`region`, screen `mirror`/`watch`) needs `ext-image-copy-capture-v1` with the **output**
+source — **Sway ≥ 1.11 / wlroots ≥ 0.19** — or `wlr-screencopy`; targeting a **window**
+(`-w`, window mirror) needs the **foreign-toplevel** source +
+`ext-foreign-toplevel-list-v1` — **Sway ≥ 1.12 / wlroots ≥ 0.20** — which
+`wlr-screencopy` does not stand in for. The frozen overlays (`color`, `loupe`, `region`)
+use `zwlr-layer-shell`, `mirror` uses `xdg-shell`, and `color --clipboard` needs
+`zwlr_data_control_manager_v1`. `wlr-peek doctor` prints exactly what your compositor
+advertises; see [COMPATIBILITY.md](../../COMPATIBILITY.md) for the full matrix.
 
 - **GL stack** — `libegl1` at runtime (the overlays render through EGL/GLES), plus
   `libgbm` for the zero-copy dma-buf path `mirror` streams through (the `gpu` feature, on

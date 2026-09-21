@@ -171,10 +171,12 @@ The default build records video and links the system FFmpeg libraries (see
 
 ## Requirements
 
-A wlroots compositor exposing `ext-image-copy-capture-v1`. Output/region screenshots and
-recording need the `ext-output-image-capture-source-manager-v1` source — **Sway ≥ 1.11 /
-wlroots ≥ 0.19**; capturing a **window** (`-w`/`--pick-window`) additionally needs
-`ext-foreign-toplevel-image-capture-source-manager-v1` — **Sway ≥ 1.12 / wlroots ≥ 0.20**.
+A wlroots compositor exposing a capture protocol. Output/region screenshots and
+recording need `ext-image-copy-capture-v1` with the
+`ext-output-image-capture-source-manager-v1` source — **Sway ≥ 1.11 / wlroots ≥ 0.19** —
+or `zwlr_screencopy_manager_v1`; capturing a **window** (`-w`/`--pick-window`) needs
+`ext-foreign-toplevel-image-capture-source-manager-v1` — **Sway ≥ 1.12 / wlroots ≥ 0.20**,
+which `zwlr_screencopy_manager_v1` does not stand in for.
 `xdg-output` is used for accurate logical geometry when present, and the clipboard (`-c`)
 needs `zwlr_data_control_manager_v1`. Run `wlr-shot doctor` to see what your compositor
 exposes; see [COMPATIBILITY.md](../../COMPATIBILITY.md) for the full matrix.

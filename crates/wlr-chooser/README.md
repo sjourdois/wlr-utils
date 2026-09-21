@@ -48,12 +48,14 @@ window or a monitor with a click.
 
 ## Requirements
 
-- A wlroots-based compositor exposing `ext-image-copy-capture-v1` and `wlr-layer-shell`.
-  Screen sources need the **output** source (**Sway ≥ 1.11 / wlroots ≥ 0.19**); live
-  **window** thumbnails and **`wlr-switcher`** additionally need the **foreign-toplevel**
-  source + `ext-foreign-toplevel-list-v1` (**Sway ≥ 1.12 / wlroots ≥ 0.20**). Below that,
-  `wlr-switcher` reports the missing window capture and exits. Run `wlr-chooser --doctor`
-  (or `wlr-switcher --doctor`) to check your own; see [COMPATIBILITY.md](../../COMPATIBILITY.md).
+- A wlroots-based compositor exposing `wlr-layer-shell` and a capture protocol.
+  Screen sources need `ext-image-copy-capture-v1` with the **output** source
+  (**Sway ≥ 1.11 / wlroots ≥ 0.19**), or `wlr-screencopy`; live **window** thumbnails
+  and **`wlr-switcher`** need the **foreign-toplevel** source +
+  `ext-foreign-toplevel-list-v1` (**Sway ≥ 1.12 / wlroots ≥ 0.20**), which
+  `wlr-screencopy` does not stand in for. Without it, `wlr-switcher` reports the missing
+  window capture and exits. Run `wlr-chooser --doctor` (or `wlr-switcher --doctor`) to
+  check your own; see [COMPATIBILITY.md](../../COMPATIBILITY.md).
 - `xdg-desktop-portal-wlr` ≥ 0.8 (for the screencast chooser use).
 - For the **GPU path** (default): a working EGL/GLES driver and `libgbm`
   (ships with Mesa). It falls back to CPU automatically if unavailable.

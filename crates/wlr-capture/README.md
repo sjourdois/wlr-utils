@@ -21,7 +21,9 @@ The reusable bricks plus the overlay UI helpers they share:
 
 - **`wl`** — a native Wayland client that enumerates foreign toplevels and outputs
   (`ext-foreign-toplevel-list-v1`) and captures them at full resolution via
-  `ext-image-capture-source-v1` + `ext-image-copy-capture-v1`. It computes the
+  `ext-image-capture-source-v1` + `ext-image-copy-capture-v1`, or via
+  `zwlr-screencopy-v1` where those are absent — that one addresses a `wl_output`
+  and never a window, so it carries screen capture only. It computes the
   format-correct stride (so it works where `grim 1.5` fails with "Invalid
   stride"). Live sessions take a zero-copy dma-buf path (allocated through `gbm`,
   every plane of the modifier declared); single captures, which end up as CPU
