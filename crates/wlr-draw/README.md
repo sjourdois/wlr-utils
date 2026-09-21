@@ -4,7 +4,7 @@
 [![crates.io](https://img.shields.io/crates/v/wlr-draw.svg)](https://crates.io/crates/wlr-draw)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-Draw and annotate **live on screen** on wlroots compositors — a native, Wayland-first
+Draw and annotate **live on screen** on wlroots and derivatives — a native, Wayland-first
 take on [gromit-mpx](https://github.com/bk138/gromit-mpx). A transparent, always-on-top
 overlay floats over every output, including monitors plugged in mid-session; toggle draw
 mode to scribble freehand strokes, lines, rectangles, ellipses, arrows and text over

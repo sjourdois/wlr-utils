@@ -4,7 +4,7 @@
 [![crates.io](https://img.shields.io/crates/v/wlr-peek.svg)](https://crates.io/crates/wlr-peek)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-Inspect the screen on wlroots compositors. The "look at the screen and extract
+Inspect the screen on wlroots and derivatives. The "look at the screen and extract
 something" companion to [`wlr-shot`](../wlr-shot) (which produces image artifacts),
 built on the shared [`wlr-capture`](../wlr-capture) engine.
 

@@ -9,7 +9,7 @@ welcome.
 
 | Crate | Binaries | What it is |
 |-------|----------|------------|
-| `wlr-capture` | — | the shared engine: wlroots capture (`ext-image-copy-capture-v1`, dma-buf zero-copy + shm fallback) and the egui/EGL overlay toolkit |
+| `wlr-capture` | — | the shared engine: wlroots capture (`ext-image-copy-capture-v1`, or `wlr-screencopy` for screens, dma-buf zero-copy + shm fallback) and the egui/EGL overlay toolkit |
 | `wlr-i18n` | — | shared Fluent localisation plumbing; each tool builds its own catalog on it |
 | `wlr-chooser` | `wlr-chooser`, `wlr-switcher` | screen-share picker + Alt-Tab/exposé switcher |
 | `wlr-shot` | `wlr-shot` | screenshots & recording |

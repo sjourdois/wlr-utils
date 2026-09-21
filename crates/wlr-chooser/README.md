@@ -48,7 +48,7 @@ window or a monitor with a click.
 
 ## Requirements
 
-- A wlroots-based compositor exposing `wlr-layer-shell` and a capture protocol.
+- A compositor speaking the wlroots protocols, with `wlr-layer-shell` and a capture protocol.
   Screen sources need `ext-image-copy-capture-v1` with the **output** source
   (**Sway ≥ 1.11 / wlroots ≥ 0.19**), or `wlr-screencopy`; live **window** thumbnails
   and **`wlr-switcher`** need the **foreign-toplevel** source +

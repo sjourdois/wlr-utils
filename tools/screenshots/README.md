@@ -33,7 +33,8 @@ keeps every frame of the master — set `SHOTS_GIF_FPS` to resample it to anothe
 
 ## Requirements
 
-System tools: `sway`, `wtype`, `foot`, `ffmpeg`, `jq`, `curl`, `python3` with
+System tools: `sway`, `wtype`, `foot`, `ffmpeg`, `jq`, `curl`, `gh` (optional, for an
+ad-blocker in the browser scenes), `python3` with
 `websockets`, ImageMagick, plus `batcat`/`tree` for the demo windows. The scenes
 that show a desktop also need `chromium`, `galculator`, `mpv`, `btop` and `cmatrix`. The
 first run also builds a tiny virtual-pointer injector:
