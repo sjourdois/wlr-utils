@@ -39,15 +39,17 @@ wayland-protocols-wlr.workspace = true
 rustix.workspace = true
 # Zero-copy GPU capture (the `gpu` feature): allocate dma-bufs via gbm.
 gbm = { workspace = true, optional = true }
+# COSMIC has no IPC socket, so both the focus backend and window activation talk the
+# COSMIC toplevel protocols over Wayland. The bindings are generated from the protocol
+# files vendored under `protocols/`: the published `cosmic-protocols` crate is
+# GPL-3.0-only, which this crate's MIT OR Apache-2.0 licensing cannot take on.
+# Always on, because `wl::activate_window` is: both crates are already in the graph
+# under `wayland-client`, so naming them here costs nothing.
+wayland-scanner.workspace = true
+wayland-backend.workspace = true
 # Compositor IPC for focus-aware capture (the `focus` feature).
 serde_json = { workspace = true, optional = true }
 swayipc = { workspace = true, optional = true }
-# COSMIC has no IPC socket, so its focus backend talks cosmic-toplevel-info over
-# Wayland. The bindings are generated from the protocol files vendored under
-# `protocols/`: the published `cosmic-protocols` crate is GPL-3.0-only, which this
-# crate's MIT OR Apache-2.0 licensing cannot take on.
-wayland-scanner = { workspace = true, optional = true }
-wayland-backend = { workspace = true, optional = true }
 # Windowing host for the shared frozen overlay (the `overlay` feature).
 smithay-client-toolkit = { workspace = true, optional = true }
 # Native FFmpeg bindings for video encoding (the `video` feature).
@@ -82,9 +84,8 @@ gpu = ["dep:gbm"]
 # that only streams frames through `sink` doesn't need it.
 compose = ["dep:image"]
 # Focus-aware capture (`focus`): ask the compositor for the active window / current
-# output. Pulls `serde_json` to parse `hyprctl` and `niri msg` outputs, and
-# `wayland-scanner` to generate the COSMIC protocol bindings.
-focus = ["dep:serde_json", "dep:swayipc", "dep:wayland-scanner", "dep:wayland-backend"]
+# output. Pulls `serde_json` to parse `hyprctl` and `niri msg` outputs.
+focus = ["dep:serde_json", "dep:swayipc"]
 # The shared frozen-screen overlay (`overlay`): a layer-shell surface per output
 # rendering a frozen capture for interactive region/point selection. Needs the
 # toolkit (egui rendering), compose (OutputCapture) and a windowing host (sctk).

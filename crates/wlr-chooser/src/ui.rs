@@ -19,20 +19,30 @@ use wlr_capture::{focus, icons, wl};
 pub type Outcome = Arc<Mutex<Option<Selection>>>;
 
 /// The picked source, carrying the full identity so `main` can act on it per mode:
-/// print `token` (portal), activate by `app_id`+`title` (`--switch`), or — later —
-/// mirror it live by `identifier` (PiP). See the pip-mode design notes.
+/// print `token` (portal) or focus it (`wlr-switcher`). Focusing needs both keys: the
+/// `identifier` COSMIC addresses a window by, and the `app_id`+`title`+`dup_index`
+/// triple zwlr forces on us. See [`Selection::identity`].
 #[derive(Clone)]
 pub struct Selection {
     pub token: String, // portal stdout contract: "Window: <id>" / "Monitor: <name>"
     pub is_window: bool,
-    // Reserved for the upcoming PiP mode (mirror by identifier); not yet consumed.
-    #[allow(dead_code)]
-    pub identifier: String, // ext-foreign-toplevel identifier (capture / PiP); empty for outputs
-    pub app_id: String, // for zwlr activation / PiP labelling
-    pub title: String,  // window title
+    pub identifier: String, // ext-foreign-toplevel identifier; empty for outputs
+    pub app_id: String,     // for zwlr activation / tile labelling
+    pub title: String,      // window title
     /// Ordinal among windows sharing this (app_id, title), in creation order, to
     /// disambiguate identical windows when correlating to zwlr handles.
     pub dup_index: usize,
+}
+
+impl Selection {
+    /// This window in the terms `zwlr-foreign-toplevel-management` exposes.
+    pub fn identity(&self) -> wl::WindowIdentity {
+        wl::WindowIdentity {
+            app_id: self.app_id.clone(),
+            title: self.title.clone(),
+            dup_index: self.dup_index,
+        }
+    }
 }
 
 pub const APP_ID: &str = "wlr-chooser";

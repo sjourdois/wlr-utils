@@ -1740,6 +1740,9 @@ fn convert(raw: &[u8], w: u32, h: u32, stride: usize, layout: &PixelLayout) -> C
 // object namespace. We correlate the two by app_id + title — the only key both
 // expose — plus a creation-order index among identical windows. Each is a
 // self-contained, one-shot path on its own connection.
+//
+// cosmic-comp advertises none of this; `activate_window` falls back to the COSMIC
+// toplevel manager there, which needs no such correlation. See `cosmic_activate`.
 
 /// A toplevel as zwlr-foreign-toplevel-management advertises it.
 struct ZwlrToplevel {
@@ -1812,27 +1815,31 @@ struct ToplevelEnumeration {
 
 /// Connect, bind zwlr-foreign-toplevel-management and collect the toplevels it
 /// advertises, with their app-id, title and activation state.
-fn enumerate_toplevels() -> Result<ToplevelEnumeration> {
+///
+/// `Ok(None)` means the compositor advertises no `zwlr_foreign_toplevel_manager_v1` —
+/// cosmic-comp, for one. That is a fact about the compositor, not a failure, and each
+/// caller answers it its own way.
+fn enumerate_toplevels() -> Result<Option<ToplevelEnumeration>> {
     let conn = Connection::connect_to_env().context("Wayland connection")?;
     let (globals, mut queue) =
         registry_queue_init::<ActState>(&conn).context("Wayland registry")?;
     let qh = queue.handle();
-    let manager: ZwlrForeignToplevelManagerV1 = globals
-        .bind(&qh, 1..=3, ())
-        .context("zwlr_foreign_toplevel_manager_v1 missing (unsupported compositor)")?;
+    let Ok(manager) = globals.bind::<ZwlrForeignToplevelManagerV1, _, _>(&qh, 1..=3, ()) else {
+        return Ok(None);
+    };
 
     // Binding the manager makes the compositor advertise current toplevels: the
     // first roundtrip brings the handles, the second the events describing them.
     let mut state = ActState::default();
     queue.roundtrip(&mut state).context("Wayland roundtrip")?;
     queue.roundtrip(&mut state).context("Wayland roundtrip")?;
-    Ok(ToplevelEnumeration {
+    Ok(Some(ToplevelEnumeration {
         globals,
         queue,
         state,
         _manager: manager,
         _conn: conn,
-    })
+    }))
 }
 
 /// The window that holds the focus right now, or `None` if no window does.
@@ -1840,9 +1847,13 @@ fn enumerate_toplevels() -> Result<ToplevelEnumeration> {
 /// Portable across wlroots compositors: it reads zwlr's `activated` state rather
 /// than a compositor-specific IPC. It must run *before* the caller maps a layer
 /// surface that takes the keyboard — under an exclusive keyboard grab no toplevel
-/// is activated any more, and the answer becomes `None`.
+/// is activated any more, and the answer becomes `None`. A compositor without the
+/// protocol answers `None` too: callers use this to pre-select a tile, and no tile
+/// is a usable answer.
 pub fn active_window() -> Result<Option<WindowIdentity>> {
-    let e = enumerate_toplevels()?;
+    let Some(e) = enumerate_toplevels()? else {
+        return Ok(None);
+    };
     // A multi-seat compositor can activate one window per seat; the first is as
     // good a choice as any, since a client cannot tell which seat is "ours".
     let Some(i) = e.state.toplevels.iter().position(|t| t.activated) else {
@@ -1856,30 +1867,52 @@ pub fn active_window() -> Result<Option<WindowIdentity>> {
     }))
 }
 
-/// Focus the window matching `app_id` + `title` via zwlr-foreign-toplevel-manager.
-/// `dup_index` selects among identical (app_id, title) windows by creation order
-/// (both ext-foreign-toplevel-list and zwlr enumerate in that order on wlroots),
-/// so the right one is focused even with duplicates.
+/// Focus a window, through whichever activation protocol the compositor offers.
+///
+/// `zwlr-foreign-toplevel-management` comes first: it is the portable one, and the one
+/// `active_window` already reads. Where it is absent — cosmic-comp — the COSMIC toplevel
+/// manager takes over, addressing the window by its `identifier` alone (see
+/// [`crate::cosmic_activate`]). A compositor with neither gets
+/// [`CaptureError::ActivationUnsupported`].
+///
+/// `identifier` is the `ext-foreign-toplevel-list-v1` identifier of the target, i.e.
+/// [`Toplevel::identifier`]; `identity` is the same window in the terms zwlr exposes.
 ///
 /// Run it after the picker closes, so our overlay's keyboard grab is already gone
 /// and focus can move to the target.
-pub fn activate_window(app_id: &str, title: &str, dup_index: usize) -> Result<()> {
-    let mut e = enumerate_toplevels()?;
+pub fn activate_window(identifier: &str, identity: &WindowIdentity) -> Result<()> {
+    let Some(e) = enumerate_toplevels()? else {
+        return crate::cosmic_activate::activate(identifier);
+    };
+    zwlr_activate(e, identity)
+}
+
+/// Focus a window over zwlr-foreign-toplevel-management.
+///
+/// zwlr exposes no identifier, so the target is matched on app-id + title, with
+/// `dup_index` selecting among identical windows by creation order (both
+/// ext-foreign-toplevel-list and zwlr enumerate in that order on wlroots).
+fn zwlr_activate(mut e: ToplevelEnumeration, identity: &WindowIdentity) -> Result<()> {
     let seat: WlSeat = e
         .globals
         .bind(&e.queue.handle(), 1..=8, ())
         .context("wl_seat missing")?;
 
-    let matching = |t: &&ZwlrToplevel| t.app_id == app_id && t.title == title;
+    let matching = |t: &&ZwlrToplevel| t.app_id == identity.app_id && t.title == identity.title;
     let handle = e
         .state
         .toplevels
         .iter()
         .filter(matching)
-        .nth(dup_index)
+        .nth(identity.dup_index)
         .or_else(|| e.state.toplevels.iter().find(matching))
         .map(|t| t.handle.clone())
-        .with_context(|| format!("window to activate not found: {app_id} / {title}"))?;
+        .with_context(|| {
+            format!(
+                "window to activate not found: {} / {}",
+                identity.app_id, identity.title
+            )
+        })?;
     handle.activate(&seat);
     e.queue
         .roundtrip(&mut e.state)

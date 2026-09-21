@@ -10,3 +10,4 @@ preview-unavailable = 미리 보기를 사용할 수 없음
 show-system = 시스템 창
 error = wlr-chooser: { $error }
 capture-no-window = 이 컴포지터는 개별 창을 캡처할 수 없습니다. 창 캡처에는 ext-image-copy-capture-v1과 foreign-toplevel 소스(wlroots >= 0.20 / Sway >= 1.12)가 필요합니다. `wlr-peek doctor`를 실행하여 컴포지터가 지원하는 기능을 확인하세요.
+focus-unsupported = 이 컴포지터는 선택한 창에 포커스를 줄 수 없습니다. 창 포커스에는 wlr-foreign-toplevel-management-v1이, COSMIC에서는 cosmic-toplevel-management-v1이 필요합니다. `wlr-peek doctor`를 실행하여 컴포지터가 지원하는 기능을 확인하세요.

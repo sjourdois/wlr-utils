@@ -10,3 +10,4 @@ preview-unavailable = Pré-visualização indisponível
 show-system = Janelas do sistema
 error = wlr-chooser: { $error }
 capture-no-window = Este compositor não pode capturar janelas individuais. A captura de janelas requer ext-image-copy-capture-v1 com a fonte foreign-toplevel (wlroots >= 0.20 / Sway >= 1.12). Execute `wlr-peek doctor` para ver o que seu compositor suporta.
+focus-unsupported = Este compositor não pode focar a janela escolhida. Focar uma janela requer wlr-foreign-toplevel-management-v1, ou cosmic-toplevel-management-v1 no COSMIC. Execute `wlr-peek doctor` para ver o que seu compositor suporta.

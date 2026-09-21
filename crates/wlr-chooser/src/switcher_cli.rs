@@ -13,7 +13,7 @@ use crate::{acquire_switch_lock, run_overlay};
 use crate::{i18n, tr};
 use clap::{Parser, ValueEnum};
 use std::time::Instant;
-use wlr_capture::wl;
+use wlr_capture::{CaptureError, wl};
 
 /// Presentation of the switcher (CLI mirror of [`View`]).
 #[derive(Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
@@ -155,9 +155,16 @@ pub fn main() {
         Ok(Some(sel)) => {
             // Focus the picked window (outputs aren't focusable, so ignore them).
             if sel.is_window
-                && let Err(e) = wl::activate_window(&sel.app_id, &sel.title, sel.dup_index)
+                && let Err(e) = wl::activate_window(&sel.identifier, &sel.identity())
             {
-                eprintln!("{}", tr!("error", error = format!("{e:#}")));
+                // A compositor with no activation protocol at all is a property of the
+                // setup, not a bug in this run: say what is missing, like the pre-flight
+                // does for window capture, rather than dumping a protocol name.
+                let msg = match e {
+                    CaptureError::ActivationUnsupported => tr!("focus-unsupported"),
+                    e => tr!("error", error = format!("{e:#}")),
+                };
+                eprintln!("{msg}");
                 std::process::exit(2);
             }
         }

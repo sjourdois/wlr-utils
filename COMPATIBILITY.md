@@ -24,6 +24,7 @@ single-tool install can produce it too.
 | `wlr-screencopy` (`zwlr_screencopy_manager_v1`, v3) | the capture engine's fallback, **outputs only**, used when `ext-image-copy-capture-v1` is absent | screen capture on a compositor without the `ext` protocols |
 | `ext-foreign-toplevel-list-v1` | enumerating windows | `wlr-chooser`, `-w`, `wlr-peek mirror`, window record/watch |
 | `wlr-foreign-toplevel-management` (`zwlr_foreign_toplevel_manager_v1`) | focusing the picked window, and reading which window is focused (its `activated` state) | `wlr-switcher` |
+| `cosmic-toplevel-management` (`zcosmic_toplevel_manager_v1`) + `cosmic-toplevel-info` v2+ | focusing the picked window on COSMIC, which has no `wlr-foreign-toplevel-management` | `wlr-switcher` on cosmic-comp |
 | `wlr-layer-shell` (`zwlr_layer_shell_v1`) | full-screen overlays | the region selector (`-s`), `wlr-peek loupe`/`color`, `wlr-switcher`, `wlr-chooser`, `wlr-draw` |
 | `wlr-data-control` (`zwlr_data_control_manager_v1`) | clipboard copy | `-c`/`--clipboard` |
 | `keyboard-shortcuts-inhibit` (`zwp_keyboard_shortcuts_inhibit_manager_v1`) | grabbing keys under a layer-shell grab | `wlr-switcher` (so `Alt+Tab` reaches it) |
@@ -96,8 +97,9 @@ requests (the per-interface numbers on wayland.app are unreliable snapshots).
 
 Tested on **Sway** ≥ 1.12 (the development compositor), **Hyprland 0.56.2**,
 **niri 26.04**, **KWin 6.7.5** and **Mutter 50.5**. On **cosmic-comp 1.8.0** the
-advertised protocols and the focus backend were checked in a software-rendered virtual
-machine, where frame capture could not be exercised. The other rows are untested.
+advertised protocols, the focus backend and `wlr-switcher`'s focus change were checked in
+a software-rendered virtual machine, where frame capture could not be exercised. The other
+rows are untested.
 
 Three caveats:
 
@@ -105,9 +107,9 @@ Three caveats:
   on KWin, without its freeze and save.
 - **niri / dwl** expose `wlr-screencopy` and none of the `ext` capture protocols, so the
   screen features work there and the window features do not.
-- **cosmic-comp** exposes no `wlr-foreign-toplevel-management`. `wlr-switcher` lists the
-  windows but cannot focus the one you pick, and fails with a message; every other tool
-  works.
+- **cosmic-comp** exposes no `wlr-foreign-toplevel-management`. `wlr-switcher` focuses the
+  picked window through `cosmic-toplevel-management` there, and addresses it by its
+  `ext-foreign-toplevel-list-v1` identifier.
 
 Two things vary by compositor:
 
@@ -124,9 +126,9 @@ Two things vary by compositor:
   windows are ordered by name.
 
   **Which tile `wlr-switcher` starts on** needs no backend: the window you are on comes
-  from `wlr-foreign-toplevel-management`'s `activated` state, the protocol the switcher
-  already needs to focus what it picks. A quick `Alt+Tab` therefore switches away from
-  that window wherever the switcher runs, in either window order.
+  from `wlr-foreign-toplevel-management`'s `activated` state. A quick `Alt+Tab` therefore
+  switches away from that window, in either window order. cosmic-comp does not expose that
+  protocol, so the switcher there starts on the first tile instead.
 - **Zero-copy GPU capture** (`linux-dmabuf`) is optional; the CPU `wl_shm` path is the
   universal fallback.
 

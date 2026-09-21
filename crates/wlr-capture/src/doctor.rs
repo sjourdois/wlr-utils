@@ -74,6 +74,14 @@ const CHECKS: &[(&str, &str)] = &[
         "enumerate windows (chooser, -w)",
     ),
     (
+        "zwlr_foreign_toplevel_manager_v1",
+        "focus a window (wlr-switcher)",
+    ),
+    (
+        "zcosmic_toplevel_manager_v1",
+        "focus a window on COSMIC (wlr-switcher)",
+    ),
+    (
         "zwlr_screencopy_manager_v1",
         "capture an output, older protocol (fallback)",
     ),
@@ -102,6 +110,22 @@ pub fn capture_verdict(globals: &[(String, u32)]) -> (Option<wl::Protocol>, bool
         .iter()
         .any(|(n, _)| n == "ext_foreign_toplevel_image_capture_source_manager_v1");
     (wl::select_protocol(globals), window)
+}
+
+/// Which protocol would focus the window `wlr-switcher` picks, or `None` if neither is
+/// advertised. zwlr first, the order [`wl::activate_window`] takes: it is the portable
+/// one, and the only one that also reports which window is focused.
+///
+/// This reads the advertised globals, like every other line of the report; the manager's
+/// own `capabilities` event has the last word at activation time.
+pub fn focus_verdict(globals: &[(String, u32)]) -> Option<&'static str> {
+    if globals
+        .iter()
+        .any(|(n, _)| n == "zwlr_foreign_toplevel_manager_v1")
+    {
+        return Some("wlr-foreign-toplevel-management-v1");
+    }
+    crate::cosmic_activate::manager_advertised(globals).then_some("cosmic-toplevel-management-v1")
 }
 
 /// Print the compositor capability report to stdout. Backs every tool's `doctor`
@@ -158,6 +182,15 @@ pub fn report(tool: &str, version: &str) -> Result<()> {
              captures outputs only. Screen capture still works; only window-only \
              features are unavailable (wlr-switcher exits with a notice)."
         );
+    }
+
+    match focus_verdict(&globals) {
+        Some(p) => println!("Window focus: supported via {p} (wlr-switcher)."),
+        None => println!(
+            "Window focus: UNSUPPORTED — needs wlr-foreign-toplevel-management-v1, or \
+             cosmic-toplevel-management-v1 with cosmic-toplevel-info-v1 v2+. wlr-switcher \
+             cannot focus the window you pick."
+        ),
     }
 
     if protocol.is_some() {
@@ -256,7 +289,7 @@ fn self_reported_version(name: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{capture_verdict, parse_pretty_name, redact_home};
+    use super::{capture_verdict, focus_verdict, parse_pretty_name, redact_home};
 
     #[test]
     fn redact_home_replaces_the_home_dir_with_tilde() {
@@ -334,5 +367,38 @@ mod tests {
             capture_verdict(&globals(&[SCREENCOPY])),
             (Some(Protocol::Screencopy), false)
         );
+    }
+
+    #[test]
+    fn focus_verdict_prefers_zwlr_and_falls_back_to_cosmic() {
+        const ZWLR: &str = "zwlr_foreign_toplevel_manager_v1";
+        const COSMIC_MANAGER: &str = "zcosmic_toplevel_manager_v1";
+        const COSMIC_INFO: &str = "zcosmic_toplevel_info_v1";
+        let cosmic = || {
+            vec![
+                (COSMIC_MANAGER.to_string(), 5),
+                (COSMIC_INFO.to_string(), 3),
+            ]
+        };
+
+        assert_eq!(focus_verdict(&globals(&[])), None);
+        assert_eq!(
+            focus_verdict(&globals(&[ZWLR])),
+            Some("wlr-foreign-toplevel-management-v1")
+        );
+        assert_eq!(
+            focus_verdict(&cosmic()),
+            Some("cosmic-toplevel-management-v1")
+        );
+        // Both advertised → zwlr, the protocol activate_window reaches for first.
+        let mut both = cosmic();
+        both.push((ZWLR.to_string(), 3));
+        assert_eq!(
+            focus_verdict(&both),
+            Some("wlr-foreign-toplevel-management-v1")
+        );
+        // The COSMIC manager alone is useless: without info v2+ there is no way to
+        // turn the window we picked into a handle it accepts.
+        assert_eq!(focus_verdict(&globals(&[COSMIC_MANAGER])), None);
     }
 }

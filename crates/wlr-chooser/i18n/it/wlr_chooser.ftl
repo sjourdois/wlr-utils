@@ -10,3 +10,4 @@ preview-unavailable = Anteprima non disponibile
 show-system = Finestre di sistema
 error = wlr-chooser: { $error }
 capture-no-window = Questo compositor non può catturare singole finestre. La cattura delle finestre richiede ext-image-copy-capture-v1 con la sorgente foreign-toplevel (wlroots >= 0.20 / Sway >= 1.12). Esegui `wlr-peek doctor` per vedere cosa supporta il tuo compositor.
+focus-unsupported = Questo compositor non può dare il focus alla finestra scelta. Dare il focus a una finestra richiede wlr-foreign-toplevel-management-v1, o cosmic-toplevel-management-v1 su COSMIC. Esegui `wlr-peek doctor` per vedere cosa supporta il tuo compositor.

@@ -48,6 +48,8 @@
 pub use wayland_client::Connection;
 
 pub mod clipboard;
+mod cosmic_activate;
+mod cosmic_protocol;
 pub mod diff;
 pub mod doctor;
 pub mod error;
@@ -62,8 +64,6 @@ pub mod wl;
 #[cfg_attr(docsrs, doc(cfg(feature = "compose")))]
 pub mod capture;
 
-#[cfg(feature = "focus")]
-mod cosmic_protocol;
 #[cfg(feature = "focus")]
 #[cfg_attr(docsrs, doc(cfg(feature = "focus")))]
 pub mod focus;

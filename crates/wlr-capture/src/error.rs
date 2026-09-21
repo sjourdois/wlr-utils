@@ -23,6 +23,15 @@ pub enum CaptureError {
     )]
     WindowsUnsupported,
 
+    /// The compositor offers no way to give a window the focus: it advertises neither
+    /// `zwlr-foreign-toplevel-management-v1` nor COSMIC's `zcosmic_toplevel_manager_v1`
+    /// (or that manager refuses `activate`). Window capture may still work.
+    #[error(
+        "this compositor cannot focus a window (needs wlr-foreign-toplevel-management-v1 \
+         or cosmic-toplevel-management-v1)"
+    )]
+    ActivationUnsupported,
+
     /// No outputs are available to capture.
     #[error("no outputs available")]
     NoOutputs,
@@ -172,6 +181,11 @@ mod tests {
             CaptureError::WindowsUnsupported
                 .to_string()
                 .contains("wlroots >= 0.20")
+        );
+        assert!(
+            CaptureError::ActivationUnsupported
+                .to_string()
+                .contains("cosmic-toplevel-management-v1")
         );
     }
 

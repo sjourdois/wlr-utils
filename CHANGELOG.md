@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **`--cursor` on `wlr-shot`** — `screenshot` and `record` can composite the mouse
+  cursor into the capture. It stays out by default. Works on both capture
+  protocols.
+
 - **Screen capture over `wlr-screencopy`** — the capture engine uses
   `zwlr_screencopy_manager_v1` v3 where `ext-image-copy-capture-v1` is absent, so
   screenshots, recording, the loupe/colour picker, region select and wlr-draw's
@@ -17,6 +21,11 @@ All notable changes to this project are documented here. The format is based on
   stay unavailable there and say so. `doctor` reports which capture protocol is in
   use; `WLR_FORCE_SCREENCOPY=1` selects `wlr-screencopy` on a compositor that
   advertises both.
+- **`wlr-switcher` focuses the picked window on cosmic-comp** — COSMIC exposes no
+  `wlr-foreign-toplevel-management`, so the switcher uses `cosmic-toplevel-management`
+  there and names the window by its `ext-foreign-toplevel-list-v1` identifier. Checked
+  against cosmic-comp 1.8.0. A compositor with neither protocol says so and exits;
+  `doctor` reports which one is in use.
 - **Focus backend for cosmic-comp** — `-a` (active window) and `--current-output`
   work on **cosmic-comp**. COSMIC exposes no IPC socket, so the backend reads
   `zcosmic_toplevel_info_v1` over Wayland; `get_cosmic_toplevel` ties each COSMIC
