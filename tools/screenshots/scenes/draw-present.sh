@@ -23,13 +23,19 @@ present_demo() {
   shots_scroll v 3; shots_settle 0.6       # widen the flashlight
   shots_glide 1270 360 1270 1080 26        # -> the calculator (down the column)
   shots_settle 0.7
-  shots_glide 1270 1080 2080 520 32        # -> phoronix (right)
+  shots_glide 1270 1080 1850 400 32        # -> the article column (right)
   shots_settle 0.6
-  shots_glide 2080 520 430 520 36          # back to GitHub
-  shots_settle 0.4
-  # Still holding Shift, drag a fixed spotlight rectangle over GitHub.
+  # Still holding Shift, pose a tight spotlight on a few articles. Two choices here,
+  # both deliberate. It goes on phoronix rather than GitHub, because a spotlight only
+  # reads when the lit window is a bright one — lighting GitHub's dark theme leaves
+  # the lit zone as dark as the veiled surround. And it covers about three articles
+  # rather than the whole column, so the veil's edge cuts across the page instead of
+  # landing on a window border, where it would just look like the window is focused.
+  # It spans the column's full width on purpose: inset sides would slice the
+  # headlines mid-word. The top and bottom edges carry the effect — they fall on the
+  # article rules at y~322 and ~805, measured on the rendered page.
   "$DRAW" tool rect >/dev/null 2>&1
-  shots_drag 40 210 840 1240 18
+  shots_drag 1700 330 2552 810 18
   shots_settle 0.6
   shots_kup 42                             # release Shift; the posed spotlight stays
   shots_settle 1.2
