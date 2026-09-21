@@ -329,9 +329,12 @@ fn hypr_active_window_rect(w: &serde_json::Value) -> Option<Region> {
 /// Rank the windows of `hyprctl -j clients` by Hyprland's own focus history.
 ///
 /// `focusHistoryID` ranks every mapped window, `0` being the one focused most
-/// recently, and `stableId` is exactly the `ext-foreign-toplevel-list-v1`
-/// identifier — so, unlike the announcement order of that list, it also tells
-/// apart two windows sharing an app id and a title.
+/// recently. `stableId` is Hyprland's own window counter in hex, the same value it
+/// hands `ext-foreign-toplevel-list-v1` as an identifier — which is what makes the
+/// ranking tell apart two windows sharing an app id and a title, where the
+/// announcement order of that list cannot. Hyprland documents neither field, so the
+/// two being equal is an implementation detail: callers rank what matches and order
+/// the rest by name.
 ///
 /// `active` is `hyprctl -j activewindow`, `{}` when nothing holds the focus: the
 /// head of the history counts as focused only when it is that window, since the

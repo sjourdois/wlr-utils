@@ -131,6 +131,21 @@ impl WindowOrder {
         Self::Mru(windows.map(String::from).zip(0..).collect())
     }
 
+    /// Whether a focus history was read but ranks none of the `windows` on screen.
+    /// Callers pass a non-empty window list.
+    ///
+    /// The ranking is keyed by what a compositor IPC calls a window, the tiles by the
+    /// `ext-foreign-toplevel-list-v1` identifier; that the two agree is how every
+    /// backend correlates them, and no protocol owes it. When they stop agreeing every
+    /// pair lands in the unranked arm of [`Self::compare`] and the order quietly
+    /// degrades to alphabetical, which is the right fallback but a silent one.
+    fn mru_unmatched<'a>(&self, windows: impl IntoIterator<Item = &'a Source>) -> bool {
+        let Self::Mru(rank) = self else {
+            return false;
+        };
+        !rank.is_empty() && !windows.into_iter().any(|w| rank.contains_key(&w.key))
+    }
+
     /// Whether window `a` goes before, after or level with `b`.
     fn compare(&self, a: &Source, b: &Source) -> cmp::Ordering {
         let by_name = |s: &Source| (s.app_id.to_lowercase(), s.win_title.to_lowercase());
@@ -269,6 +284,8 @@ pub(crate) fn capture_thread(tx: Sender<Msg>, gpu_failed: Arc<AtomicBool>, order
     let mut by_id: HashMap<wl::SessionId, String> = HashMap::new(); // reverse, to label frames
     let mut iconed: HashSet<String> = HashSet::new();
     let mut last_keys: Vec<String> = Vec::new();
+    // Whether the focus history has been confronted with a window list yet.
+    let mut mru_checked = false;
     let budget = round_budget();
 
     'outer: loop {
@@ -296,6 +313,17 @@ pub(crate) fn capture_thread(tx: Sender<Msg>, gpu_failed: Arc<AtomicBool>, order
             current.push((window_source(w, dup_index), Capturable::Window(w.clone())));
         }
         current[outputs.len()..].sort_by(|(a, _), (b, _)| order.compare(a, b));
+        // The ranking is built before the toplevels are known, so whether its keys are
+        // the ones the windows carry can only be seen here. One round with windows on
+        // it settles the question — the loop runs several times a second, and the
+        // answer is a property of the compositor, not of this round's window set.
+        let windows = &current[outputs.len()..];
+        if !mru_checked && !windows.is_empty() {
+            mru_checked = true;
+            if order.mru_unmatched(windows.iter().map(|(s, _)| s)) {
+                eprintln!("{}", tr!("mru-unmatched"));
+            }
+        }
         let keys: Vec<String> = current.iter().map(|(s, _)| s.key.clone()).collect();
 
         // Announce the source list only when it actually changes (set or order).
@@ -1792,6 +1820,24 @@ mod tests {
         fn picked(&self) -> Option<String> {
             self.out.lock().unwrap().as_ref().map(|s| s.token.clone())
         }
+    }
+
+    #[test]
+    fn mru_notices_a_ranking_that_names_no_window() {
+        let listed = [window("ext-a", "foot"), window("ext-b", "firefox")];
+        // Identifiers the compositor and the toplevel list agree on: ranked.
+        let agreed = WindowOrder::mru(["ext-b", "ext-a"].into_iter());
+        assert!(!agreed.mru_unmatched(&listed));
+        // One window opened since the snapshot still leaves the ranking usable.
+        let partial = WindowOrder::mru(["ext-a"].into_iter());
+        assert!(!partial.mru_unmatched(&listed));
+        // A compositor naming its windows otherwise: nothing to rank by.
+        let diverged = WindowOrder::mru(["0x7f2c", "0x7f31"].into_iter());
+        assert!(diverged.mru_unmatched(&listed));
+        // No history at all is the documented "not supported" case, not a mismatch,
+        // and by-name order has nothing to match in the first place.
+        assert!(!WindowOrder::mru(std::iter::empty()).mru_unmatched(&listed));
+        assert!(!WindowOrder::ByName.mru_unmatched(&listed));
     }
 
     #[test]
