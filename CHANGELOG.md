@@ -21,7 +21,12 @@ All notable changes to this project are documented here. The format is based on
     exactly as before, so existing keybindings need no change either way.
   - **Nothing is captured while it idles.** The capture thread is spawned for each
     overlay and dies with it; between two, the daemon holds a connection and a GPU
-    context and reads no window contents.
+    context and reads no window contents. What an overlay put on the GPU is freed
+    when it closes, imported window buffers included, so a daemon holds on to no
+    window it is no longer showing.
+  - An invocation that finds no daemon says so on stderr before showing the overlay
+    itself, since paying the full startup is otherwise invisible. `--no-daemon` says
+    nothing: it asked for that.
   - Each overlay gets its own layer surface, so it still opens on the screen you are
     working on, and outputs can come and go under an idle daemon.
   - `--no-daemon` shows the overlay in the calling process even when a daemon is

@@ -20,3 +20,5 @@ daemon-already-running = Ein wlr-switcher-Daemon läuft bereits.
 daemon-none = Es läuft kein wlr-switcher-Daemon.
 daemon-gone = Der wlr-switcher-Daemon hat sich ohne Antwort beendet; es wurde nichts umgeschaltet.
 daemon-cannot-serve = Ein Daemon kann diesen Lauf nicht übernehmen: --no-gpu und --doctor ändern das Verhalten des gesamten Prozesses. Führe ihn mit --no-daemon aus.
+daemon-not-running = Es läuft kein wlr-switcher-Daemon, daher zahlt dieses Overlay den vollen Start (etwa 90 ms). Starte einen aus dem Autostart deiner Sitzung: `wlr-switcher --daemon`.
+daemon-bypassed = Dieser Lauf geht nicht über den Daemon — --no-gpu ändert das Verhalten des gesamten Prozesses — und zahlt daher den vollen Start.

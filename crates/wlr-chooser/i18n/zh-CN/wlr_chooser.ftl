@@ -20,3 +20,5 @@ daemon-already-running = wlr-switcher 守护进程已在运行。
 daemon-none = 没有正在运行的 wlr-switcher 守护进程。
 daemon-gone = wlr-switcher 守护进程未作应答便已退出；没有切换任何窗口。
 daemon-cannot-serve = 守护进程无法承接此次运行：--no-gpu 和 --doctor 会改变整个进程的行为。请加上 --no-daemon 运行。
+daemon-not-running = 没有正在运行的 wlr-switcher 守护进程，因此本次浮层要承担全部启动开销（约 90 毫秒）。请从会话自启动中运行 `wlr-switcher --daemon`。
+daemon-bypassed = 本次运行不经过守护进程——--no-gpu 会改变整个进程的行为——因此要承担全部启动开销。

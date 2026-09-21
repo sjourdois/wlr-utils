@@ -20,3 +20,5 @@ daemon-already-running = Er draait al een wlr-switcher-daemon.
 daemon-none = Er draait geen wlr-switcher-daemon.
 daemon-gone = De wlr-switcher-daemon is gestopt zonder te antwoorden; er is niet van venster gewisseld.
 daemon-cannot-serve = Een daemon kan deze uitvoering niet overnemen: --no-gpu en --doctor veranderen het gedrag van het hele proces. Voer haar uit met --no-daemon.
+daemon-not-running = Er draait geen wlr-switcher-daemon, dus deze overlay betaalt de volledige opstart (ongeveer 90 ms). Start er een vanuit de autostart van je sessie: `wlr-switcher --daemon`.
+daemon-bypassed = Deze uitvoering gaat niet via de daemon — --no-gpu verandert het gedrag van het hele proces — en betaalt dus de volledige opstart.

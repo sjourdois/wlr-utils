@@ -20,3 +20,5 @@ daemon-already-running = wlr-switcher 데몬이 이미 실행 중입니다.
 daemon-none = 실행 중인 wlr-switcher 데몬이 없습니다.
 daemon-gone = wlr-switcher 데몬이 응답하지 않고 종료되었습니다. 창이 전환되지 않았습니다.
 daemon-cannot-serve = 데몬은 이 실행을 맡을 수 없습니다. --no-gpu와 --doctor는 프로세스 전체의 동작을 바꿉니다. --no-daemon으로 실행하세요.
+daemon-not-running = 실행 중인 wlr-switcher 데몬이 없어 이 오버레이는 시작 비용을 전부 치릅니다(약 90 ms). 세션 자동 시작에서 `wlr-switcher --daemon`을 실행하세요.
+daemon-bypassed = 이 실행은 데몬을 거치지 않습니다. --no-gpu가 프로세스 전체의 동작을 바꾸기 때문이며, 시작 비용을 전부 치릅니다.

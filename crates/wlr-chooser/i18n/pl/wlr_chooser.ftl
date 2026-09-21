@@ -20,3 +20,5 @@ daemon-already-running = Demon wlr-switcher już działa.
 daemon-none = Żaden demon wlr-switcher nie działa.
 daemon-gone = Demon wlr-switcher zakończył działanie bez odpowiedzi; nie przełączono żadnego okna.
 daemon-cannot-serve = Demon nie może obsłużyć tego uruchomienia: --no-gpu i --doctor zmieniają zachowanie całego procesu. Uruchom je z --no-daemon.
+daemon-not-running = Żaden demon wlr-switcher nie działa, więc ta nakładka płaci pełny koszt uruchomienia (około 90 ms). Uruchom go z autostartu sesji: `wlr-switcher --daemon`.
+daemon-bypassed = To uruchomienie nie przechodzi przez demona — --no-gpu zmienia zachowanie całego procesu — więc płaci pełny koszt uruchomienia.

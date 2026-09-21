@@ -20,3 +20,5 @@ daemon-already-running = wlr-switcher のデーモンはすでに実行中です
 daemon-none = wlr-switcher のデーモンは実行されていません。
 daemon-gone = wlr-switcher のデーモンが応答せずに終了しました。ウィンドウは切り替わっていません。
 daemon-cannot-serve = この実行はデーモンでは扱えません。--no-gpu と --doctor はプロセス全体の動作を変えるためです。--no-daemon を付けて実行してください。
+daemon-not-running = wlr-switcher のデーモンが実行されていないため、このオーバーレイは起動処理をすべて負担します（約 90 ミリ秒）。セッションの自動起動から `wlr-switcher --daemon` を起動してください。
+daemon-bypassed = この実行はデーモンを経由しません。--no-gpu はプロセス全体の動作を変えるためで、起動処理をすべて負担します。

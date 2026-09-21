@@ -20,3 +20,5 @@ daemon-already-running = Демон wlr-switcher уже запущено.
 daemon-none = Демон wlr-switcher не запущено.
 daemon-gone = Демон wlr-switcher завершився, не відповівши; перемикання не відбулося.
 daemon-cannot-serve = Демон не може обслужити цей запуск: --no-gpu і --doctor змінюють поведінку всього процесу. Запустіть його з --no-daemon.
+daemon-not-running = Демон wlr-switcher не запущено, тож цей оверлей оплачує повний запуск (близько 90 мс). Запустіть його з автозапуску сеансу: `wlr-switcher --daemon`.
+daemon-bypassed = Цей запуск не йде через демон — --no-gpu змінює поведінку всього процесу — тож він оплачує повний запуск.

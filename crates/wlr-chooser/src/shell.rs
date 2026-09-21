@@ -384,9 +384,11 @@ impl State {
         if let Some(inhibitor) = self.shortcuts_inhibitor.take() {
             inhibitor.destroy();
         }
-        // In this order: EGL must let go of the surface before the compositor is told
-        // to forget it.
+        // In this order: the GPU frees what the overlay left on it while its context
+        // is still current, then lets go of the surface, and only then is the
+        // compositor told to forget it.
         if let Some(gpu) = self.gpu.as_mut() {
+            gpu.release_textures(&self.egui_ctx);
             gpu.unbind();
         }
         self.layer = None;

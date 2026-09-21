@@ -125,22 +125,23 @@ impl Reply {
 
 // --- client side -------------------------------------------------------------
 
+/// Whether these arguments survive the wire.
+///
+/// An argument holding a separator (or a newline) would come out of the daemon's
+/// parser as two. Vanishingly unlikely in a command line, and showing the overlay
+/// here answers the same question — slower, but right.
+pub fn can_encode(args: &[String]) -> bool {
+    !args
+        .iter()
+        .any(|a| a.contains(SEP) || a.contains('\n') || a.contains('\r'))
+}
+
 /// Hand this invocation's arguments to a running daemon and wait for its answer.
 ///
-/// `None` means there is no daemon to hand it to — nothing is listening, or the
-/// arguments cannot be put on the wire — and the caller should show the overlay
+/// `None` means there is no daemon listening, and the caller should show the overlay
 /// itself. Anything else, including a failure, is the daemon's answer to report as
 /// this invocation's own.
 pub fn request(args: &[String]) -> Option<Reply> {
-    // An argument holding a separator (or a newline) would come out of the daemon's
-    // parser as two. Vanishingly unlikely in a command line, and running the overlay
-    // here answers the same question — slower, but right.
-    if args
-        .iter()
-        .any(|a| a.contains(SEP) || a.contains('\n') || a.contains('\r'))
-    {
-        return None;
-    }
     let mut stream = UnixStream::connect(socket_path()).ok()?;
     let mut line = String::from("show");
     for a in args {

@@ -145,15 +145,19 @@ pub fn main() {
 
     // Hand the run to a daemon if the user is running one. None of this starts one:
     // with nothing listening the invocation shows the overlay itself, below, exactly
-    // as it always has.
-    if !cli.no_daemon
-        && daemon_can_serve(&cli)
-        && let Some(reply) = daemon::request(&args)
-    {
-        if let daemon::Reply::Err(reason) = &reply {
-            eprintln!("{reason}");
+    // as it always has — and says so, because that is the slow path and the reason
+    // it is slow is not otherwise visible.
+    if !cli.no_daemon {
+        if !daemon_can_serve(&cli, &args) {
+            eprintln!("{}", tr!("daemon-bypassed"));
+        } else if let Some(reply) = daemon::request(&args) {
+            if let daemon::Reply::Err(reason) = &reply {
+                eprintln!("{reason}");
+            }
+            std::process::exit(reply.exit_code());
+        } else {
+            eprintln!("{}", tr!("daemon-not-running"));
         }
-        std::process::exit(reply.exit_code());
     }
 
     // Single-instance guard: re-pressing the keybind while we're up is a no-op
@@ -175,9 +179,9 @@ pub fn main() {
 /// `--no-gpu` (and `WLR_NO_GPU`) turns off the zero-copy path for the whole process,
 /// including the EGL context the daemon built at startup: a daemon started without it
 /// cannot honour it, and honouring it halfway would be worse than being slow. Such a
-/// run shows its own overlay.
-fn daemon_can_serve(cli: &Cli) -> bool {
-    !cli.no_gpu && std::env::var_os("WLR_NO_GPU").is_none()
+/// run shows its own overlay, as does one whose arguments will not survive the wire.
+fn daemon_can_serve(cli: &Cli, args: &[String]) -> bool {
+    !cli.no_gpu && std::env::var_os("WLR_NO_GPU").is_none() && daemon::can_encode(args)
 }
 
 /// One switcher run, from the pre-flight to the focus change it was for.

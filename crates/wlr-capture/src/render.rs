@@ -295,6 +295,41 @@ impl Gpu {
     /// primitives and no `swap_buffers`, so nothing is attached to the surface and an
     /// unmapped one stays unmapped.
     pub fn prewarm(&mut self, egui_ctx: &egui::Context) {
+        // Text has to be laid out for any glyph to reach the atlas.
+        self.pump_textures(egui_ctx, |ui| {
+            ui.label("Ag");
+        });
+    }
+
+    /// Free everything the overlay that just ended left on the GPU.
+    ///
+    /// A one-shot run leaves this to process exit; a host that outlives its overlays
+    /// cannot. An imported dma-buf holds a reference to the compositor's buffer — for
+    /// a window that may since have closed — and the cache is keyed by source, so
+    /// without this it would grow with every window a session ever previewed. The
+    /// overlay's own textures (shm thumbnails, app icons) were dropped with it, but
+    /// egui only acts on that at its next pass, which would be the next overlay.
+    ///
+    /// Call while the surface is still bound: freeing needs the context current.
+    pub fn release_textures(&mut self, egui_ctx: &egui::Context) {
+        if let Some(egl) = self.dmabuf_egl {
+            use glow::HasContext as _;
+            let gl = self.painter.gl().clone();
+            for (_, nt) in self.dmabuf_tex.drain() {
+                self.painter.free_texture(nt.id);
+                unsafe {
+                    gl.delete_texture(nt.tex);
+                    (egl.destroy_image)(egl.display, nt.image);
+                }
+            }
+        }
+        self.pump_textures(egui_ctx, |_| {});
+    }
+
+    /// Run one egui pass and carry out the texture uploads and frees it asks for,
+    /// without presenting anything: no primitives and no `swap_buffers`, so the
+    /// surface is left exactly as it was — an unmapped one stays unmapped.
+    fn pump_textures(&mut self, egui_ctx: &egui::Context, run_ui: impl FnMut(&mut egui::Ui)) {
         let Some(surface) = self.target.as_ref().map(|t| t.surface) else {
             return;
         };
@@ -313,12 +348,7 @@ impl Gpu {
             )),
             ..Default::default()
         };
-        // Text has to be laid out for any glyph to reach the atlas.
-        let mut delta = egui_ctx
-            .run_ui(raw_input, |ui| {
-                ui.label("Ag");
-            })
-            .textures_delta;
+        let mut delta = egui_ctx.run_ui(raw_input, run_ui).textures_delta;
         self.painter
             .paint_and_update_textures([64, 64], 1.0, &[], &mut delta);
     }

@@ -316,11 +316,17 @@ bindsym $mod+Tab exec wlr-switcher --layout grid  # every option still means the
 Nothing starts a daemon for you, and nothing depends on one: with none listening,
 `wlr-switcher` shows the overlay itself exactly as it always has.
 
+An invocation that finds no daemon says so on stderr — paying the full startup is
+otherwise invisible — and then shows the overlay itself. `--no-daemon` says nothing:
+it asked for that.
+
 **It captures nothing while it idles.** The capture thread is spawned for each
 overlay and dies with it — between two, the daemon holds a Wayland connection and a
-GPU context, and reads no window contents. Idle, it sits on a `poll()` and costs no
-CPU; it holds about 170 MB of resident memory, most of it the GPU driver's mappings
-shared with everything else on screen (90 MB proportional).
+GPU context, and reads no window contents. What an overlay put on the GPU is freed
+when it closes, the imported window buffers included, so the daemon holds on to no
+window it is no longer showing. Idle, it sits on a `poll()` and costs no CPU; its
+memory is the GPU driver's mappings, shared with everything else drawing on screen,
+plus a few megabytes of its own.
 
 Each overlay still builds its own layer surface, so it opens on the screen you are
 working on, and screens can be plugged or unplugged under an idle daemon.

@@ -20,3 +20,5 @@ daemon-already-running = A wlr-switcher daemon is already running.
 daemon-none = No wlr-switcher daemon is running.
 daemon-gone = The wlr-switcher daemon stopped without answering; nothing was switched.
 daemon-cannot-serve = A daemon cannot take this run on: --no-gpu and --doctor change what the whole process does. Run it with --no-daemon.
+daemon-not-running = No wlr-switcher daemon is running, so this overlay pays the full startup (about 90 ms). Start one from your session autostart: `wlr-switcher --daemon`.
+daemon-bypassed = This run does not go through the daemon — --no-gpu changes what the whole process does — so it pays the full startup.
