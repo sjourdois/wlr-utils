@@ -19,8 +19,9 @@ All notable changes to this project are documented here. The format is based on
   - **One daemon for both**, because they are one overlay: the same egui app on the
     same engine, differing only in what they do with the pick. Two daemons would warm
     two GPU contexts for it.
-  - Nothing starts it for you: put `exec wlr-overlayd` in your session
-    autostart. With none listening, both tools show the overlay themselves exactly as
+  - Nothing starts it for you: put `exec wlr-overlayd` in your session autostart, or
+    install the systemd `--user` unit shipped as
+    `crates/wlr-chooser/contrib/wlr-overlayd.service`. With none listening, both tools show the overlay themselves exactly as
     before, so existing keybindings and the portal need no change either way. An
     invocation that finds no daemon says so on stderr, since paying the full startup
     is otherwise invisible; `--no-daemon` says nothing, having asked for it.

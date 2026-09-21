@@ -71,7 +71,8 @@ struct Cli {
     /// Report which capture protocols the current compositor supports, then exit.
     #[arg(long)]
     doctor: bool,
-    /// Show the overlay in this process, even if a `wlr-overlayd` daemon is running.
+    /// Show the overlay in this process, even if a `wlr-overlayd` daemon is running —
+    /// and without the notice that says none is.
     #[arg(long)]
     no_daemon: bool,
 }

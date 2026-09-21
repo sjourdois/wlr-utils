@@ -73,7 +73,7 @@ instead of ninety — see [Instant overlays](#instant-overlays--wlr-overlayd).
 > go. The single-tool install below is the lighter, à-la-carte option.
 
 ```sh
-cargo install wlr-chooser        # installs both wlr-chooser and wlr-switcher
+cargo install wlr-chooser        # wlr-chooser, wlr-switcher and their wlr-overlayd daemon
 ```
 
 Or build just these binaries from the [wlr-utils](../../README.md) workspace:

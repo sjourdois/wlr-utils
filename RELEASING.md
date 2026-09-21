@@ -36,6 +36,12 @@ skip and expensive to miss:
       `crates/wlr-capture`, `crates/wlr-i18n`, `crates/wlr-chooser`, `crates/wlr-shot`,
       `crates/wlr-peek`, `crates/wlr-draw`, `crates/wlr-utils`. A **new crate** needs its
       own `README.md` *and* a `readme = "README.md"` line in its `Cargo.toml`.
+- [ ] **A new binary** drifts in more places than a new crate, because nothing fails to
+      build when one is missed: `[[bin]]` in its own crate *and* in the `wlr-utils`
+      bundle (with the shim under `src/bin/`), the `assets` list of both `.deb`s, both
+      `description`s, the root README's binary count and its Install / Uninstall
+      sections, the crate table in `CONTRIBUTING.md`, and `docs/index.md`. Grep the tree
+      for the binary it sits next to and answer every hit.
 - [ ] **[`CONTRIBUTING.md`](CONTRIBUTING.md)** — the workspace crate table, the
       feature-combo list, the Translations and Themes sections.
 - [ ] **[`COMPATIBILITY.md`](COMPATIBILITY.md)** — compositor floors / capability matrix.

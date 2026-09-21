@@ -11,11 +11,11 @@ welcome.
 |-------|----------|------------|
 | `wlr-capture` | — | the shared engine: wlroots capture (`ext-image-copy-capture-v1`, or `wlr-screencopy` for screens, dma-buf zero-copy + shm fallback) and the egui/EGL overlay toolkit |
 | `wlr-i18n` | — | shared Fluent localisation plumbing; each tool builds its own catalog on it |
-| `wlr-chooser` | `wlr-chooser`, `wlr-switcher` | screen-share picker + Alt-Tab/exposé switcher |
+| `wlr-chooser` | `wlr-chooser`, `wlr-switcher`, `wlr-overlayd` | screen-share picker + Alt-Tab/exposé switcher, and the daemon that keeps their overlay warm |
 | `wlr-shot` | `wlr-shot` | screenshots & recording |
 | `wlr-peek` | `wlr-peek` | colour picker, loupe, mirror, OCR, grep, watch |
 | `wlr-draw` | `wlr-draw` | on-screen annotation overlay |
-| `wlr-utils` | `wlr-chooser`, `wlr-switcher`, `wlr-peek`, `wlr-shot`, `wlr-draw` | bundle crate re-exporting every tool's binary (`cargo install wlr-utils`); kept out of `default-members` so a plain build doesn't clash on duplicate binary names |
+| `wlr-utils` | `wlr-chooser`, `wlr-switcher`, `wlr-overlayd`, `wlr-peek`, `wlr-shot`, `wlr-draw` | bundle crate re-exporting every tool's binary (`cargo install wlr-utils`); kept out of `default-members` so a plain build doesn't clash on duplicate binary names |
 
 ## Building & checks
 

@@ -176,6 +176,14 @@ systemctl --user disable --now wlr-draw.service
 rm -f ~/.config/systemd/user/wlr-draw.service
 ```
 
+If you started `wlr-overlayd` from its systemd unit, take that one out the same way —
+otherwise it is only a line in your compositor's config:
+
+```sh
+systemctl --user disable --now wlr-overlayd.service
+rm -f ~/.config/systemd/user/wlr-overlayd.service
+```
+
 ## Documentation
 
 - **[wlr-chooser README](crates/wlr-chooser/README.md)** — portal setup, options,

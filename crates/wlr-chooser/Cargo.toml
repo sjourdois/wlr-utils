@@ -1,6 +1,6 @@
 [package]
 name = "wlr-chooser"
-description = "Graphical window & screen picker for wlroots screencast portals (xdg-desktop-portal-wlr)"
+description = "Graphical window & screen picker for wlroots screencast portals (xdg-desktop-portal-wlr), with the wlr-switcher Alt-Tab/exposé and their wlr-overlayd daemon"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

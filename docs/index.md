@@ -63,6 +63,11 @@ bindsym Mod1+Tab exec wlr-switcher
 bindsym Mod1+grave exec wlr-switcher --layout grid --hints --app-id foot
 ```
 
+Start `wlr-overlayd` with your session — `exec wlr-overlayd` — and the overlay
+appears in about ten milliseconds instead of ninety: the daemon holds the GPU
+context both it and `wlr-chooser` would otherwise rebuild every time. Nothing is
+captured while it waits, and neither tool needs a daemon to work.
+
 ---
 
 ## wlr-shot — capture the screen
