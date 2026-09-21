@@ -280,13 +280,17 @@ fn serve(
                 Request::Run(tool, args) => {
                     SHOWING.store(true, Ordering::Relaxed);
                     let reply = show(host, tool, args);
-                    SHOWING.store(false, Ordering::Relaxed);
-                    answer(&mut stream, &reply);
                     // Whatever slipped into the queue in the moment before the flag
                     // went up was a keybinding pressed twice, not a second picker.
+                    // Drained with the flag still up, so that once the queue is empty
+                    // it stays empty — the accept thread is answering `busy` itself
+                    // meanwhile — and the next request, which really did arrive after
+                    // the overlay closed, is served rather than refused.
                     while let Ok((_, mut queued)) = rx.try_recv() {
                         answer(&mut queued, &Reply::Busy);
                     }
+                    SHOWING.store(false, Ordering::Relaxed);
+                    answer(&mut stream, &reply);
                 }
             }
         }
