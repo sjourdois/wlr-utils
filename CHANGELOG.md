@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 1.9.0 — 2026-09-21
 
 ### Added
 
@@ -147,6 +147,13 @@ All notable changes to this project are documented here. The format is based on
   `thunar-volman-settings.desktop` and a window without an id took the first icon on
   disk. Matching now follows the file name, then `StartupWMClass`; a window without
   an id gets no icon.
+
+### Breaking
+
+- `wlr-capture`: `activate_window` selects by `ext-foreign-toplevel-list` identifier
+  instead of app id and title, `SessionId` is an opaque handle, and `Client::connect`
+  also binds `wlr-foreign-toplevel-management`. Shipped as a minor version: the crate is
+  published to let the binaries be.
 
 ## 1.8.0 — 2026-09-11
 

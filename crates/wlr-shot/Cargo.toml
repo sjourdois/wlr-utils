@@ -43,9 +43,9 @@ audio-fallback = ["audio", "wlr-capture/audio-fallback"]
 # `overlay` (the frozen region selector) pulls the egui/EGL toolkit + `compose`
 # (source→image); `focus` adds active-window / current-output via compositor IPC.
 # The dma-buf path comes from this crate's `gpu` feature (above).
-wlr-capture = { path = "../wlr-capture", version = "1.8.0", default-features = false, features = ["overlay", "focus"] }
+wlr-capture = { path = "../wlr-capture", version = "1.9.0", default-features = false, features = ["overlay", "focus"] }
 # This crate owns its localised catalog (`i18n/`); wlr-i18n is the shared loader plumbing.
-wlr-i18n = { path = "../wlr-i18n", version = "1.8.0", default-features = false }
+wlr-i18n = { path = "../wlr-i18n", version = "1.9.0", default-features = false }
 # For `#[derive(RustEmbed)]` over `i18n/` (the `i18n` feature).
 rust-embed = { workspace = true, optional = true }
 anyhow.workspace = true
@@ -80,4 +80,4 @@ dist = false
 
 # Generates the English fallback table for the no-Fluent build.
 [build-dependencies]
-wlr-i18n = { path = "../wlr-i18n", version = "1.8.0", default-features = false }
+wlr-i18n = { path = "../wlr-i18n", version = "1.9.0", default-features = false }
