@@ -24,9 +24,12 @@ Output lands in `../../docs/assets/<tool>/` as `*.png` (still) plus `*.mp4` and
 To render the overlays in French (or any locale): `SHOTS_LANG=fr_FR.UTF-8 ./capture.sh`.
 
 Animations are recorded with `wlr-shot record`, which emits a constant frame rate,
-so the MP4 runs at the speed the scene was actually driven. The GIF beside it is
-derived from that MP4 and plays at `SHOTS_GIF_FPS` (6 by default) — lower it for
-smaller files, since a GIF stores whole frames.
+so they run at the speed the scene was actually driven. The recording is a lossless
+master (`SHOTS_CRF`, 0 by default) that both published files are cut from, and which
+is then discarded: the GIF encoder crops each frame to the pixels that changed, and
+that only pays off when the pixels that did not change are bit-identical. The GIF
+keeps every frame of the master — set `SHOTS_GIF_FPS` to resample it to another rate
+— and the MP4 is transcoded at `SHOTS_MP4_CRF` (20).
 
 ## Requirements
 

@@ -54,8 +54,14 @@ shots_out() { mkdir -p "$SHOTS_ASSETS/$1"; printf '%s/%s' "$SHOTS_ASSETS/$1" "$2
 : "${SHOTS_MPV_PAUSE:=0}"
 # How many pixels must change for shots_expect_change to call an effect visible.
 : "${SHOTS_CHANGE_MIN:=200}"
-# Playback rate of the README GIFs. Lower than the MP4's: see shots_record.
-: "${SHOTS_GIF_FPS:=6}"
+# Frame rate of the README GIFs. Empty means "the rate the scene was recorded at",
+# which keeps every captured frame: see shots_record.
+: "${SHOTS_GIF_FPS:=}"
+# Constant-quality level of the recording the published files are cut from. 0 is
+# lossless, which is what the GIF needs: see shots_record.
+: "${SHOTS_CRF:=0}"
+# Constant-quality level of the published MP4, transcoded from that master.
+: "${SHOTS_MP4_CRF:=20}"
 SHOTS_FOOT_INI="$SHOTS_DIR/foot.ini"
 # uBlock Origin Lite (unpacked, MV3) loaded into the demo browsers to keep ads
 # out of the captures. Fetched into vendor/ubol by capture.sh if missing.
@@ -492,8 +498,15 @@ shots_record() {
   # a video-only build is silent already.
   local quiet=()
   "$shot" record --help 2>&1 | grep -q -- '--no-audio' && quiet=(--no-audio)
+  # Record a lossless master and cut both published files from it. A GIF stores
+  # whole frames but the encoder crops each one to the pixels that changed, and
+  # that only works when the pixels that did NOT change are bit-identical. Lossy
+  # H.264 sprinkles a little noise over the whole frame, so the crop degenerates
+  # to the full frame and the GIF grows several-fold. Transient, and big.
+  local tmp; tmp="$(mktemp -d)"
+  local master="$tmp/master.mkv"
   local err; err="$(mktemp)"
-  "$shot" record --cursor "${quiet[@]}" -o HEADLESS-1 --fps "$fps" "$out.mp4" \
+  "$shot" record --cursor "${quiet[@]}" --crf "$SHOTS_CRF" -o HEADLESS-1 --fps "$fps" "$master" \
     >/dev/null 2>"$err" &
   local rpid=$!
   # wlr-shot announces itself once the encoder is up and it is entering the
@@ -509,26 +522,26 @@ shots_record() {
   # finalises the container. SIGTERM would leave an unplayable file behind.
   kill -INT "$rpid" 2>/dev/null; wait "$rpid" 2>/dev/null
 
-  if [ ! -s "$out.mp4" ]; then
+  if [ ! -s "$master" ]; then
     shots_msg "NO RECORDING: $(basename "$out") — $(tr '\n' ' ' < "$err")"
-    rm -f "$err"; return 1
+    rm -f "$err"; rm -rf "$tmp"; return 1
   fi
   rm -f "$err"
 
-  # Move the moov atom to the front. These files are served by GitHub Pages, and a
-  # player otherwise has to fetch the whole thing before it can start. Stream copy,
-  # so the encode itself is untouched.
-  if ffmpeg -y -i "$out.mp4" -c copy -movflags +faststart "$out.fs.mp4" >/dev/null 2>&1; then
-    mv -f "$out.fs.mp4" "$out.mp4"
-  else
-    rm -f "$out.fs.mp4"
-  fi
+  # MP4 — the primary format. yuv420p for broad playback, and the moov atom up
+  # front because GitHub Pages serves these: a player otherwise has to fetch the
+  # whole file before it can start.
+  ffmpeg -y -i "$master" -c:v libx264 -crf "$SHOTS_MP4_CRF" -preset medium \
+    -pix_fmt yuv420p -movflags +faststart "$out.mp4" >/dev/null 2>&1
 
   # GIF — full frames (no transdiff) so simple viewers (feh) don't drift; a global
   # palette keeps it stable. Embedded in the READMEs (crates.io can't play MP4).
-  # Resampled down: a GIF stores whole frames, so one at the MP4's rate weighs
-  # several times what a README should carry.
-  ffmpeg -y -i "$out.mp4" -gifflags -transdiff \
-    -vf "fps=$SHOTS_GIF_FPS,scale='min(1280,iw)':-2:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse=dither=sierra2_4a" \
+  # No resampling by default: the master is constant-rate, so every captured frame
+  # goes through and the GIF runs at the speed the scene was driven.
+  local rate=""
+  [ -n "$SHOTS_GIF_FPS" ] && rate="fps=$SHOTS_GIF_FPS,"
+  ffmpeg -y -i "$master" -gifflags -transdiff \
+    -vf "${rate}scale='min(1280,iw)':-2:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse=dither=sierra2_4a" \
     "$out.gif" >/dev/null 2>&1
+  rm -rf "$tmp"
 }
