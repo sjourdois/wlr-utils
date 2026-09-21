@@ -493,6 +493,7 @@ mod record_impl {
                 mode,
                 device: Some(args.device.clone().into()),
                 audio,
+                crf: args.crf,
             },
         )?;
         let label = format!("{:?}", enc.resolved_backend()?);
@@ -543,6 +544,12 @@ mod record_impl {
         /// DRM render node for the VAAPI backend.
         #[arg(long, value_name = "PATH", default_value = "/dev/dri/renderD128")]
         device: String,
+        /// Constant-quality level, 0-51: 0 is lossless, 51 the coarsest, lower means
+        /// better and bigger. Each encoder gets its own equivalent (libx264 `crf`,
+        /// NVENC `cq`, VAAPI `qp`). Left out, every encoder keeps its own default.
+        /// Note this is not `screenshot --quality`, whose JPEG scale runs the other way.
+        #[arg(long, value_name = "N", value_parser = clap::value_parser!(u8).range(0..=51))]
+        crf: Option<u8>,
         /// Composite the mouse cursor into the recording (it is left out by default).
         /// A demo of a pointer-driven interaction needs it.
         #[arg(long)]

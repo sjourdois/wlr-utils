@@ -26,7 +26,7 @@ wlr-shot screenshot [-o NAME | -g GEOM | -w ID | --app-id ID | --pick-window]
                     [--cursor] [-t png|jpeg|ppm] [-q QUALITY] [-c] [FILE|-]
 wlr-shot screenshot --list-outputs | --list-windows
 wlr-shot record [-o NAME | -g GEOM | -w ID | --app-id ID | --pick-window | -s | -a]
-                [--cursor] [--encoder auto|nvenc|vaapi|software] [--fps N]
+                [--cursor] [--encoder auto|nvenc|vaapi|software] [--crf N] [--fps N]
                 [--timelapse INTERVAL] [-d SECS] FILE
 ```
 
@@ -113,6 +113,7 @@ wlr-shot record --pick-window -d 30 clip.mp4    # a window, 30 seconds
 wlr-shot record -g "$(slurp)" region.mp4        # a region (single output)
 wlr-shot record -g "$(slurp)" --fps 15 demo.gif # a region as an animated GIF
 wlr-shot record -g "$(slurp)" demo.webp         # …or animated WebP (smaller)
+wlr-shot record -o DP-4 --crf 18 sharp.mp4       # visually lossless, a bigger file
 wlr-shot record -o DP-4 --timelapse 2s day.mp4  # a frame every 2s, played at --fps
 wlr-shot record -o DP-4 --no-audio clip.mp4     # video only (audio is on by default)
 ```
@@ -122,6 +123,14 @@ wlr-shot record -o DP-4 --no-audio clip.mp4     # video only (audio is on by def
 - `--encoder` — `auto` (default) prefers hardware (NVENC, then VAAPI) and falls back
   to software `libx264`. Force one with `nvenc`/`vaapi`/`software`.
 - `--device PATH` — DRM render node for VAAPI (default `/dev/dri/renderD128`).
+- `--crf N` — constant quality, `0`–`51`: **lower is better and bigger**, `0` is
+  lossless. Left out, each encoder keeps its own default, which is what you get
+  today. The three encoders spell this differently and ignore each other's
+  spelling, so the level is translated: libx264 takes it as `crf`, NVENC as `cq`
+  (under VBR), VAAPI as a fixed `qp`. Lossless therefore means `tune=lossless` on
+  NVENC, and VAAPI — which has no lossless H.264 mode — refuses `--crf 0` and says
+  so. Mind the direction: `screenshot --quality` is a JPEG scale that runs the
+  other way.
 - `--fps N` — frame rate (default 30). Capture is damage-driven (a frame only arrives
   when the screen changes), so a normal recording emits a **constant** `--fps`,
   repeating the last frame through static stretches; `--timelapse` instead samples one

@@ -59,6 +59,33 @@ impl Backend {
             Backend::Auto => unreachable!("resolved before use"),
         }
     }
+
+    /// Translate a constant-quality level into this backend's private options.
+    ///
+    /// The three encoders spell the same idea differently, and none of them accepts
+    /// the others' key — passing `crf` to VAAPI is simply ignored, which is why this
+    /// mapping exists rather than one shared option name:
+    ///
+    /// * libx264 has real rate-factor control (`crf`), and `crf=0` is exactly lossless.
+    /// * NVENC calls the equivalent `cq`, but only honours it under VBR rate control,
+    ///   and reads `cq=0` as "pick for me" — so lossless goes through `tune=lossless`
+    ///   instead.
+    /// * VAAPI offers a fixed quantiser only, and its `qp=0` means "driver default",
+    ///   not lossless; the driver has no lossless H.264 mode to ask for.
+    fn quality_options(self, crf: u8) -> Result<Vec<(&'static str, String)>> {
+        Ok(match (self, crf) {
+            (Backend::Software, q) => vec![("crf", q.to_string())],
+            (Backend::Nvenc, 0) => vec![("tune", "lossless".into())],
+            (Backend::Nvenc, q) => vec![("rc", "vbr".into()), ("cq", q.to_string())],
+            (Backend::Vaapi, 0) => {
+                return Err(CaptureError::msg(
+                    "VAAPI has no lossless H.264 mode; use --crf 1 or --encoder software",
+                ));
+            }
+            (Backend::Vaapi, q) => vec![("qp", q.to_string())],
+            (Backend::Auto, _) => unreachable!("resolved before use"),
+        })
+    }
 }
 
 /// Timing behaviour for the output stream.
@@ -85,6 +112,11 @@ pub struct Options {
     /// Mux an AAC audio stream fed by [`VideoEncoder::push_audio`] (the PCM source is
     /// the caller's concern — see [`crate::audio`]). Ignored for timelapse.
     pub audio: bool,
+    /// Constant-quality level on the usual H.264 scale: 0 is lossless, 51 is the
+    /// coarsest, and lower means better and bigger. `None` leaves every backend on
+    /// its own default. Each backend gets its native equivalent — see
+    /// [`Backend::quality_options`].
+    pub crf: Option<u8>,
 }
 
 impl Default for Options {
@@ -95,6 +127,7 @@ impl Default for Options {
             mode: Mode::Record,
             device: None,
             audio: false,
+            crf: None,
         }
     }
 }
@@ -375,8 +408,15 @@ impl Pipeline {
             None
         };
 
+        // Private encoder options must be handed over at open time.
+        let mut enc_opts = ffmpeg::Dictionary::new();
+        if let Some(crf) = opts.crf {
+            for (k, v) in backend.quality_options(crf)? {
+                enc_opts.set(k, &v);
+            }
+        }
         let encoder = enc
-            .open_as(codec)
+            .open_as_with(codec, enc_opts)
             .with_context(|| format!("opening encoder '{}'", backend.codec_name()))?;
         ost.set_parameters(&encoder);
 
@@ -695,6 +735,7 @@ mod tests {
                 mode: Mode::Record,
                 device: Some("/dev/dri/renderD128".into()),
                 audio: false,
+                crf: None,
             },
         )
         .expect("create encoder");
@@ -735,6 +776,40 @@ mod tests {
 
         // `tmp` drops here, removing the file.
         drop(tmp);
+    }
+
+    /// Each backend must get a key it actually understands: passing libx264's `crf`
+    /// to VAAPI is silently ignored, which would make `--crf` a no-op there.
+    #[test]
+    fn quality_options_are_per_backend() {
+        let keys = |b: Backend, q: u8| -> Vec<&'static str> {
+            b.quality_options(q)
+                .expect("supported")
+                .into_iter()
+                .map(|(k, _)| k)
+                .collect()
+        };
+        assert_eq!(keys(Backend::Software, 18), ["crf"]);
+        assert_eq!(
+            keys(Backend::Software, 0),
+            ["crf"],
+            "libx264 is lossless at crf 0"
+        );
+        assert_eq!(keys(Backend::Vaapi, 18), ["qp"]);
+        // NVENC reads cq=0 as "choose for me", so lossless has to go through tune.
+        assert_eq!(keys(Backend::Nvenc, 18), ["rc", "cq"]);
+        assert_eq!(keys(Backend::Nvenc, 0), ["tune"]);
+        // VAAPI has no lossless H.264 mode: say so instead of encoding lossy.
+        assert!(Backend::Vaapi.quality_options(0).is_err());
+    }
+
+    /// The level reaches the encoder as the number the user asked for.
+    #[test]
+    fn quality_options_carry_the_level() {
+        let opts = Backend::Software.quality_options(23).expect("supported");
+        assert_eq!(opts, vec![("crf", "23".to_string())]);
+        let opts = Backend::Nvenc.quality_options(31).expect("supported");
+        assert_eq!(opts[1], ("cq", "31".to_string()));
     }
 
     /// Software (libx264) path — the portable fallback.
