@@ -8,33 +8,38 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
-- **A daemon, so the switcher's overlay appears at once**
+- **`wlr-overlayd`, so the overlay appears at once**
   ([#11](https://github.com/sjourdois/wlr-utils/issues/11), requested by
-  [@aoterman12365](https://github.com/aoterman12365)) — `wlr-switcher --daemon` stays
-  in the background holding the Wayland connection, the EGL context and its compiled
-  shaders, and the glyph atlas: the initialisation an overlay spent about ninety
-  milliseconds on and then threw away. With one running, an ordinary `wlr-switcher`
-  hands it the run and the overlay is on screen in roughly ten — measured on an
-  NVIDIA driver at 2560×1440, where a cold start takes 93 to 109 ms.
-  - Nothing starts a daemon for you: put `exec_always wlr-switcher --daemon` in your
-    session autostart. With none listening, `wlr-switcher` shows the overlay itself
-    exactly as before, so existing keybindings need no change either way.
+  [@aoterman12365](https://github.com/aoterman12365)) — a new binary that holds what
+  an overlay costs to build and then throws away: the Wayland connection, the EGL
+  context with its compiled shaders, the glyph atlas. With one running, `wlr-switcher`
+  and `wlr-chooser` hand it the run over a control socket and the overlay is on screen
+  in about ten milliseconds — measured on an NVIDIA driver at 2560×1440, where
+  building it all takes 93 to 109 ms.
+  - **One daemon for both**, because they are one overlay: the same egui app on the
+    same engine, differing only in what they do with the pick. Two daemons would warm
+    two GPU contexts for it.
+  - Nothing starts it for you: put `exec_always wlr-overlayd` in your session
+    autostart. With none listening, both tools show the overlay themselves exactly as
+    before, so existing keybindings and the portal need no change either way. An
+    invocation that finds no daemon says so on stderr, since paying the full startup
+    is otherwise invisible; `--no-daemon` says nothing, having asked for it.
   - **Nothing is captured while it idles.** The capture thread is spawned for each
     overlay and dies with it; between two, the daemon holds a connection and a GPU
     context and reads no window contents. What an overlay put on the GPU is freed
-    when it closes, imported window buffers included, so a daemon holds on to no
+    when it closes, imported window buffers included, so the daemon holds on to no
     window it is no longer showing.
-  - An invocation that finds no daemon says so on stderr before showing the overlay
-    itself, since paying the full startup is otherwise invisible. `--no-daemon` says
-    nothing: it asked for that.
   - Each overlay gets its own layer surface, so it still opens on the screen you are
     working on, and outputs can come and go under an idle daemon.
-  - `--no-daemon` shows the overlay in the calling process even when a daemon is
-    running; `--stop-daemon` stops one. A run that asks for `--no-gpu` or `--doctor`
-    never goes through the daemon: they change what the whole process does.
-  - Exit statuses are what they always were: `0` for a switch, `1` for a cancel, `2`
-    for a failure, and `0` again for a keybinding pressed while an overlay is already
-    up (still a no-op, never a second overlay).
+  - It shows one overlay at a time and says so at once. For `wlr-switcher` that is
+    the no-op pressing the keybinding twice has always been; `wlr-chooser` shows its
+    own overlay instead, so a portal asking for a screen-share picker is never left
+    with no answer.
+  - `--no-daemon` shows the overlay in the calling process; `wlr-overlayd --quit`
+    stops a daemon. A run that asks for `--no-gpu` or `--doctor` never goes through
+    it: they change what the whole process does.
+  - Exit statuses and the `wlr-chooser` stdout contract are what they always were,
+    whichever process showed the overlay.
 
 ### Fixed
 

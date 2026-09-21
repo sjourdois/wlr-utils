@@ -23,6 +23,10 @@ path = "src/bin/wlr-chooser.rs"
 name = "wlr-switcher"
 path = "src/bin/wlr-switcher.rs"
 
+[[bin]]
+name = "wlr-overlayd"
+path = "src/bin/wlr-overlayd.rs"
+
 [dependencies]
 # `compose` is on for `capture::WindowFilter`, so `--app-id` / `--title` compare windows
 # here exactly as they do in wlr-shot. It only pulls `image`, already a direct dependency.
@@ -69,10 +73,13 @@ recommends = "fonts-noto-cjk"
 extended-description = """\
 A graphical window & screen picker for wlroots screencast portals \
 (xdg-desktop-portal-wlr): a rofi-like overlay with live thumbnails to pick a \
-window or monitor to share."""
+window or monitor to share. Ships wlr-switcher, the Alt-Tab/exposé window \
+switcher built on the same overlay, and wlr-overlayd, the optional daemon that \
+holds their GPU context so the overlay appears at once."""
 assets = [
     ["../../target/release/wlr-chooser", "usr/bin/", "755"],
     ["../../target/release/wlr-switcher", "usr/bin/", "755"],
+    ["../../target/release/wlr-overlayd", "usr/bin/", "755"],
     ["README.md", "usr/share/doc/wlr-chooser/README.md", "644"],
     ["../../docs/themes/*.toml", "usr/share/doc/wlr-chooser/themes/", "644"],
 ]

@@ -8,6 +8,7 @@ pub mod chooser_cli;
 pub mod daemon;
 pub mod hints;
 mod i18n;
+pub mod overlayd;
 pub mod shell;
 pub mod switcher_cli;
 pub mod ui;

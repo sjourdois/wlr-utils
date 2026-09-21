@@ -1,6 +1,6 @@
 [package]
 name = "wlr-utils"
-description = "The wlr-utils suite in one install: wlr-chooser, wlr-switcher, wlr-peek, wlr-shot and wlr-draw (Wayland/wlroots screen tools)"
+description = "The wlr-utils suite in one install: wlr-chooser, wlr-switcher, wlr-overlayd, wlr-peek, wlr-shot and wlr-draw (Wayland/wlroots screen tools)"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -22,6 +22,10 @@ path = "src/bin/wlr-chooser.rs"
 [[bin]]
 name = "wlr-switcher"
 path = "src/bin/wlr-switcher.rs"
+
+[[bin]]
+name = "wlr-overlayd"
+path = "src/bin/wlr-overlayd.rs"
 
 [[bin]]
 name = "wlr-peek"
@@ -69,12 +73,13 @@ conflicts = "wlr-chooser, wlr-shot, wlr-peek, wlr-draw, wlr-pip"
 replaces = "wlr-chooser, wlr-shot, wlr-peek, wlr-draw, wlr-pip"
 extended-description = """\
 The wlr-utils suite in one package: wlr-chooser (screen-share picker), wlr-switcher \
-(Alt-Tab/exposé), wlr-peek (colour picker, loupe, OCR, live mirror, watch, visual grep), \
+(Alt-Tab/exposé) with their wlr-overlayd daemon, wlr-peek (colour picker, loupe, OCR, live mirror, watch, visual grep), \
 wlr-shot (screenshots and recording) and wlr-draw (on-screen annotation overlay) — native \
 screen tools for wlroots compositors, sharing one capture engine."""
 assets = [
     ["../../target/release/wlr-chooser", "usr/bin/", "755"],
     ["../../target/release/wlr-switcher", "usr/bin/", "755"],
+    ["../../target/release/wlr-overlayd", "usr/bin/", "755"],
     ["../../target/release/wlr-peek", "usr/bin/", "755"],
     ["../../target/release/wlr-shot", "usr/bin/", "755"],
     ["../../target/release/wlr-draw", "usr/bin/", "755"],
@@ -88,7 +93,7 @@ assets = [
 name = "wlr-utils"
 extended-description = """\
 The wlr-utils suite in one package: wlr-chooser (screen-share picker), wlr-switcher \
-(Alt-Tab/exposé), wlr-peek (colour picker, loupe, OCR, live mirror, watch, visual grep), \
+(Alt-Tab/exposé) with their wlr-overlayd daemon, wlr-peek (colour picker, loupe, OCR, live mirror, watch, visual grep), \
 wlr-shot (screenshots) and wlr-draw (on-screen annotation overlay) — native screen tools \
 for wlroots compositors, sharing one capture engine. This is a screenshots-only build: \
 `wlr-shot record` is omitted because this distribution's FFmpeg/PipeWire are too old to \

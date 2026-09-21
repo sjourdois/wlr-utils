@@ -84,19 +84,9 @@ struct Cli {
     /// Report which capture protocols the current compositor supports, then exit.
     #[arg(long)]
     doctor: bool,
-    /// Run the overlay daemon in the foreground. It holds the Wayland connection
-    /// and the GPU context, so a later `wlr-switcher` puts the overlay on screen in
-    /// a few milliseconds instead of about ninety. Nothing starts one for you: put
-    /// it in your session autostart (sway: `exec_always wlr-switcher --daemon`).
-    /// It captures nothing until an invocation asks for an overlay.
-    #[arg(long, conflicts_with_all = ["no_daemon", "stop_daemon"])]
-    daemon: bool,
-    /// Show the overlay in this process, even if a daemon is running.
-    #[arg(long, conflicts_with = "stop_daemon")]
-    no_daemon: bool,
-    /// Stop the running daemon, then exit.
+    /// Show the overlay in this process, even if a `wlr-overlayd` daemon is running.
     #[arg(long)]
-    stop_daemon: bool,
+    no_daemon: bool,
 }
 
 /// What a run came to.
@@ -127,36 +117,26 @@ pub fn main() {
         return;
     }
 
-    if cli.stop_daemon {
-        if let Err(e) = daemon::quit() {
-            eprintln!("{e:#}");
-            std::process::exit(2);
-        }
-        return;
-    }
-
-    if cli.daemon {
-        if let Err(e) = daemon::run(t0, serve) {
-            eprintln!("{}", tr!("error", error = format!("{e:#}")));
-            std::process::exit(2);
-        }
-        return;
-    }
-
-    // Hand the run to a daemon if the user is running one. None of this starts one:
-    // with nothing listening the invocation shows the overlay itself, below, exactly
-    // as it always has — and says so, because that is the slow path and the reason
-    // it is slow is not otherwise visible.
+    // Hand the run to the daemon if the user is running one. None of this starts
+    // one: with nothing listening the invocation shows the overlay itself, below,
+    // exactly as it always has — and says so, because that is the slow path and the
+    // reason it is slow is not otherwise visible.
     if !cli.no_daemon {
         if !daemon_can_serve(&cli, &args) {
             eprintln!("{}", tr!("daemon-bypassed"));
-        } else if let Some(reply) = daemon::request(&args) {
-            if let daemon::Reply::Err(reason) = &reply {
-                eprintln!("{reason}");
-            }
-            std::process::exit(reply.exit_code());
         } else {
-            eprintln!("{}", tr!("daemon-not-running"));
+            match daemon::request(daemon::Tool::Switch, &args) {
+                // An overlay is already up. That is what pressing the keybinding
+                // twice has always been: a no-op, not a second overlay.
+                Some(daemon::Reply::Busy) => return,
+                Some(reply) => {
+                    if let daemon::Reply::Err(reason) = &reply {
+                        eprintln!("{reason}");
+                    }
+                    std::process::exit(reply.exit_code());
+                }
+                None => eprintln!("{}", tr!("daemon-not-running")),
+            }
         }
     }
 
@@ -261,11 +241,11 @@ fn preflight(opts: &mut Options) -> Result<(), String> {
     }
 }
 
-/// Serve one `show` request: the daemon's side of a `wlr-switcher` invocation.
+/// Serve one `switch` request: the daemon's side of a `wlr-switcher` invocation.
 ///
 /// The arguments are parsed with the very same parser the client used, so a daemon
 /// run and a direct run differ in nothing but what they had to build first.
-fn serve(host: &mut shell::Host, args: Vec<String>) -> daemon::Reply {
+pub(crate) fn serve(host: &mut shell::Host, args: Vec<String>) -> daemon::Reply {
     // This overlay's clock starts here — a few hundred microseconds after the
     // invocation's own, which is all the client spent reaching us.
     let t0 = Instant::now();
@@ -275,7 +255,7 @@ fn serve(host: &mut shell::Host, args: Vec<String>) -> daemon::Reply {
     };
     // Runs that are not a daemon's to make. A client settles this before asking (see
     // `daemon_can_serve`), so only a hand-sent line reaches here.
-    if cli.daemon || cli.no_daemon || cli.stop_daemon || cli.no_gpu || cli.doctor {
+    if cli.no_daemon || cli.no_gpu || cli.doctor {
         return daemon::Reply::Err(tr!("daemon-cannot-serve"));
     }
     // The same single-instance guard a one-shot run takes, and for the same reason:
@@ -284,7 +264,9 @@ fn serve(host: &mut shell::Host, args: Vec<String>) -> daemon::Reply {
         return daemon::Reply::Busy;
     };
     match run(cli, t0, Some(host)) {
-        Ok(Ran::Switched) => daemon::Reply::Done,
+        // The switcher acts on the pick rather than naming it, so there is nothing
+        // for the client to print.
+        Ok(Ran::Switched) => daemon::Reply::Done(String::new()),
         Ok(Ran::Cancelled) => daemon::Reply::Cancelled,
         Err(reason) => daemon::Reply::Err(reason),
     }

@@ -9,7 +9,7 @@
 //! that *acts* — focusing the window it picked — see `wlr-switcher`.
 
 use crate::ui::{self, Live, Mode, Options, View};
-use crate::{FilterArgs, HintRowArg, LayoutArg, OrderArg, parse_grid, run_overlay};
+use crate::{FilterArgs, HintRowArg, LayoutArg, OrderArg, daemon, parse_grid, run_overlay, shell};
 use crate::{i18n, tr};
 use clap::{Parser, ValueEnum};
 use std::time::Instant;
@@ -71,6 +71,9 @@ struct Cli {
     /// Report which capture protocols the current compositor supports, then exit.
     #[arg(long)]
     doctor: bool,
+    /// Show the overlay in this process, even if a `wlr-overlayd` daemon is running.
+    #[arg(long)]
+    no_daemon: bool,
 }
 
 /// How the picked source is written on stdout.
@@ -139,6 +142,9 @@ fn json(sel: &ui::Selection, pid: Option<u32>) -> String {
 
 pub fn main() {
     let t0 = Instant::now();
+    // Kept before clap eats them: what the daemon is handed is the invocation itself,
+    // so a run it shows and a run this process shows mean the same thing.
+    let args: Vec<String> = std::env::args().skip(1).collect();
     let cli = Cli::parse();
     if cli.no_gpu {
         wlr_capture::wl::disable_gpu_globally();
@@ -153,21 +159,68 @@ pub fn main() {
         return;
     }
 
-    crate::reject_hints_on_card(cli.hints, cli.layout)
-        .unwrap_or_else(|reason| crate::exit_with(reason));
+    if let Some(secs) = cli.bench_capture {
+        ui::bench_capture(secs, cli.filters.into());
+        return;
+    }
+
+    // Hand the run to `wlr-overlayd` if one is listening; nothing here starts one.
+    // A busy daemon is already showing an overlay, and this run is the portal
+    // waiting for an answer — so it gets its own, rather than nothing.
+    if !cli.no_daemon {
+        if !daemon_can_serve(&cli, &args) {
+            eprintln!("{}", tr!("daemon-bypassed"));
+        } else {
+            match daemon::request(daemon::Tool::Choose, &args) {
+                // Either way this process shows the overlay, below: the portal is
+                // waiting for an answer and must not be told nothing.
+                Some(daemon::Reply::Busy) => eprintln!("{}", tr!("daemon-busy")),
+                None => eprintln!("{}", tr!("daemon-not-running")),
+                Some(daemon::Reply::Done(line)) => {
+                    // stdout is the contract: whatever the daemon answered, verbatim.
+                    println!("{line}");
+                    return;
+                }
+                Some(reply) => {
+                    if let daemon::Reply::Err(reason) = &reply {
+                        eprintln!("{reason}");
+                    }
+                    std::process::exit(reply.exit_code());
+                }
+            }
+        }
+    }
+
+    match run(cli, t0, None) {
+        Ok(Some(line)) => println!("{line}"),
+        Ok(None) => std::process::exit(1), // cancelled
+        Err(reason) => crate::exit_with(reason),
+    }
+}
+
+/// Whether this invocation is one the daemon could take on.
+///
+/// `--no-gpu` (and `WLR_NO_GPU`) turns off the zero-copy path for the whole process,
+/// including the EGL context the daemon built at startup: a daemon started without it
+/// cannot honour it. Such a run shows its own overlay, as does one whose arguments
+/// will not survive the wire.
+fn daemon_can_serve(cli: &Cli, args: &[String]) -> bool {
+    !cli.no_gpu && std::env::var_os("WLR_NO_GPU").is_none() && daemon::can_encode(args)
+}
+
+/// One chooser run: settle what can be settled before the overlay, show it, and
+/// return the line naming what was picked (`None` if the user cancelled).
+///
+/// `host` is the daemon's warm host, or `None` to build one for this run alone.
+/// Refusals come back as a message rather than exiting the process: the daemon has to
+/// send them to the client that asked instead of dying on them.
+fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Option<String>, String> {
+    crate::reject_hints_on_card(cli.hints, cli.layout)?;
     // --grid sizes the card and nothing else: the exposé lays itself out to fill the
     // screen, the strip is one row by definition. A flag with no effect would look
     // applied.
     if cli.grid.is_some() && cli.layout != LayoutArg::Card {
-        eprintln!("{}", tr!("grid-needs-card"));
-        std::process::exit(2);
-    }
-
-    let window_filters: ui::WindowFilters = cli.filters.into();
-
-    if let Some(secs) = cli.bench_capture {
-        ui::bench_capture(secs, window_filters);
-        return;
+        return Err(tr!("grid-needs-card"));
     }
 
     let _ = cli.both; // default; accepted for symmetry with -w/-o
@@ -186,47 +239,67 @@ pub fn main() {
         hold: false,
         live: Live::All,
         order: cli.window_order.into(),
-        window_filters,
+        window_filters: cli.filters.into(),
         hints: cli.hints.map(Into::into),
     };
+    preflight(&mut opts, mode)?;
 
-    // Two reasons to connect before the overlay. A --pid filter needs the compositor to
-    // name the process behind each window, whatever the mode, and must say so rather
-    // than come up unapplied. And screens ignore the window filter, so only a
-    // windows-only run can be emptied by it. Anything else opens the overlay straight
-    // away, paying no extra connection.
-    if opts.window_filters.needs_pids()
-        || (mode == Mode::Windows && !opts.window_filters.is_empty())
-    {
-        match wlr_capture::wl::Client::connect() {
-            Ok(client) => {
-                crate::require_window_pids(&mut opts.window_filters, client.toplevels())
-                    .unwrap_or_else(|reason| crate::exit_with(reason));
-                if mode == Mode::Windows {
-                    crate::reject_empty_window_filter(client.toplevels(), &opts.window_filters)
-                        .unwrap_or_else(|reason| crate::exit_with(reason));
-                }
-            }
-            Err(e) => {
-                eprintln!("{}", tr!("error", error = format!("{e:#}")));
-                std::process::exit(2);
-            }
-        }
+    let picked = match host {
+        Some(host) => crate::run_overlay_on(host, opts, t0),
+        None => run_overlay(opts, t0),
     }
+    .map_err(|e| tr!("error", error = format!("{e:#}")))?;
 
-    match run_overlay(opts, t0) {
-        Ok(Some(sel)) => println!(
-            "{}",
-            match cli.format {
-                FormatArg::Portal => sel.token.clone(),
-                FormatArg::Json => json(&sel, window_pid(&sel)),
+    Ok(picked.map(|sel| match cli.format {
+        FormatArg::Portal => sel.token.clone(),
+        FormatArg::Json => json(&sel, window_pid(&sel)),
+    }))
+}
+
+/// Settle the filters that cannot be applied silently, before the overlay.
+///
+/// Two reasons to connect before it. A --pid filter needs the compositor to name the
+/// process behind each window, whatever the mode, and must say so rather than come up
+/// unapplied. And screens ignore the window filter, so only a windows-only run can be
+/// emptied by it. Anything else opens the overlay straight away, paying no extra
+/// connection.
+fn preflight(opts: &mut Options, mode: Mode) -> Result<(), String> {
+    if !opts.window_filters.needs_pids()
+        && !(mode == Mode::Windows && !opts.window_filters.is_empty())
+    {
+        return Ok(());
+    }
+    match wlr_capture::wl::Client::connect() {
+        Ok(client) => {
+            crate::require_window_pids(&mut opts.window_filters, client.toplevels())?;
+            if mode == Mode::Windows {
+                crate::reject_empty_window_filter(client.toplevels(), &opts.window_filters)?;
             }
-        ),
-        Ok(None) => std::process::exit(1), // cancelled
-        Err(e) => {
-            eprintln!("{}", tr!("error", error = format!("{e:#}")));
-            std::process::exit(2);
+            Ok(())
         }
+        Err(e) => Err(tr!("error", error = format!("{e:#}"))),
+    }
+}
+
+/// Serve one `choose` request: the daemon's side of a `wlr-chooser` invocation.
+///
+/// The answer travels back to the client, which writes it on stdout — the portal
+/// contract is the client's to honour, wherever the overlay was shown.
+pub(crate) fn serve(host: &mut shell::Host, args: Vec<String>) -> daemon::Reply {
+    let t0 = Instant::now();
+    let cli = match Cli::try_parse_from(std::iter::once("wlr-chooser".to_string()).chain(args)) {
+        Ok(cli) => cli,
+        Err(e) => return daemon::Reply::Err(e.render().to_string()),
+    };
+    // Runs that are not the daemon's to make. A client settles this before asking
+    // (see `daemon_can_serve`), so only a hand-sent line reaches here.
+    if cli.no_daemon || cli.no_gpu || cli.doctor || cli.bench_capture.is_some() {
+        return daemon::Reply::Err(tr!("daemon-cannot-serve"));
+    }
+    match run(cli, t0, Some(host)) {
+        Ok(Some(line)) => daemon::Reply::Done(line),
+        Ok(None) => daemon::Reply::Cancelled,
+        Err(reason) => daemon::Reply::Err(reason),
     }
 }
 
