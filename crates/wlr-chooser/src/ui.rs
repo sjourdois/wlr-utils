@@ -102,8 +102,9 @@ impl Order {
     /// this has to run before it takes the keyboard.
     pub(crate) fn resolve(self) -> (WindowOrder, Option<wl::WindowIdentity>) {
         // The active window comes from the foreign-toplevel protocol rather than a
-        // compositor IPC, so the switcher opens on the same tile everywhere — MRU
-        // history, below, is the part only some compositors can answer.
+        // compositor IPC, so the opening tile is the same wherever that protocol is;
+        // without it the first tile wins. MRU history, below, is the part only some
+        // compositors can answer.
         let focused = wl::active_window().ok().flatten();
         let order = match self {
             Self::Mru => WindowOrder::mru(
