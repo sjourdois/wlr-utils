@@ -230,8 +230,9 @@ fn detected_name() -> Option<String> {
 }
 
 /// Ask a recognised compositor for its version (`sway --version`, `hyprctl version`,
-/// `niri --version`) and return the first non-empty output line. Best-effort: returns
-/// `None` if the compositor is unrecognised or the command isn't runnable.
+/// `niri --version`, `cosmic-comp --version`) and return the first non-empty output
+/// line. Best-effort: returns `None` if the compositor is unrecognised or the command
+/// isn't runnable.
 fn self_reported_version(name: &str) -> Option<String> {
     let n = name.to_ascii_lowercase();
     let (cmd, args): (&str, &[&str]) = if n.contains("sway") {
@@ -240,6 +241,8 @@ fn self_reported_version(name: &str) -> Option<String> {
         ("hyprctl", &["version"])
     } else if n.contains("niri") {
         ("niri", &["--version"])
+    } else if n.contains("cosmic") {
+        ("cosmic-comp", &["--version"])
     } else {
         return None;
     };

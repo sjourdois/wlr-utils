@@ -63,6 +63,8 @@ pub mod wl;
 pub mod capture;
 
 #[cfg(feature = "focus")]
+mod cosmic_protocol;
+#[cfg(feature = "focus")]
 #[cfg_attr(docsrs, doc(cfg(feature = "focus")))]
 pub mod focus;
 

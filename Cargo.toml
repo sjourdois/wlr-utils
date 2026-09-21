@@ -39,6 +39,8 @@ egui = "0.36"
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["staging", "client"] }
 wayland-protocols-wlr = { version = "0.3.12", features = ["client"] }
+wayland-scanner = "0.31"
+wayland-backend = "0.3"
 rustix = { version = "1.1.5", features = ["fs", "mm", "event", "process"] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 i18n-embed = { version = "0.16.0", features = ["fluent-system", "desktop-requester"] }

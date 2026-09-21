@@ -17,6 +17,12 @@ All notable changes to this project are documented here. The format is based on
   stay unavailable there and say so. `doctor` reports which capture protocol is in
   use; `WLR_FORCE_SCREENCOPY=1` selects `wlr-screencopy` on a compositor that
   advertises both.
+- **Focus backend for cosmic-comp** — `-a` (active window) and `--current-output`
+  work on **cosmic-comp**. COSMIC exposes no IPC socket, so the backend reads
+  `zcosmic_toplevel_info_v1` over Wayland; `get_cosmic_toplevel` ties each COSMIC
+  toplevel to its `ext-foreign-toplevel-list-v1` handle, so windows are named the same
+  way the capture engine names them. Checked against cosmic-comp 1.8.0. COSMIC reports
+  no focus history, so `--window-order mru` falls back to `by-name` there.
 - **Most recently used window order**
   ([#14](https://github.com/sjourdois/wlr-utils/pull/14), by
   [@bR3iN](https://github.com/bR3iN)) — `--window-order mru|by-name` on

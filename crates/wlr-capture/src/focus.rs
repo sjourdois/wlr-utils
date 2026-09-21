@@ -4,10 +4,31 @@
 //! position or which surface/output has the focus — so, like `grimshot`, we rely
 //! on the compositor's own IPC. This is a small trait with per-compositor backends
 //! selected from the environment: Sway (`$SWAYSOCK`), Hyprland (`hyprctl`) and niri
-//! (`niri msg`).
+//! (`niri msg`). cosmic-comp has no IPC socket, so its backend asks the compositor
+//! over Wayland instead, through `zcosmic_toplevel_info_v1`.
+
+use std::time::{Duration, Instant};
 
 use crate::wl::Region;
+use rustix::event::{PollFd, PollFlags, Timespec};
 use swayipc::{Connection, Fallible, Node, NodeType};
+use wayland_client::{
+    Connection as WlConnection, Dispatch, Proxy, QueueHandle, event_created_child,
+    globals::{GlobalListContents, registry_queue_init},
+    protocol::{
+        wl_output::{self, WlOutput},
+        wl_registry::WlRegistry,
+    },
+};
+use wayland_protocols::ext::foreign_toplevel_list::v1::client::{
+    ext_foreign_toplevel_handle_v1::ExtForeignToplevelHandleV1,
+    ext_foreign_toplevel_list_v1::{self, ExtForeignToplevelListV1},
+};
+
+use crate::cosmic_protocol::toplevel_info::v1::client::{
+    zcosmic_toplevel_handle_v1::{self, State as CosmicToplevelState, ZcosmicToplevelHandleV1},
+    zcosmic_toplevel_info_v1::{self, ZcosmicToplevelInfoV1},
+};
 
 /// A window's identity + content geometry, for binding a region mirror to the window
 /// under it (`app_id` + `title` match a `wl::Toplevel`; `rect` is its content area).
@@ -69,6 +90,12 @@ pub fn detect() -> Option<Box<dyn FocusBackend>> {
     }
     if std::env::var_os("NIRI_SOCKET").is_some() {
         return Some(Box::new(Niri));
+    }
+    // COSMIC sets no variable of its own that a client can rely on (cosmic-comp run
+    // outside cosmic-session leaves even `XDG_CURRENT_DESKTOP` unset), so this one is
+    // detected by the protocol it answers on.
+    if cosmic_toplevel_info_available() {
+        return Some(Box::new(Cosmic));
     }
     None
 }
@@ -418,6 +445,347 @@ fn niri_focus_order(windows: &serde_json::Value) -> Option<FocusOrder> {
     })
 }
 
+/// cosmic-comp backend, over `zcosmic_toplevel_info_v1`.
+///
+/// COSMIC has neither an IPC socket nor a command-line client, so this backend is a
+/// Wayland client: it binds `ext-foreign-toplevel-list-v1`, asks
+/// `zcosmic_toplevel_info_v1.get_cosmic_toplevel` for the COSMIC extension object of
+/// every window, and reads the `state`, `output_enter` and `geometry` events.
+///
+/// That request is the correlation the other backends get from an id field: it takes
+/// the `ext_foreign_toplevel_handle_v1` itself, so a COSMIC toplevel is never matched
+/// by app id and title.
+///
+/// [`FocusBackend::focus_order`] stays unimplemented: no COSMIC protocol reports a
+/// focus history, so `--window-order mru` falls back to ordering by name.
+struct Cosmic;
+
+impl FocusBackend for Cosmic {
+    fn name(&self) -> &'static str {
+        "cosmic-comp"
+    }
+
+    fn focused_output(&self) -> Option<String> {
+        cosmic_active(&CosmicSnapshot::query()?.windows)?
+            .outputs
+            .first()
+            .cloned()
+    }
+
+    fn active_window_rect(&self) -> Option<Region> {
+        cosmic_active(&CosmicSnapshot::query()?.windows)?.rect
+    }
+}
+
+/// Whether the compositor advertises `zcosmic_toplevel_info_v1` at a version that can
+/// name our windows: `get_cosmic_toplevel` arrived in version 2, and without it the
+/// COSMIC toplevels cannot be tied to `ext-foreign-toplevel-list-v1` at all.
+fn cosmic_toplevel_info_available() -> bool {
+    crate::wl::advertised_globals().is_ok_and(|globals| {
+        globals
+            .iter()
+            .any(|(name, version)| name == ZcosmicToplevelInfoV1::interface().name && *version >= 2)
+    })
+}
+
+/// One window, reduced to what the backend reads from it.
+struct CosmicWindow {
+    /// Whether the compositor reports the window as `activated`.
+    activated: bool,
+    /// Whether the window's initial `state` event has arrived. cosmic-comp does not
+    /// answer `get_cosmic_toplevel` with the window's properties: it sends them from
+    /// its own refresh tick, so a snapshot has to wait for them.
+    described: bool,
+    /// The outputs the window is visible on, in the order it entered them. A window
+    /// can straddle two; `focused_output` answers with the first, since nothing in the
+    /// protocol says which one holds the focus.
+    outputs: Vec<String>,
+    /// The window's rectangle, in the global logical space.
+    rect: Option<Region>,
+}
+
+/// The window holding the focus. A multi-seat compositor can activate one window per
+/// seat; the first is as good a choice as any, since a client cannot tell which seat
+/// is "ours". Free function so the rule is unit-testable without a live compositor.
+fn cosmic_active(windows: &[CosmicWindow]) -> Option<&CosmicWindow> {
+    windows.iter().find(|w| w.activated)
+}
+
+/// Whether a `zcosmic_toplevel_handle_v1.state` array contains `activated`. The array
+/// is a raw sequence of 32-bit enum values, in host byte order.
+fn cosmic_is_activated(states: &[u8]) -> bool {
+    states
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .copied()
+        .map(u32::from_ne_bytes)
+        .any(|s| s == CosmicToplevelState::Activated as u32)
+}
+
+/// A `zcosmic_toplevel_handle_v1.geometry` rectangle as a [`Region`].
+///
+/// The protocol describes the position as "relative to the provided output", but
+/// cosmic-comp sends the window's rectangle in its global logical space — the space
+/// `xdg-output` places outputs in — and repeats the same values for every output the
+/// window overlaps. Measured on a single output at the origin, where both readings
+/// coincide; the global reading is what cosmic-comp's own code sends.
+fn cosmic_rect(x: i32, y: i32, width: i32, height: i32) -> Region {
+    Region {
+        x,
+        y,
+        w: width.max(0) as u32,
+        h: height.max(0) as u32,
+    }
+}
+
+/// The windows cosmic-comp describes, and the outputs they sit on.
+#[derive(Default)]
+struct CosmicSnapshot {
+    windows: Vec<CosmicWindow>,
+    /// The `ext-foreign-toplevel-list-v1` handle of each window, in `windows` order.
+    ext_handles: Vec<ExtForeignToplevelHandleV1>,
+    /// The COSMIC extension object of each window, in `windows` order.
+    cosmic_handles: Vec<ZcosmicToplevelHandleV1>,
+    /// Every `wl_output` and its connector name, filled from `wl_output.name`.
+    outputs: Vec<(WlOutput, String)>,
+}
+
+/// How long to wait for cosmic-comp's refresh tick to describe the toplevels. It took
+/// 26–67 ms on a software-rendered virtual machine; a second is far beyond that, and
+/// is only ever reached when the compositor never answers.
+const COSMIC_TIMEOUT: Duration = Duration::from_secs(1);
+
+impl CosmicSnapshot {
+    /// Connect, enumerate the windows and wait for cosmic-comp to describe them.
+    fn query() -> Option<Self> {
+        let conn = WlConnection::connect_to_env().ok()?;
+        let (globals, mut queue) = registry_queue_init::<Self>(&conn).ok()?;
+        let qh = queue.handle();
+        let mut snap = Self::default();
+
+        // `wl_output.name` (the connector name `focused_output` returns) needs v4.
+        let outputs: Vec<(u32, u32)> = {
+            let mut v = Vec::new();
+            globals.contents().with_list(|list| {
+                for g in list {
+                    if g.interface == WlOutput::interface().name {
+                        v.push((g.name, g.version));
+                    }
+                }
+            });
+            v
+        };
+        for (name, version) in outputs {
+            let output: WlOutput = globals.registry().bind(name, version.min(4), &qh, ());
+            snap.outputs.push((output, String::new()));
+        }
+
+        let info: ZcosmicToplevelInfoV1 = globals.bind(&qh, 2..=3, ()).ok()?;
+        let list: ExtForeignToplevelListV1 = globals.bind(&qh, 1..=1, ()).ok()?;
+        // Binding the list makes the compositor advertise the current toplevels; one
+        // roundtrip brings their handles, which is all `get_cosmic_toplevel` needs.
+        queue.roundtrip(&mut snap).ok()?;
+
+        for handle in snap.ext_handles.clone() {
+            let cosmic = info.get_cosmic_toplevel(&handle, &qh, ());
+            snap.cosmic_handles.push(cosmic);
+        }
+
+        let deadline = Instant::now() + COSMIC_TIMEOUT;
+        while snap.windows.iter().any(|w| !w.described)
+            && cosmic_wait(&mut queue, &mut snap, deadline)
+        {}
+
+        list.destroy();
+        info.stop();
+        Some(snap)
+    }
+
+    fn output_name(&self, output: &WlOutput) -> Option<String> {
+        self.outputs
+            .iter()
+            .find(|(o, _)| o == output)
+            .map(|(_, name)| name.clone())
+            .filter(|name| !name.is_empty())
+    }
+
+    /// The window whose COSMIC extension object is `handle`. `get_cosmic_toplevel` is
+    /// issued in `windows` order and the objects are created in request order, so the
+    /// three lists stay aligned.
+    fn window_of(&mut self, handle: &ZcosmicToplevelHandleV1) -> Option<&mut CosmicWindow> {
+        let i = self.cosmic_handles.iter().position(|h| h == handle)?;
+        self.windows.get_mut(i)
+    }
+}
+
+/// Wait for more events until `deadline`, then dispatch them. `false` means to stop
+/// waiting: the deadline passed, or the connection went away.
+fn cosmic_wait(
+    queue: &mut wayland_client::EventQueue<CosmicSnapshot>,
+    snap: &mut CosmicSnapshot,
+    deadline: Instant,
+) -> bool {
+    if queue.flush().is_err() {
+        return false;
+    }
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        return false;
+    }
+    let Some(guard) = queue.prepare_read() else {
+        // Events already queued: dispatch them and look again.
+        return queue.dispatch_pending(snap).is_ok();
+    };
+    let ts = Timespec {
+        tv_sec: remaining.as_secs() as _,
+        tv_nsec: remaining.subsec_nanos() as _,
+    };
+    // Scope the borrowed fd so it is released before `guard.read()` consumes the guard.
+    let poll = {
+        let fd = guard.connection_fd();
+        let mut fds = [PollFd::new(&fd, PollFlags::IN | PollFlags::ERR)];
+        rustix::event::poll(&mut fds, Some(&ts))
+    };
+    match poll {
+        Ok(0) => false, // deadline reached
+        Ok(_) => guard.read().is_ok() && queue.dispatch_pending(snap).is_ok(),
+        Err(rustix::io::Errno::INTR) => true,
+        Err(_) => false,
+    }
+}
+
+impl Dispatch<WlRegistry, GlobalListContents> for CosmicSnapshot {
+    fn event(
+        _: &mut Self,
+        _: &WlRegistry,
+        _: <WlRegistry as Proxy>::Event,
+        _: &GlobalListContents,
+        _: &WlConnection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+impl Dispatch<WlOutput, ()> for CosmicSnapshot {
+    fn event(
+        snap: &mut Self,
+        output: &WlOutput,
+        event: wl_output::Event,
+        _: &(),
+        _: &WlConnection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let wl_output::Event::Name { name } = event
+            && let Some((_, slot)) = snap.outputs.iter_mut().find(|(o, _)| o == output)
+        {
+            *slot = name;
+        }
+    }
+}
+
+impl Dispatch<ExtForeignToplevelListV1, ()> for CosmicSnapshot {
+    fn event(
+        snap: &mut Self,
+        _: &ExtForeignToplevelListV1,
+        event: ext_foreign_toplevel_list_v1::Event,
+        _: &(),
+        _: &WlConnection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let ext_foreign_toplevel_list_v1::Event::Toplevel { toplevel } = event {
+            snap.ext_handles.push(toplevel);
+            snap.windows.push(CosmicWindow {
+                activated: false,
+                described: false,
+                outputs: Vec::new(),
+                rect: None,
+            });
+        }
+    }
+    event_created_child!(CosmicSnapshot, ExtForeignToplevelListV1, [
+        ext_foreign_toplevel_list_v1::EVT_TOPLEVEL_OPCODE => (ExtForeignToplevelHandleV1, ()),
+    ]);
+}
+
+impl Dispatch<ExtForeignToplevelHandleV1, ()> for CosmicSnapshot {
+    fn event(
+        _: &mut Self,
+        _: &ExtForeignToplevelHandleV1,
+        _: <ExtForeignToplevelHandleV1 as Proxy>::Event,
+        _: &(),
+        _: &WlConnection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+impl Dispatch<ZcosmicToplevelInfoV1, ()> for CosmicSnapshot {
+    fn event(
+        _: &mut Self,
+        _: &ZcosmicToplevelInfoV1,
+        _: zcosmic_toplevel_info_v1::Event,
+        _: &(),
+        _: &WlConnection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+    event_created_child!(CosmicSnapshot, ZcosmicToplevelInfoV1, [
+        zcosmic_toplevel_info_v1::EVT_TOPLEVEL_OPCODE => (ZcosmicToplevelHandleV1, ()),
+    ]);
+}
+
+impl Dispatch<ZcosmicToplevelHandleV1, ()> for CosmicSnapshot {
+    fn event(
+        snap: &mut Self,
+        handle: &ZcosmicToplevelHandleV1,
+        event: zcosmic_toplevel_handle_v1::Event,
+        _: &(),
+        _: &WlConnection,
+        _: &QueueHandle<Self>,
+    ) {
+        use zcosmic_toplevel_handle_v1::Event;
+        match event {
+            Event::State { state } => {
+                let activated = cosmic_is_activated(&state);
+                if let Some(w) = snap.window_of(handle) {
+                    w.described = true;
+                    w.activated = activated;
+                }
+            }
+            Event::OutputEnter { output } => {
+                let Some(name) = snap.output_name(&output) else {
+                    return;
+                };
+                if let Some(w) = snap.window_of(handle) {
+                    w.outputs.push(name);
+                }
+            }
+            Event::OutputLeave { output } => {
+                let Some(name) = snap.output_name(&output) else {
+                    return;
+                };
+                if let Some(w) = snap.window_of(handle) {
+                    w.outputs.retain(|o| *o != name);
+                }
+            }
+            Event::Geometry {
+                x,
+                y,
+                width,
+                height,
+                ..
+            } => {
+                let rect = cosmic_rect(x, y, width, height);
+                if let Some(w) = snap.window_of(handle) {
+                    w.rect = Some(rect);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -669,6 +1037,104 @@ mod tests {
         let order = niri_focus_order(&windows).expect("an array of windows");
         assert_eq!(order.focused, None);
         assert_eq!(order.unfocused, ["9", "8", "7"]);
+    }
+
+    /// A `zcosmic_toplevel_handle_v1.state` array, as the wire carries it: 32-bit
+    /// enum values in host byte order.
+    fn cosmic_states(states: &[CosmicToplevelState]) -> Vec<u8> {
+        states
+            .iter()
+            .flat_map(|s| (*s as u32).to_ne_bytes())
+            .collect()
+    }
+
+    /// The five windows of a cosmic-comp 1.8.0 run (foot, cascaded by the floating
+    /// layout), the last of them focused. Only one window is ever `activated`, and the
+    /// four others carry an empty state array — which is not the same as never having
+    /// been described.
+    fn cosmic_windows() -> Vec<CosmicWindow> {
+        let mut windows: Vec<CosmicWindow> = [(292, 100), (340, 148), (244, 196), (292, 244)]
+            .into_iter()
+            .map(|(x, y)| CosmicWindow {
+                activated: false,
+                described: true,
+                outputs: vec!["WINIT-0".to_string()],
+                rect: Some(cosmic_rect(x, y, 696, 532)),
+            })
+            .collect();
+        windows.push(CosmicWindow {
+            activated: true,
+            described: true,
+            outputs: vec!["WINIT-0".to_string()],
+            rect: Some(cosmic_rect(196, 292, 696, 492)),
+        });
+        windows
+    }
+
+    #[test]
+    fn cosmic_is_activated_reads_the_state_array() {
+        assert!(cosmic_is_activated(&cosmic_states(&[
+            CosmicToplevelState::Maximized,
+            CosmicToplevelState::Activated,
+        ])));
+        // `maximized` is 0 and `activated` is 2: a state array must not be read as a
+        // bitfield.
+        assert!(!cosmic_is_activated(&cosmic_states(&[
+            CosmicToplevelState::Maximized,
+            CosmicToplevelState::Minimized,
+            CosmicToplevelState::Fullscreen,
+        ])));
+        // No state at all — every window but the focused one, on cosmic-comp.
+        assert!(!cosmic_is_activated(&[]));
+        // A truncated array is ignored rather than read across its end.
+        assert!(!cosmic_is_activated(&[2, 0, 0]));
+    }
+
+    #[test]
+    fn cosmic_active_picks_the_activated_window() {
+        let windows = cosmic_windows();
+        let active = cosmic_active(&windows).expect("one window is activated");
+        assert_eq!(active.outputs.first().map(String::as_str), Some("WINIT-0"));
+        assert_eq!(
+            active.rect,
+            Some(Region {
+                x: 196,
+                y: 292,
+                w: 696,
+                h: 492
+            })
+        );
+
+        // Nothing focused — under a layer-shell keyboard grab, for instance.
+        let mut none = cosmic_windows();
+        for w in &mut none {
+            w.activated = false;
+        }
+        assert!(cosmic_active(&none).is_none());
+        assert!(cosmic_active(&[]).is_none());
+    }
+
+    #[test]
+    fn cosmic_rect_clamps_a_negative_size() {
+        // x/y may be negative (an output left of the origin); a size cannot.
+        assert_eq!(
+            cosmic_rect(-100, -50, 800, 600),
+            Region {
+                x: -100,
+                y: -50,
+                w: 800,
+                h: 600
+            }
+        );
+        assert_eq!(
+            cosmic_rect(0, 0, -1, -1),
+            Region {
+                x: 0,
+                y: 0,
+                w: 0,
+                h: 0
+            }
+        );
     }
 
     #[test]
