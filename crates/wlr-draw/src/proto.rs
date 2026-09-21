@@ -1,7 +1,7 @@
 //! The control protocol carried over the daemon's Unix socket.
 //!
 //! One command per line, a verb plus an optional argument: `toggle`, `clear`, `undo`,
-//! `redo`, `visibility`, `tool pen`, `color #ff0000`, `width 6`, `quit`. The client
+//! `redo`, `visibility`, `snap`, `tool pen`, `color #ff0000`, `width 6`, `quit`. The client
 //! ([`crate::ipc::send`]) serializes a [`Cmd`] with [`Cmd::to_line`]; the daemon's
 //! socket thread parses each line with [`Cmd::parse`] and feeds the [`Cmd`] into the
 //! event loop. Text, not a binary format — trivial to send by hand (`socat`, `echo`)
@@ -24,6 +24,8 @@ pub enum Cmd {
     Redo,
     /// Hide / show the annotations without discarding them.
     Visibility,
+    /// Turn the pen's snap-on-dwell on / off.
+    Snap,
     /// Select a drawing tool.
     Tool(Tool),
     /// Set the stroke colour.
@@ -56,6 +58,7 @@ impl Cmd {
             "undo" => Cmd::Undo,
             "redo" => Cmd::Redo,
             "visibility" | "hide" | "show" => Cmd::Visibility,
+            "snap" => Cmd::Snap,
             // The path may contain spaces, so take the whole remainder of the line
             // rather than a single whitespace-split token.
             "save" | "screenshot" => {
@@ -89,6 +92,7 @@ impl Cmd {
             Cmd::Undo => "undo".into(),
             Cmd::Redo => "redo".into(),
             Cmd::Visibility => "visibility".into(),
+            Cmd::Snap => "snap".into(),
             Cmd::Quit => "quit".into(),
             Cmd::Tool(t) => format!("tool {}", t.name()),
             Cmd::Color([r, g, b, a]) => format!("color #{r:02x}{g:02x}{b:02x}{a:02x}"),
@@ -113,6 +117,7 @@ mod tests {
             Cmd::Undo,
             Cmd::Redo,
             Cmd::Visibility,
+            Cmd::Snap,
             Cmd::Quit,
             Cmd::Tool(Tool::Arrow),
             Cmd::Color([0xff, 0x3b, 0x30, 0xff]),

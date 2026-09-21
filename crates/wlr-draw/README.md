@@ -44,6 +44,7 @@ wlr-draw on | off        # force draw mode on/off
 wlr-draw clear           # erase everything
 wlr-draw undo | redo
 wlr-draw visibility      # hide/show the annotations without discarding them
+wlr-draw snap            # turn the pen's dwell-to-snap on/off
 wlr-draw tool  <pen|rect|mask|arrow|text|eraser|move>   # mask = solid box to redact areas
 wlr-draw color <name|#rrggbb[aa]>     # red green blue yellow orange cyan magenta white black
 wlr-draw width <px>
@@ -78,6 +79,7 @@ don't clash with the compositor's `$mod+…` bindings, so you only need to bind 
 | `e` | eraser | `h` | toggle the help legend |
 | `s` | move tool (or right-drag) | `Ctrl` | constrain shape / move axis (hold) |
 | `Space` | freeze-frame on/off | `Shift` | spotlight (hold); wheel/`ijkl` size & dim |
+| `d` | dwell-to-snap on/off | `Alt` | invert dwell-to-snap for one stroke (hold) |
 | `Esc` | unfreeze / close popup / leave | | |
 | `↑↓←→` | nudge selection (`Shift`: 1px, `Ctrl`: big) | | |
 
@@ -95,11 +97,17 @@ Every shortcut above is rebindable from **`~/.config/wlr-draw/keys.toml`** (hono
 binding is a single name or a list; missing entries keep their default, so a partial file
 is fine and no config at all means the defaults below.
 
-The three held controls — `passthrough` (click-through), `constrain`, `spotlight` — take
-**either a modifier** (`caps`, `ctrl`, `shift`, `alt`, `super`) **or a regular key**. This
-is the fix for keyboards without a usable Caps Lock (e.g. HHKB): point `passthrough` at
-`alt`, `super`, or any key. A modifier engages while held (Caps Lock latches); a regular
-key bound to `passthrough` toggles, and to `constrain`/`spotlight` engages while held.
+The four held controls — `passthrough` (click-through), `constrain`, `spotlight`,
+`snap-invert` — take **either a modifier** (`caps`, `ctrl`, `shift`, `alt`, `super`) **or
+a regular key**. This is the fix for keyboards without a usable Caps Lock (e.g. HHKB):
+point `passthrough` at `alt`, `super`, or any key. A modifier engages while held (Caps
+Lock latches); a regular key bound to `passthrough` toggles, and to
+`constrain`/`spotlight`/`snap-invert` engages while held.
+
+The same file carries the two settings the `snap` binding acts on: `dwell` (whether a
+pen stroke snaps on its own) and `dwell-ms` (how long it must hold still, 650 by
+default). `dwell-ms = 0` is refused — the delay stays a delay, and `dwell = false` is
+how snapping is switched off.
 
 A commented example listing every binding with its default is at
 [`docs/wlr-draw-keys.toml`](../../docs/wlr-draw-keys.toml) — copy it to
@@ -148,6 +156,15 @@ the tray's Shortcuts menu reflect your bindings.
   without releasing the button*. The freehand blob snaps to a clean ellipse (a perfect
   circle when roughly round) or a straight line, which you then **resize live** by
   moving the mouse. Release to commit.
+  - The delay is `dwell-ms` in `keys.toml` (650 ms by default), and `dwell = false`
+    starts with snapping off.
+  - **`d`** (or `wlr-draw snap`) turns it on and off while drawing. The status chip
+    says `snap off` whenever a pen stroke would not snap.
+  - **Hold `Alt`** to invert it for the stroke you are drawing: it suppresses the snap
+    where it is on and arms it where it is off. Releasing `Alt` changes nothing
+    lasting. Since a snapped ellipse is what a held `Shift` turns into an elliptical
+    spotlight, `Alt`+`Shift` drops the ellipse where snapping is on — and is the way to
+    get it back where snapping is off.
 
 The tray icon shows the **current tool** as a glyph (in the stroke colour while drawing,
 grey when idle).

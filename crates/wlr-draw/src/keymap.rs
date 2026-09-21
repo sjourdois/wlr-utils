@@ -1,4 +1,5 @@
-//! Configurable keybindings, loaded from `~/.config/wlr-draw/keys.toml`.
+//! Configurable keybindings and the pen's dwell settings, loaded from
+//! `~/.config/wlr-draw/keys.toml`.
 //!
 //! Each action resolves to a [`Trigger`] — either a regular key (an XKB keysym) or a
 //! modifier. Names follow the XKB keysym convention used by sway / Hyprland `bindsym`
@@ -6,6 +7,15 @@
 //! anything you can bind in your compositor you can bind here. A missing file or field
 //! falls back to the built-in defaults, which reproduce the historical hardcoded layout —
 //! so existing users need no config.
+//!
+//! The held roles (`passthrough`, `constrain`, `spotlight`, `snap-invert`) take either a
+//! modifier or a regular key; the rest are discrete actions.
+//!
+//! Besides the bindings the file carries the two scalars the `snap` binding acts on:
+//! `dwell` (whether the pen snaps on its own) and `dwell-ms` (how long it must hold
+//! still). They live here rather than in a file of their own because they only describe
+//! how a binding behaves, and a second loader for two values would double the config
+//! path, the diagnostics and the documentation.
 //!
 //! Example (the defaults):
 //! ```toml
@@ -15,11 +25,19 @@
 //! passthrough = "caps"            # a modifier (caps/ctrl/shift/alt/super) or a key
 //! constrain = "ctrl"
 //! spotlight = "shift"
+//! snap = "d"
+//! snap-invert = "alt"
+//! dwell = true
+//! dwell-ms = 650
 //! ```
 
 use serde::Deserialize;
 use smithay_client_toolkit::seat::keyboard::Keysym;
 use std::path::PathBuf;
+use std::time::Duration;
+
+/// How long the pen holds still before its freehand stroke snaps to a clean shape.
+const DEFAULT_DWELL: Duration = Duration::from_millis(650);
 
 /// A modifier, usable as a bindable trigger and matched against the xkb modifier state.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -41,8 +59,9 @@ pub enum Trigger {
 }
 
 /// A discrete action — fires once on key press. The held roles (pass-through, constrain,
-/// spotlight) are not here; they live as the `passthrough`/`constrain`/`spotlight` fields
-/// of [`Keymap`] because they can be a modifier as well as a key.
+/// spotlight, snap-invert) are not here; they live as the `passthrough`/`constrain`/
+/// `spotlight`/`snap_invert` fields of [`Keymap`] because they can be a modifier as well
+/// as a key.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Action {
     Pen,
@@ -62,6 +81,7 @@ pub enum Action {
     WidthInc,
     WidthDec,
     Freeze,
+    Snap,
 }
 
 /// Parse one trigger name. Modifier aliases first (`ctrl`, `shift`, `alt`, `super`/`logo`,
@@ -116,14 +136,23 @@ pub fn trigger_label(t: Trigger) -> String {
     }
 }
 
-/// The resolved bindings. `keys` maps discrete-action triggers (an action may have several
-/// — e.g. `+` and `=`); the three held roles each carry one trigger.
+/// The resolved configuration. `keys` maps discrete-action triggers (an action may have
+/// several — e.g. `+` and `=`); each held role carries one trigger; the dwell pair tunes
+/// what the `snap` binding and its held counterpart act on.
 #[derive(Clone)]
 pub struct Keymap {
     keys: Vec<(Trigger, Action)>,
     pub passthrough: Trigger,
     pub constrain: Trigger,
     pub spotlight: Trigger,
+    /// Held to invert [`Keymap::snap_on_dwell`] for the stroke in progress — suppressing
+    /// the snap where it is on, arming it where it is off.
+    pub snap_invert: Trigger,
+    /// Whether the pen snaps a held-still stroke to a clean shape without being asked.
+    /// The starting state only: [`Action::Snap`] flips it at runtime.
+    pub snap_on_dwell: bool,
+    /// How long the pen must hold still before that snap fires.
+    pub dwell: Duration,
 }
 
 impl Default for Keymap {
@@ -153,10 +182,14 @@ impl Default for Keymap {
                 (Trigger::Key(Keysym::KP_Subtract), Action::WidthDec),
                 (Trigger::Key(Keysym::space), Action::Freeze),
                 (Trigger::Key(Keysym::KP_Space), Action::Freeze),
+                (c('d'), Action::Snap),
             ],
             passthrough: Trigger::Mod(ModKind::Caps),
             constrain: Trigger::Mod(ModKind::Ctrl),
             spotlight: Trigger::Mod(ModKind::Shift),
+            snap_invert: Trigger::Mod(ModKind::Alt),
+            snap_on_dwell: true,
+            dwell: DEFAULT_DWELL,
         }
     }
 }
@@ -252,16 +285,33 @@ impl Keymap {
         self.override_action(raw.width_inc, Action::WidthInc, "width-inc");
         self.override_action(raw.width_dec, Action::WidthDec, "width-dec");
         self.override_action(raw.freeze, Action::Freeze, "freeze");
+        self.override_action(raw.snap, Action::Snap, "snap");
+
+        if let Some(on) = raw.dwell {
+            self.snap_on_dwell = on;
+        }
+        if let Some(ms) = raw.dwell_ms {
+            // Zero would leave the `snap` binding with nothing to turn back on, so the
+            // delay stays a delay and `dwell = false` is the way to switch snapping off.
+            if ms == 0 {
+                eprintln!("wlr-draw: dwell-ms: must be at least 1; use `dwell = false`");
+            } else {
+                self.dwell = Duration::from_millis(ms);
+            }
+        }
 
         let mut pt = self.passthrough;
         let mut co = self.constrain;
         let mut sp = self.spotlight;
+        let mut si = self.snap_invert;
         self.override_role(raw.passthrough, &mut pt, "passthrough");
         self.override_role(raw.constrain, &mut co, "constrain");
         self.override_role(raw.spotlight, &mut sp, "spotlight");
+        self.override_role(raw.snap_invert, &mut si, "snap-invert");
         self.passthrough = pt;
         self.constrain = co;
         self.spotlight = sp;
+        self.snap_invert = si;
 
         self.warn_conflicts();
     }
@@ -279,7 +329,12 @@ impl Keymap {
                 }
             }
         }
-        for role in [self.passthrough, self.constrain, self.spotlight] {
+        for role in [
+            self.passthrough,
+            self.constrain,
+            self.spotlight,
+            self.snap_invert,
+        ] {
             if matches!(role, Trigger::Key(_)) && self.keys.iter().any(|(t, _)| *t == role) {
                 eprintln!(
                     "wlr-draw: `{}` is bound to both a held role and a tool",
@@ -317,7 +372,8 @@ impl OneOrMany {
 }
 
 /// The on-disk schema. Every field optional so a partial file is valid; missing keys keep
-/// their default. Keys are kebab-case (`width-inc`).
+/// their default. Keys are kebab-case (`width-inc`). Everything is a binding except the
+/// two dwell scalars, which a name no key could carry (`dwell`, `dwell-ms`) keeps apart.
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "kebab-case", default)]
 struct RawConfig {
@@ -338,9 +394,13 @@ struct RawConfig {
     width_inc: Option<OneOrMany>,
     width_dec: Option<OneOrMany>,
     freeze: Option<OneOrMany>,
+    snap: Option<OneOrMany>,
     passthrough: Option<String>,
     constrain: Option<String>,
     spotlight: Option<String>,
+    snap_invert: Option<String>,
+    dwell: Option<bool>,
+    dwell_ms: Option<u64>,
 }
 
 #[cfg(test)]
@@ -377,10 +437,17 @@ mod tests {
         assert_eq!(km.action_for_key(Keysym::plus), Some(Action::WidthInc));
         assert_eq!(km.action_for_key(Keysym::equal), Some(Action::WidthInc));
         assert_eq!(km.action_for_key(Keysym::space), Some(Action::Freeze));
+        assert_eq!(
+            km.action_for_key(Keysym::from_char('d')),
+            Some(Action::Snap)
+        );
         assert_eq!(km.action_for_key(Keysym::from_char('z')), None);
         assert_eq!(km.passthrough, Trigger::Mod(ModKind::Caps));
         assert_eq!(km.constrain, Trigger::Mod(ModKind::Ctrl));
         assert_eq!(km.spotlight, Trigger::Mod(ModKind::Shift));
+        assert_eq!(km.snap_invert, Trigger::Mod(ModKind::Alt));
+        assert!(km.snap_on_dwell);
+        assert_eq!(km.dwell, Duration::from_millis(650));
     }
 
     #[test]
@@ -405,5 +472,61 @@ mod tests {
             km.action_for_key(Keysym::from_char('w')),
             Some(Action::Save)
         );
+    }
+
+    /// Both dwell settings, and the `snap` binding they belong to, override cleanly.
+    #[test]
+    fn dwell_settings_override() {
+        let mut km = Keymap::default();
+        let raw: RawConfig = toml::from_str(
+            r#"
+            snap = "n"
+            snap-invert = "super"
+            dwell = false
+            dwell-ms = 1200
+        "#,
+        )
+        .unwrap();
+        km.apply(raw);
+        assert_eq!(
+            km.action_for_key(Keysym::from_char('n')),
+            Some(Action::Snap)
+        );
+        assert_eq!(km.action_for_key(Keysym::from_char('d')), None);
+        assert!(!km.snap_on_dwell);
+        assert_eq!(km.dwell, Duration::from_millis(1200));
+        assert_eq!(km.snap_invert, Trigger::Mod(ModKind::Logo));
+    }
+
+    /// A file that mentions neither leaves both at their default, and turning snapping
+    /// off does not shorten the delay the `snap` binding turns back on.
+    #[test]
+    fn dwell_settings_are_independent() {
+        let mut km = Keymap::default();
+        km.apply(toml::from_str(r#"pen = "b""#).unwrap());
+        assert!(km.snap_on_dwell);
+        assert_eq!(km.dwell, Duration::from_millis(650));
+
+        let mut km = Keymap::default();
+        km.apply(toml::from_str("dwell = false").unwrap());
+        assert_eq!(km.dwell, Duration::from_millis(650));
+    }
+
+    /// `0` is the sentinel the request suggested; it is refused, because it would leave
+    /// the toggle with no delay to restore. The default stands.
+    #[test]
+    fn zero_dwell_ms_keeps_the_default() {
+        let mut km = Keymap::default();
+        km.apply(toml::from_str("dwell-ms = 0").unwrap());
+        assert_eq!(km.dwell, Duration::from_millis(650));
+        assert!(km.snap_on_dwell);
+    }
+
+    /// A value of the wrong type is a TOML error: `load` reports it and keeps every
+    /// default, rather than applying half the file.
+    #[test]
+    fn non_numeric_dwell_ms_is_a_parse_error() {
+        assert!(toml::from_str::<RawConfig>(r#"dwell-ms = "slow""#).is_err());
+        assert!(toml::from_str::<RawConfig>("dwell = 650").is_err());
     }
 }

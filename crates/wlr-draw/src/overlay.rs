@@ -91,9 +91,6 @@ const FREEZE_BUDGET: Duration = Duration::from_secs(2);
 fn text_size(width: f32) -> f32 {
     (width * TEXT_SIZE_RATIO).clamp(TEXT_SIZE_MIN, TEXT_SIZE_MAX)
 }
-/// How long the pen must hold still mid-stroke to snap the freehand shape to a clean
-/// one (dwell-to-snap).
-const DWELL: Duration = Duration::from_millis(650);
 /// Pointer travel under this (logical px) counts as "still" for the dwell timer.
 const PEN_STILL_EPS: f32 = 3.0;
 /// How long the status chip pulses to draw the eye when draw mode is entered on an
@@ -303,6 +300,8 @@ struct Frame<'a> {
     visible: bool,
     show_help: bool,
     show_palette: bool,
+    /// Whether a held-still pen stroke snaps right now (the snap-invert role included).
+    snap_active: bool,
     /// Whether screen capture is available (drives whether freeze/save are listed).
     capture_available: bool,
     /// Status-chip attention pulse (0 = none … 1 = peak).
@@ -353,6 +352,9 @@ struct State {
     /// Spotlight role active (the spotlight bind): dim everything around the shape being
     /// drawn, or a flashlight hole around the cursor while idle.
     spotlight_active: bool,
+    /// Snap-invert role active (the snap-invert bind): the stroke in progress dwells the
+    /// other way round from the persistent setting.
+    snap_invert_active: bool,
     /// Physical Ctrl / Shift state, read only for the arrow-nudge step granularity
     /// (Shift = 1px, Ctrl = big) — kept on the real modifiers regardless of how the
     /// constrain / spotlight roles are rebound.
@@ -390,6 +392,9 @@ struct State {
     moving: bool,
     /// Time of the last significant pen movement, for dwell-to-snap.
     pen_dwell: Instant,
+    /// Whether a held-still pen stroke snaps to a clean shape. Starts from the config
+    /// and is flipped by [`Cmd::Snap`]; the snapped shapes stay reachable either way.
+    snap_on_dwell: bool,
     /// When the status-chip attention pulse started (draw mode entered on an empty
     /// canvas); `None` once it has run its course.
     flash_start: Option<Instant>,
@@ -434,6 +439,7 @@ impl State {
             visible: self.visible,
             show_help: self.show_help,
             show_palette: self.show_palette,
+            snap_active: self.snap_active(),
             capture_available: self.capture_available,
             flash,
             selected: self.selected,
@@ -543,6 +549,9 @@ impl State {
             self.unfreeze();
             self.gesture = Gesture::None;
             self.flash_start = None;
+            // The keyboard is released here, so a snap-invert key released afterwards
+            // is never seen: drop the momentary state rather than carry it over.
+            self.set_snap_invert(false);
         } else if self.doc.elements().is_empty() {
             // Entering draw mode on an empty canvas: pulse the chip to draw the eye.
             self.flash_start = Some(Instant::now());
@@ -614,6 +623,22 @@ impl State {
             self.spotlight_latched = false; // a fresh activation re-arms the torch
         }
         self.dirty = true;
+    }
+
+    /// Toggle the snap-invert role. Purely momentary: it never touches `snap_on_dwell`,
+    /// so releasing it returns to whatever the config or the `snap` binding last set.
+    fn set_snap_invert(&mut self, on: bool) {
+        if on == self.snap_invert_active {
+            return;
+        }
+        self.snap_invert_active = on;
+        self.dirty = true; // the chip states the effective mode
+    }
+
+    /// Whether a held-still pen stroke snaps right now: the persistent setting, inverted
+    /// while the snap-invert role is held.
+    fn snap_active(&self) -> bool {
+        self.snap_on_dwell != self.snap_invert_active
     }
 
     /// Toggle the freeze-frame backdrop: capture every output once and show it frozen so
@@ -863,6 +888,10 @@ impl State {
                 self.visible = !self.visible;
                 self.dirty = true;
             }
+            Cmd::Snap => {
+                self.snap_on_dwell = !self.snap_on_dwell;
+                self.dirty = true;
+            }
             Cmd::Tool(t) => {
                 if t != Tool::Text {
                     self.commit_text();
@@ -992,7 +1021,11 @@ impl State {
     /// shape then resizes live until the button is released.
     fn check_dwell(&mut self) {
         let recognized = match &self.gesture {
-            Gesture::Pen(points) if self.pen_dwell.elapsed() >= DWELL => recognize(points),
+            Gesture::Pen(points)
+                if self.snap_active() && self.pen_dwell.elapsed() >= self.keymap.dwell =>
+            {
+                recognize(points)
+            }
             _ => None,
         };
         if let Some(r) = recognized {
@@ -1207,6 +1240,10 @@ impl State {
             self.set_spotlight(true);
             return;
         }
+        if self.keymap.snap_invert == Trigger::Key(ks) {
+            self.set_snap_invert(true);
+            return;
+        }
         // Discrete actions.
         if let Some(action) = self.keymap.action_for_key(ks) {
             self.do_action(action);
@@ -1222,6 +1259,9 @@ impl State {
         }
         if self.keymap.spotlight == Trigger::Key(ks) {
             self.set_spotlight(false);
+        }
+        if self.keymap.snap_invert == Trigger::Key(ks) {
+            self.set_snap_invert(false);
         }
     }
 
@@ -1251,6 +1291,7 @@ impl State {
             Action::WidthInc => self.apply_cmd(Cmd::Width(self.width + 2.0)),
             Action::WidthDec => self.apply_cmd(Cmd::Width((self.width - 2.0).max(1.0))),
             Action::Freeze => self.toggle_freeze(),
+            Action::Snap => self.apply_cmd(Cmd::Snap),
         }
     }
 
@@ -1312,6 +1353,7 @@ pub fn run() -> anyhow::Result<()> {
 
     let theme = Theme::load();
     let keymap = Keymap::load();
+    let snap_on_dwell = keymap.snap_on_dwell;
     let mut state = State {
         registry_state: RegistryState::new(&globals),
         seat_state: SeatState::new(&globals, &qh),
@@ -1337,6 +1379,7 @@ pub fn run() -> anyhow::Result<()> {
         passthrough: false,
         constrain_active: false,
         spotlight_active: false,
+        snap_invert_active: false,
         ctrl_held: false,
         shift_held: false,
         spotlight_radius: DEFAULT_SPOTLIGHT_RADIUS,
@@ -1360,6 +1403,7 @@ pub fn run() -> anyhow::Result<()> {
         selected: None,
         moving: false,
         pen_dwell: Instant::now(),
+        snap_on_dwell,
         flash_start: None,
         click_anchor: (f32::MIN, f32::MIN),
         click_count: 0,
@@ -2047,6 +2091,10 @@ fn paint_hud(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
     let info_text = if in_spotlight {
         let pct = (frame.spotlight_dim as f32 / 255.0 * 100.0).round();
         format!("◯ {:.0}px · {pct:.0}%  ·  {hint}", frame.spotlight_radius)
+    } else if frame.tool == Tool::Pen && !frame.snap_active {
+        // Only the pen dwells, and only the off state is worth a word: the chip then
+        // shows the toggle took effect and stays that way until it is turned back on.
+        format!("{:.0}px · {}  ·  {hint}", frame.width, tr!("draw-snap-off"))
     } else {
         format!("{:.0}px  ·  {hint}", frame.width)
     };
@@ -2211,6 +2259,10 @@ pub(crate) fn shortcut_rows(km: &Keymap, capture_available: bool) -> Vec<HelpRow
         key(Action::Visibility),
         tr!("draw-help-visibility"),
     ));
+    rows.push(HelpRow::Entry(
+        key(Action::Snap),
+        tr!("draw-help-snap-toggle"),
+    ));
 
     rows.push(HelpRow::Group(tr!("draw-help-group-screen")));
     // Save and Freeze need screen capture; list them only where they work (issue #1).
@@ -2236,6 +2288,10 @@ pub(crate) fn shortcut_rows(km: &Keymap, capture_available: bool) -> Vec<HelpRow
     rows.push(HelpRow::Entry(
         tr!("draw-help-key-wheel"),
         tr!("draw-help-spotlight-tune"),
+    ));
+    rows.push(HelpRow::Entry(
+        trigger_label(km.snap_invert),
+        tr!("draw-help-snap-invert"),
     ));
     rows.push(HelpRow::Entry(
         trigger_label(km.passthrough),
@@ -2595,6 +2651,9 @@ impl KeyboardHandler for State {
         }
         if let Trigger::Mod(m) = self.keymap.spotlight {
             self.set_spotlight(mod_active(&modifiers, m));
+        }
+        if let Trigger::Mod(m) = self.keymap.snap_invert {
+            self.set_snap_invert(mod_active(&modifiers, m));
         }
     }
 }

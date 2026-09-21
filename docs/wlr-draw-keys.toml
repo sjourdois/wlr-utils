@@ -25,6 +25,7 @@ clear = "Delete"
 width-inc = ["plus", "equal"]
 width-dec = "minus"
 freeze = "space"
+snap = "d"
 
 # --- Held controls: a modifier (caps/ctrl/shift/alt/super) OR a regular key ---
 # On a keyboard without a usable Caps Lock (e.g. HHKB), point `passthrough` elsewhere:
@@ -32,3 +33,9 @@ freeze = "space"
 passthrough = "caps"
 constrain = "ctrl"
 spotlight = "shift"
+snap-invert = "alt"
+
+# --- Pen dwell-to-snap ---
+# `dwell = false` starts with snapping off; `snap` and `snap-invert` still reach it.
+dwell = true
+dwell-ms = 650

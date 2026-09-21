@@ -56,6 +56,8 @@ enum Ctl {
     Redo,
     /// Hide / show the annotations without discarding them
     Visibility,
+    /// Toggle the pen's snap-on-dwell (hold still mid-stroke to snap to a clean shape)
+    Snap,
     /// Select a tool: pen, rect, mask, arrow, text, eraser, move
     Tool {
         /// Tool name
@@ -112,6 +114,7 @@ fn ctl_to_cmd(ctl: Ctl) -> anyhow::Result<Cmd> {
         Ctl::Undo => Cmd::Undo,
         Ctl::Redo => Cmd::Redo,
         Ctl::Visibility => Cmd::Visibility,
+        Ctl::Snap => Cmd::Snap,
         Ctl::Quit => Cmd::Quit,
         Ctl::Tool { name } => Cmd::Tool(
             Tool::from_name(&name).ok_or_else(|| anyhow::anyhow!("unknown tool: {name}"))?,

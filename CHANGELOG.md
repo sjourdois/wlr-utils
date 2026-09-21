@@ -8,7 +8,16 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **The pen's dwell-to-snap is yours to tune**
+  ([#15](https://github.com/sjourdois/wlr-utils/issues/15), reported by
+  [@algmyr](https://github.com/algmyr)) — `wlr-draw`'s `keys.toml` gains `dwell-ms`, the
+  delay before a held-still stroke snaps to a clean shape, and `dwell`, whether it snaps
+  at all. `d` (or `wlr-draw snap`) turns snapping on and off while drawing, and holding
+  `Alt` inverts it for the stroke in progress. The status chip says `snap off` whenever
+  a pen stroke would not snap.
 - **`--app-id`, `--title` and `--pid` on `wlr-switcher` and `wlr-chooser`**
+||||||| parent of b341674 (feat(draw): make dwell-to-snap tunable, switchable and invertible)
+- **`--app-id` and `--title` on `wlr-switcher` and `wlr-chooser`**
   ([#12](https://github.com/sjourdois/wlr-utils/issues/12)) — offer only the windows
   that match, instead of every open one. The app id is matched exactly, the title as a
   substring, both ignoring case, like the flags of the same name on `wlr-shot`; `--pid`
