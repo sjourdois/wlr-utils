@@ -194,19 +194,35 @@ pub struct Output {
     pub have_xdg: bool,
 }
 
+/// Whether `transform` exchanges the output's width and height (the quarter-turns).
+fn transform_swaps_axes(transform: Transform) -> bool {
+    matches!(
+        transform,
+        Transform::_90 | Transform::_270 | Transform::Flipped90 | Transform::Flipped270
+    )
+}
+
 /// Logical dimensions from physical pixels: divide by `scale`, swapping
 /// width/height for 90°/270° transforms. Free function so it's unit-testable
 /// without a live `WlOutput`.
 fn logical_dims(phys_w: i32, phys_h: i32, scale: i32, transform: Transform) -> (i32, i32) {
     let s = scale.max(1);
     let (w, h) = (phys_w / s, phys_h / s);
-    if matches!(
-        transform,
-        Transform::_90 | Transform::_270 | Transform::Flipped90 | Transform::Flipped270
-    ) {
+    if transform_swaps_axes(transform) {
         (h, w)
     } else {
         (w, h)
+    }
+}
+
+/// Capture dimensions from physical pixels: the mode, with width and height
+/// swapped for 90°/270° transforms (see [`Output::capture_size`]). Free function so
+/// it's unit-testable without a live `WlOutput`.
+fn capture_dims(phys_w: i32, phys_h: i32, transform: Transform) -> (i32, i32) {
+    if transform_swaps_axes(transform) {
+        (phys_h, phys_w)
+    } else {
+        (phys_w, phys_h)
     }
 }
 
@@ -225,6 +241,26 @@ impl Output {
                 self.transform,
             )
         }
+    }
+
+    /// Whether this output declares the identity transform, so a capture of it
+    /// needs no turning. Almost every physical monitor does; a panel stood on its
+    /// side (`transform 90`) does not.
+    pub fn is_untransformed(&self) -> bool {
+        matches!(self.transform, Transform::Normal)
+    }
+
+    /// Pixel size of a capture of this output: the current mode's pixels, with
+    /// width and height swapped for the 90°/270° transforms.
+    ///
+    /// The compositor renders an output's scene already turned for the panel, so a
+    /// capture buffer is `phys_width × phys_height` in *panel* space. The engine
+    /// takes that turn back out before handing the frame on, so the image a caller
+    /// receives has these dimensions and not the mode's — this is what maps onto
+    /// [`Output::logical_size`], and what `capture::logical_to_physical` scales
+    /// against.
+    pub fn capture_size(&self) -> (i32, i32) {
+        capture_dims(self.phys_width, self.phys_height, self.transform)
     }
 }
 
@@ -487,6 +523,11 @@ struct SessionData {
     delivered: bool,
     /// The compositor reports the captured contents bottom-up (`y_invert`).
     y_invert: bool,
+    /// The output this session captures, for a window session `None`. Kept as the
+    /// protocol object rather than a copied transform so a screen rotated *during*
+    /// a live session is read from the current `wl_output` geometry instead of a
+    /// snapshot taken when the session opened.
+    source_output: Option<WlOutput>,
     /// Constraints changed since the buffer was last (re)allocated (e.g. resize).
     dirty: bool,
     /// Set when the current in-flight frame is ready to read.
@@ -993,6 +1034,9 @@ impl Client {
     /// Open a persistent capture session for an output. See [`Client::open_toplevel_session`].
     pub fn open_output_session(&mut self, o: &Output) -> Result<SessionId> {
         let id = self.new_session();
+        if let Some(d) = self.state.sessions.get_mut(&id) {
+            d.source_output = Some(o.wl_output.clone());
+        }
         let objects = match self.protocol {
             Protocol::ImageCopyCapture => {
                 let out_src = self
@@ -1290,22 +1334,26 @@ impl Client {
             }
 
             if ready {
-                // A bottom-up dma-buf cannot be handed on as it is (see `harvest`):
-                // discard it and reallocate, so the next round comes through shm.
-                let gpu_inverted =
-                    y_invert && self.open[&id].buf.as_ref().is_some_and(Buf::is_dmabuf);
+                let transform = self.state.session_transform(&id);
+                // A dma-buf that would still need turning cannot be handed on as it
+                // is (see `harvest`): discard it and reallocate, so the next round
+                // comes through shm. The check belongs here and not only at
+                // allocation time — `y_invert` is learned from a frame, and an
+                // output can be rotated in the middle of a live session.
+                let gpu_needs_turning = (y_invert || !matches!(transform, Transform::Normal))
+                    && self.open[&id].buf.as_ref().is_some_and(Buf::is_dmabuf);
                 let frame = self.open[&id]
                     .buf
                     .as_ref()
-                    .filter(|_| !gpu_inverted)
-                    .and_then(|b| harvest(b, y_invert));
+                    .filter(|_| !gpu_needs_turning)
+                    .and_then(|b| harvest(b, y_invert, transform));
                 if let Some(os) = self.open.get_mut(&id) {
                     os.objects.drop_frame();
                 }
                 if let Some(d) = self.state.sessions.get_mut(&id) {
                     d.ready = false;
                     d.frame_failed = None;
-                    d.dirty |= gpu_inverted;
+                    d.dirty |= gpu_needs_turning;
                     d.delivered |= frame.is_some();
                 }
                 if let Some(frame) = frame {
@@ -1467,10 +1515,15 @@ impl Client {
     /// gbm/allocation failure) so the caller falls back to shm.
     #[cfg(feature = "gpu")]
     fn alloc_dmabuf(&mut self, id: &SessionId, w: u32, h: u32) -> Option<Buf> {
-        // `y_invert`: the compositor writes this source bottom-up, and the engine's
-        // contract is top-down frames. Flipping shm pixels is a memcpy; flipping a
-        // dma-buf would mean a blit in every consumer, so such a session stays on shm.
+        // `y_invert` (the compositor writes this source bottom-up) and a non-`Normal`
+        // output transform (it renders the scene turned for the panel) both mean the
+        // pixels have to be moved before the engine's contract — top-down, in the
+        // layout's orientation — is met. Doing that to shm pixels is a memcpy; doing
+        // it to a dma-buf would mean a blit in every consumer, and a quarter-turn
+        // cannot even be expressed as the axis-aligned UV rectangle the texture
+        // consumers draw with. Such a session stays on shm.
         if self.gpu_disabled
+            || !matches!(self.state.session_transform(id), Transform::Normal)
             || self
                 .state
                 .sessions
@@ -1695,10 +1748,15 @@ fn debug() -> bool {
 /// texture (re-exporting an fd for the buffer the compositor just wrote).
 ///
 /// `y_invert` means the compositor wrote the rows bottom-up; every [`Frame`] this
-/// crate hands out is top-down, so the shm path flips here. A dma-buf never reaches
-/// this point inverted: [`Client::ensure_buffer`] keeps an inverted session on shm,
-/// since flipping a GPU buffer would cost a blit at every consumer.
-fn harvest(buf: &Buf, y_invert: bool) -> Option<Frame> {
+/// crate hands out is top-down, so the shm path flips here. `transform` is the
+/// source output's transform, undone right after (see [`reorient`]) so the frame
+/// comes out in the layout's orientation. Order matters: `y_invert` describes the
+/// buffer the compositor wrote, the transform describes the panel that buffer was
+/// rendered for.
+///
+/// Neither ever reaches a dma-buf: [`Client::alloc_dmabuf`] keeps such a session on
+/// shm, since turning a GPU buffer would cost a blit at every consumer.
+fn harvest(buf: &Buf, y_invert: bool, transform: Transform) -> Option<Frame> {
     match buf {
         Buf::Shm(b) => {
             let layout = PixelLayout::of(b.format).expect("format validated at alloc time");
@@ -1707,7 +1765,7 @@ fn harvest(buf: &Buf, y_invert: bool) -> Option<Frame> {
             if y_invert {
                 flip_vertically(&mut img);
             }
-            Some(Frame::Shm(img))
+            Some(Frame::Shm(reorient(img, transform)))
         }
         #[cfg(feature = "gpu")]
         Buf::Dmabuf(b) => {
@@ -1727,6 +1785,69 @@ fn harvest(buf: &Buf, y_invert: bool) -> Option<Frame> {
                 modifier: b.modifier,
             }))
         }
+    }
+}
+
+/// Where destination pixel `(x, y)` reads from in a `w × h` capture buffer, when
+/// undoing output transform `t`.
+///
+/// A compositor renders an output's scene *already turned* for the panel: on an
+/// output on its side the framebuffer — and therefore the capture — holds the
+/// scene rotated so that it reads upright on the panel. Everything above this layer
+/// (logical rectangles, crops, the frozen overlay) speaks the layout's orientation,
+/// so that turn has to be taken back out.
+///
+/// `t` is applied as it comes, *not* inverted: `wl_output.geometry`'s transform is
+/// the one mapping framebuffer to output, which is already the turn that
+/// straightens the buffer. wlroots makes the distinction visible — sway's
+/// `output … transform 90` is advertised on `wl_output` as `270`, and it is the
+/// advertised value that reaches us.
+///
+/// Pure index arithmetic, so the eight cases are unit-testable without a
+/// compositor. For the axis-swapping cases the destination is `h × w`, so `x`
+/// ranges over `h` and `y` over `w` — every arm stays inside the source either way.
+fn source_pixel(t: Transform, x: usize, y: usize, w: usize, h: usize) -> (usize, usize) {
+    match t {
+        Transform::_90 => (y, h - 1 - x),
+        Transform::_180 => (w - 1 - x, h - 1 - y),
+        Transform::_270 => (w - 1 - y, x),
+        Transform::Flipped => (w - 1 - x, y),
+        Transform::Flipped90 => (y, x),
+        Transform::Flipped180 => (x, h - 1 - y),
+        Transform::Flipped270 => (w - 1 - y, h - 1 - x),
+        // `Normal`, and a value this protocol version doesn't know: copy as-is
+        // rather than guess a turn we can't name.
+        _ => (x, y),
+    }
+}
+
+/// Take `transform` back out of a freshly captured output buffer, so the image is
+/// in the layout's orientation (what `grim` writes, and what every logical
+/// coordinate in this crate assumes). Identity — and free — for `Normal`, which is
+/// what a physical monitor almost always declares.
+fn reorient(img: CapturedImage, transform: Transform) -> CapturedImage {
+    let (w, h) = (img.width as usize, img.height as usize);
+    if matches!(transform, Transform::Normal) || w == 0 || h == 0 {
+        return img;
+    }
+    let (dw, dh) = if transform_swaps_axes(transform) {
+        (h, w)
+    } else {
+        (w, h)
+    };
+    let mut rgba = vec![0u8; dw * dh * 4];
+    for y in 0..dh {
+        for x in 0..dw {
+            let (sx, sy) = source_pixel(transform, x, y, w, h);
+            let s = (sy * w + sx) * 4;
+            let d = (y * dw + x) * 4;
+            rgba[d..d + 4].copy_from_slice(&img.rgba[s..s + 4]);
+        }
+    }
+    CapturedImage {
+        width: dw as u32,
+        height: dh as u32,
+        rgba,
     }
 }
 
@@ -2243,6 +2364,17 @@ impl State {
                 t.app_id = app_id.to_string();
             }
         }
+    }
+
+    /// The transform currently declared by the output session `id` captures, or
+    /// `Normal` for a window session (a toplevel's buffer is never turned by the
+    /// output it happens to be displayed on).
+    fn session_transform(&self, id: &SessionId) -> Transform {
+        self.sessions
+            .get(id)
+            .and_then(|d| d.source_output.as_ref())
+            .and_then(|wl| self.outputs.iter().find(|o| &o.wl_output == wl))
+            .map_or(Transform::Normal, |o| o.transform)
     }
 
     /// The `Output` for `wl_output`, created (with neutral geometry) on first sight
@@ -2791,6 +2923,145 @@ mod tests {
         );
         // 180° keeps orientation; scale 0 is treated as 1.
         assert_eq!(logical_dims(1000, 500, 0, Transform::_180), (1000, 500));
+    }
+
+    #[test]
+    fn capture_dims_swap_only_on_the_quarter_turns() {
+        // The mode is the same either way; only the axes swap. Unlike `logical_dims`
+        // the scale plays no part: a capture is in pixels.
+        assert_eq!(capture_dims(3840, 2160, Transform::Normal), (3840, 2160));
+        assert_eq!(capture_dims(3840, 2160, Transform::_180), (3840, 2160));
+        assert_eq!(capture_dims(3840, 2160, Transform::Flipped), (3840, 2160));
+        assert_eq!(
+            capture_dims(3840, 2160, Transform::Flipped180),
+            (3840, 2160)
+        );
+        assert_eq!(capture_dims(3840, 2160, Transform::_90), (2160, 3840));
+        assert_eq!(capture_dims(3840, 2160, Transform::_270), (2160, 3840));
+        assert_eq!(capture_dims(3840, 2160, Transform::Flipped90), (2160, 3840));
+        assert_eq!(
+            capture_dims(3840, 2160, Transform::Flipped270),
+            (2160, 3840)
+        );
+    }
+
+    /// A 3×2 image whose every pixel names its own coordinates: `[x, y, 0, 255]`.
+    /// Asymmetric on both axes, so no two of the eight transforms agree on it.
+    fn labelled_3x2() -> CapturedImage {
+        let mut rgba = Vec::with_capacity(3 * 2 * 4);
+        for y in 0..2u8 {
+            for x in 0..3u8 {
+                rgba.extend_from_slice(&[x, y, 0, 255]);
+            }
+        }
+        CapturedImage {
+            width: 3,
+            height: 2,
+            rgba,
+        }
+    }
+
+    /// The source coordinates every pixel of `img` carries, row-major.
+    fn labels(img: &CapturedImage) -> Vec<(u8, u8)> {
+        img.rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|p| (p[0], p[1]))
+            .collect()
+    }
+
+    /// One expectation of [`reorient_undoes_every_output_transform`]: the transform,
+    /// the destination size it must produce, and the source coordinate every
+    /// destination pixel must hold, row-major over a 3×2 image.
+    type ReorientCase = (Transform, (u32, u32), [(u8, u8); 6]);
+
+    #[test]
+    fn reorient_undoes_every_output_transform() {
+        // Written out rather than computed, so the table stands independently of
+        // `source_pixel`. It is the mapping measured against `grim` on a nested sway
+        // driven through all eight `output … transform` values — keyed here by the
+        // value `wl_output` advertises, which for the quarter-turns is sway's own
+        // setting inverted (`transform 90` arrives as `_270`).
+        #[rustfmt::skip]
+        let cases: [ReorientCase; 8] = [
+            (Transform::Normal, (3, 2), [
+                (0, 0), (1, 0), (2, 0),
+                (0, 1), (1, 1), (2, 1)]),
+            (Transform::_90, (2, 3), [
+                (0, 1), (0, 0),
+                (1, 1), (1, 0),
+                (2, 1), (2, 0)]),
+            (Transform::_180, (3, 2), [
+                (2, 1), (1, 1), (0, 1),
+                (2, 0), (1, 0), (0, 0)]),
+            (Transform::_270, (2, 3), [
+                (2, 0), (2, 1),
+                (1, 0), (1, 1),
+                (0, 0), (0, 1)]),
+            (Transform::Flipped, (3, 2), [
+                (2, 0), (1, 0), (0, 0),
+                (2, 1), (1, 1), (0, 1)]),
+            (Transform::Flipped90, (2, 3), [
+                (0, 0), (0, 1),
+                (1, 0), (1, 1),
+                (2, 0), (2, 1)]),
+            (Transform::Flipped180, (3, 2), [
+                (0, 1), (1, 1), (2, 1),
+                (0, 0), (1, 0), (2, 0)]),
+            (Transform::Flipped270, (2, 3), [
+                (2, 1), (2, 0),
+                (1, 1), (1, 0),
+                (0, 1), (0, 0)]),
+        ];
+        for (t, (dw, dh), expected) in cases {
+            let out = reorient(labelled_3x2(), t);
+            assert_eq!((out.width, out.height), (dw, dh), "{t:?} size");
+            assert_eq!(labels(&out), expected.to_vec(), "{t:?} pixels");
+        }
+    }
+
+    #[test]
+    fn reorient_pairs_that_undo_each_other_round_trip() {
+        // `reorient` applies the transform it is given, so feeding it a transform and
+        // then that transform's inverse must land back on the original: the
+        // quarter-turns pair up, the reflections are their own inverse.
+        for (t, inverse) in [
+            (Transform::_90, Transform::_270),
+            (Transform::_270, Transform::_90),
+            (Transform::_180, Transform::_180),
+            (Transform::Flipped, Transform::Flipped),
+            (Transform::Flipped90, Transform::Flipped90),
+            (Transform::Flipped180, Transform::Flipped180),
+            (Transform::Flipped270, Transform::Flipped270),
+        ] {
+            let back = reorient(reorient(labelled_3x2(), t), inverse);
+            assert_eq!(labels(&back), labels(&labelled_3x2()), "{t:?}");
+        }
+    }
+
+    /// `Flipped180` is the case niri hands out for its nested `winit` output, and
+    /// there the whole correction is the vertical mirror the shm path already had.
+    #[test]
+    fn reorient_flipped180_is_the_plain_vertical_flip() {
+        let mut flipped = labelled_3x2();
+        flip_vertically(&mut flipped);
+        assert_eq!(
+            labels(&reorient(labelled_3x2(), Transform::Flipped180)),
+            labels(&flipped)
+        );
+    }
+
+    #[test]
+    fn reorient_leaves_an_empty_image_alone() {
+        let empty = CapturedImage {
+            width: 0,
+            height: 0,
+            rgba: Vec::new(),
+        };
+        let out = reorient(empty, Transform::_90);
+        assert_eq!((out.width, out.height), (0, 0));
+        assert!(out.rgba.is_empty());
     }
 }
 

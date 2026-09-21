@@ -281,13 +281,23 @@ pub fn whole_layout(client: &Client) -> Result<Region, CaptureError> {
     })
 }
 
-/// Map a logical sub-rectangle of `output` to physical pixels within its capture
-/// (handles fractional scale via the physical/logical ratio).
+/// Map a logical sub-rectangle of `output` to pixels within its capture (handles
+/// fractional scale via the pixel/logical ratio).
+///
+/// The ratio is taken against [`Output::capture_size`], not the mode: a capture of a
+/// rotated output comes back already turned into the layout's orientation, so on a
+/// `90`/`270` output the mode's width is the capture's *height*.
 pub fn logical_to_physical(output: &Output, logical: Region) -> Region {
-    let (lw, lh) = output.logical_size();
-    let sx = output.phys_width as f64 / lw.max(1) as f64;
-    let sy = output.phys_height as f64 / lh.max(1) as f64;
-    let lr = output.logical_rect();
+    scale_into_capture(output.logical_rect(), output.capture_size(), logical)
+}
+
+/// The arithmetic behind [`logical_to_physical`]: `logical` expressed relative to
+/// the output rectangle `lr`, scaled by the capture's pixels-per-point on each
+/// axis. Free function so the scaling is unit-testable without a live `WlOutput`.
+fn scale_into_capture(lr: Region, capture: (i32, i32), logical: Region) -> Region {
+    let (cw, ch) = capture;
+    let sx = cw as f64 / lr.w.max(1) as f64;
+    let sy = ch as f64 / lr.h.max(1) as f64;
     Region {
         x: (((logical.x - lr.x) as f64) * sx).round() as i32,
         y: (((logical.y - lr.y) as f64) * sy).round() as i32,
@@ -352,6 +362,53 @@ mod tests {
         assert_eq!((r.x, r.y, r.w, r.h), (10, 20, 300, 400));
         let r = parse_geometry("-5,-6 7x8").unwrap();
         assert_eq!((r.x, r.y, r.w, r.h), (-5, -6, 7, 8));
+    }
+
+    #[test]
+    fn logical_maps_into_the_capture_of_an_untransformed_output() {
+        // 3840×2160 panel shown as 1920×1080 logical: two pixels per point.
+        let lr = Region {
+            x: 100,
+            y: 50,
+            w: 1920,
+            h: 1080,
+        };
+        let r = scale_into_capture(
+            lr,
+            (3840, 2160),
+            Region {
+                x: 100 + 10,
+                y: 50 + 20,
+                w: 300,
+                h: 400,
+            },
+        );
+        assert_eq!((r.x, r.y, r.w, r.h), (20, 40, 600, 800));
+    }
+
+    #[test]
+    fn logical_maps_into_the_capture_of_a_rotated_output() {
+        // The same panel stood on its side: 1080×1920 logical, and a capture that
+        // comes back already turned, so 2160×3840 — not the mode's 3840×2160. Both
+        // axes keep the same two pixels per point; taking the mode here would scale
+        // x by 3.55 and y by 1.125 instead.
+        let lr = Region {
+            x: 0,
+            y: 0,
+            w: 1080,
+            h: 1920,
+        };
+        let r = scale_into_capture(
+            lr,
+            (2160, 3840),
+            Region {
+                x: 10,
+                y: 20,
+                w: 300,
+                h: 400,
+            },
+        );
+        assert_eq!((r.x, r.y, r.w, r.h), (20, 40, 600, 800));
     }
 
     #[test]

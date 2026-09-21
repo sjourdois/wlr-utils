@@ -90,6 +90,11 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **Captures of a rotated or mirrored output come out straight** — an output
+  declaring a `wl_output` transform (a screen stood on its side, a mirrored one) was
+  captured in the panel's orientation, so screenshots, regions, the frozen overlay
+  and recordings came out turned. Every capture path now takes the transform back
+  out, on both capture protocols, and matches `grim` byte for byte.
 - **XWayland windows appear in `wlr-switcher` and `wlr-chooser`** — Steam, games and
   Java applications were listed as system windows and hidden unless
   `--include-system` was given. Their application id is now reported everywhere: they

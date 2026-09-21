@@ -24,9 +24,26 @@ fn gpu_probe() -> String {
         Ok(c) => c,
         Err(e) => return format!("could not probe ({e})"),
     };
-    let Some(output) = client.outputs().first().cloned() else {
+    // A transformed output never takes the dma-buf path: its frames have to be
+    // turned back into the layout's orientation, which only the shm path can do.
+    // Probing one would report the driver as unable when it is merely unused here,
+    // so prefer an untransformed output and name the case when there is none.
+    let outputs = client.outputs();
+    let Some(output) = outputs
+        .iter()
+        .find(|o| o.is_untransformed())
+        .or_else(|| outputs.first())
+        .cloned()
+    else {
         return "no output to probe".to_string();
     };
+    if !output.is_untransformed() {
+        return format!(
+            "not probed: a transformed output captures through shm so its frame can be \
+             turned back upright, and no untransformed output is available here ({})",
+            output.name
+        );
+    }
     let frame = match client.probe_gpu_capture(&output, Duration::from_secs(2)) {
         Ok(f) => f,
         Err(e) => return format!("probe capture failed ({e})"),
