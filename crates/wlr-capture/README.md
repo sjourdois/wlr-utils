@@ -34,14 +34,15 @@ The reusable bricks plus the overlay UI helpers they share:
   (`EGL_EXT_image_dma_buf_import`) and `GpuReadback`, a headless offscreen context
   that reads such a dma-buf back to CPU RGBA8 (`glReadPixels` on a 1×1 pbuffer).
 - **`clipboard`** — put a captured blob on the wlroots clipboard via
-  `zwlr_data_control_v1` (the protocol `wl-copy` uses).
+  `zwlr_data_control_manager_v1` (the protocol `wl-copy` uses).
 - **`sink`** — `FrameSink`, the common output seam for screenshot/record/timelapse;
   dma-buf frames read back through `GpuReadback` unless a sink consumes them on the GPU.
 - **`stream` / `diff`** — a shared capture-session driver (arm / poll / reopen /
   give-up) and a frame-difference metric, shared by the mirror, recorder and monitor.
 - **`capture` / `focus`** *(features)* — resolve a source to a `CapturedImage`
-  (cropping + multi-output compositing), and compositor-IPC focus backends (Sway /
-  Hyprland / niri) for active-window / current-output sources.
+  (cropping + multi-output compositing), and focus backends for active-window /
+  current-output sources: Sway, Hyprland and niri over their IPC, cosmic-comp over
+  `zcosmic_toplevel_info_v1`.
 - **`overlay` / `mirror`** *(features)* — the frozen region/point/magnify selector and
   the floating live-mirror (PiP) host.
 - **`video` / `audio`** *(features)* — FFmpeg encoding (H.264 NVENC/VAAPI/libx264, and

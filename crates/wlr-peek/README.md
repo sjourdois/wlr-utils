@@ -64,8 +64,8 @@ area the focused window occupies.
 `tesseract-ocr-<lang>` data pack must be installed).
 
 OCR is behind the `ocr` Cargo feature (**on by default**); it links system
-`libtesseract`/`libleptonica`. Build `--no-default-features` for an OCR-free binary
-with no native OCR dependencies.
+`libtesseract`/`libleptonica`. Build without it for a binary with no native OCR
+dependencies.
 
 ### `loupe` — full-screen magnifier
 
@@ -83,8 +83,7 @@ region, use `mirror -g` (below).
 
 ### `mirror` — floating live mirror (picture-in-picture)
 
-A floating, always-on-top window that mirrors live content. This is the former
-`wlr-pip`, now a `wlr-peek` subcommand.
+A floating, always-on-top window that mirrors live content.
 
 ```console
 $ wlr-peek mirror                  # no source: launch wlr-chooser to pick a window
@@ -196,10 +195,11 @@ advertises; see [COMPATIBILITY.md](../../COMPATIBILITY.md) for the full matrix.
   dma-buf path works here.
 - **OCR** (`ocr`, `grep`; on by default) — links the system `libtesseract`/`libleptonica`
   (`-dev` packages, plus `clang` for the bindings); the matching `tesseract-ocr-<lang>`
-  data pack must be installed at runtime (default `eng`). `--no-default-features` builds an
-  OCR-free binary with none of these.
-- **Focus IPC** — `--active-window` / `--current-output` query the compositor (e.g.
-  sway's IPC socket on Sway); without a supported compositor, use an explicit source instead.
+  data pack must be installed at runtime (default `eng`). Without the feature the binary
+  needs none of these.
+- **Focus backend** — `--active-window` / `--current-output` ask the compositor: Sway,
+  Hyprland and niri over their IPC, cosmic-comp over `zcosmic_toplevel_info_v1`.
+  Elsewhere, use an explicit source instead.
 
 ## Install
 
@@ -217,8 +217,10 @@ Or build just this binary from the [wlr-utils](../../README.md) workspace:
 cargo build --release -p wlr-peek
 ```
 
-`--no-default-features` drops OCR (and Fluent) for a lighter binary with no native OCR
-dependencies — see **Requirements** above for what each feature pulls in.
+The default features are `ocr`, `watch`, `gpu` and `i18n`; `--no-default-features` drops
+all four, so the binary loses OCR (`ocr`, `grep`), the `watch` subcommand, the dma-buf
+capture path and the Fluent catalog. Pick the ones you want with `--features` — see
+**Requirements** above for what each pulls in.
 
 ## Uninstall
 

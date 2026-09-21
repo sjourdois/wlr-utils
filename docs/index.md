@@ -76,7 +76,7 @@ Below: the frozen region selector.
 ```sh
 wlr-shot screenshot -s out.png            # drag a region on a frozen screen
 wlr-shot screenshot --app-id firefox out.png   # a window by name — even hidden or locked
-wlr-shot record -o DP-1 --audio out.mp4
+wlr-shot record -o DP-1 out.mp4                # video + system audio
 ```
 
 ---
@@ -145,7 +145,8 @@ with `cargo uninstall <name>`; see the
 `wlr-draw` writes (its autostart entry).
 
 They run on wlroots compositors that implement `ext-image-copy-capture-v1`
-(**sway**, **Hyprland**, **niri**, …). See the
+(**sway**, **Hyprland**, **cosmic-comp**, …), and on the screen features alone where
+only `wlr-screencopy` is exposed (**niri**, **dwl**). See the
 [compatibility matrix](https://github.com/sjourdois/wlr-utils/blob/main/COMPATIBILITY.md).
 
 <p align="center"><sub>All media on this page is generated reproducibly by

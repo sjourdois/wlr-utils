@@ -33,9 +33,9 @@ keeps every frame of the master — set `SHOTS_GIF_FPS` to resample it to anothe
 
 ## Requirements
 
-System tools: `sway`, `wtype`, `foot`, `ffmpeg`, `jq`, `curl`,
-ImageMagick, plus `batcat`/`tree` for the demo windows. The scenes that show a
-desktop also need `chromium`, `galculator`, `mpv`, `btop` and `cmatrix`. The
+System tools: `sway`, `wtype`, `foot`, `ffmpeg`, `jq`, `curl`, `python3` with
+`websockets`, ImageMagick, plus `batcat`/`tree` for the demo windows. The scenes
+that show a desktop also need `chromium`, `galculator`, `mpv`, `btop` and `cmatrix`. The
 first run also builds a tiny virtual-pointer injector:
 
 ```sh
@@ -65,6 +65,7 @@ download the desktop falls back to a generated test pattern and says so.
 | `foot.ini` | dark theme for the demo terminals |
 | `btop.conf` | btop settings for the demo desktop (graph boxes, no process list) |
 | `pointer/` | `shots-pointer`, a `zwlr_virtual_pointer_v1` injector (standalone crate, **not** in the workspace) |
+| `cdp.py` | DevTools client that dismisses the browser's cookie dialog by button text |
 | `scenes/*.sh` | one scene per tool |
 | `capture.sh` | orchestrator: build + run every scene |
 
@@ -74,17 +75,16 @@ download the desktop falls back to a generated test pattern and says so.
   `XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR/wlr-shots`, created mode 0700 and recreated
   empty at each start. The tools derive their runtime paths from that variable —
   `wlr-draw`'s control socket, `wlr-chooser`'s and `wlr-peek`'s single-instance
-  locks, the Wayland socket itself — so a capture can no longer bind a name the
-  live session already holds, nor drive a daemon of yours on the real screen.
+  locks, the Wayland socket itself — so a capture cannot bind a name the live
+  session already holds, nor drive a daemon of yours on the real screen.
   D-Bus, PipeWire and Pulse stay shared and are addressed by their own variables.
 - **Why a virtual pointer?** A headless seat has no input devices, so it has no
   pointer capability and sway's `seat cursor` IPC delivers nothing to clients.
   `shots-pointer` creates a real virtual pointer, which the overlays then see.
-- **Builds.** One workspace build. This used to be one `cargo build -p` per crate,
-  to keep feature-unification from enabling `wlr-capture/gpu` — an overlay tool
-  would open a second EGL connection for its dma-buf readback and hit
-  `eglCreateWindowSurface: BadAlloc`. Single captures allocate shm directly since
-  1.6.0, so that second connection is gone.
+- **Builds.** One workspace build, with `wlr-capture/gpu` on through feature
+  unification. Single captures allocate shm directly, so an overlay tool opens no
+  second EGL connection for a dma-buf readback (which fails with
+  `eglCreateWindowSurface: BadAlloc`).
 - **Scene checks.** The helpers that open a demo window wait for it in the nested
   tree and log `MISSING WINDOW: …` otherwise. `shots_expect_change` brackets an
   action with two cursor-free grabs and logs `NO VISIBLE CHANGE: …` when fewer

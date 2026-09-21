@@ -123,6 +123,8 @@ focused output. You can pass options in `chooser_cmd`, e.g.
     --window-order by-name|mru
                        Order windows by name (default) or most recently focused
                        first, if supported by the compositor
+    --no-gpu           Capture through shared memory instead of dma-buf
+    --doctor           Report the compositor's capture protocols, then exit
 -h, --help             Print help
 -V, --version          Print version
 ```
@@ -130,16 +132,16 @@ focused output. You can pass options in `chooser_cmd`, e.g.
 In the overlay: type to filter, arrows to move, Enter/click to pick, Escape or
 click-outside to cancel, and the tab bar switches All / Windows / Screens.
 
-> **Looking for an Alt-Tab / window switcher?** That is now a separate binary,
+> **Looking for an Alt-Tab / window switcher?** That is a separate binary,
 > **`wlr-switcher`** (shipped alongside this one) — see [its section](#window-switcher--wlr-switcher) below.
 
 ## Window switcher — `wlr-switcher`
 
 The same crate ships a second binary, **`wlr-switcher`**: a live Alt-Tab / exposé
-that **focuses** the picked window (via `zwlr-foreign-toplevel-management-v1`)
-instead of printing to stdout. It reuses this engine, so previews are **live** —
-even for windows on other workspaces — which is what sets it apart from a plain
-Cmd-Tab.
+that **focuses** the picked window (via `zwlr-foreign-toplevel-management-v1`, or
+`cosmic-toplevel-management` on COSMIC) instead of printing to stdout. It reuses
+this engine, so previews are **live** — even for windows on other workspaces —
+which is what sets it apart from a plain Cmd-Tab.
 
 Three presentations via `--layout`:
 
@@ -159,8 +161,8 @@ them by name.
 Whatever the order, the overlay opens with the **first window that is not the one
 you are on** highlighted, so releasing the modifier straight away always switches
 somewhere. Which window that is comes from `zwlr-foreign-toplevel-management-v1`
-(the `activated` state) — the protocol that focuses the picked window — not from a
-compositor IPC, so it behaves the same wherever `wlr-switcher` runs at all.
+(the `activated` state) rather than from a compositor IPC. cosmic-comp does not
+expose that protocol, so the overlay opens on the first tile there.
 
 ### True Alt-Tab (hold-to-switch)
 
@@ -223,7 +225,7 @@ font-size = 15.0
 ```
 
 Screens are outlined in `screen-accent`, windows in `window-accent`, so the two
-can't be confused. Ready-made themes live in [`docs/themes/`](docs/themes/):
+can't be confused. Ready-made themes live in [`docs/themes/`](../../docs/themes/):
 Catppuccin (Mocha, Macchiato, Frappé, Latte), Nord, Gruvbox, Dracula, Tokyo Night.
 Symlink one so it tracks updates:
 
@@ -251,12 +253,12 @@ auto-detected. New locales are welcome — copy
 ## Contributing
 
 Bug reports, translations and patches welcome — see
-[CONTRIBUTING.md](CONTRIBUTING.md). Please keep `cargo fmt`, `cargo clippy` and
+[CONTRIBUTING.md](../../CONTRIBUTING.md). Please keep `cargo fmt`, `cargo clippy` and
 `cargo test` clean.
 
 ## License
 
-Licensed under either of [Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT) at your
-option.
+Licensed under either of [Apache-2.0](../../LICENSE-APACHE) or
+[MIT](../../LICENSE-MIT) at your option.
 
 [egui]: https://github.com/emilk/egui

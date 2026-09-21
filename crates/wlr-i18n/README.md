@@ -6,7 +6,7 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 Shared localisation plumbing for the [wlr-utils](https://github.com/sjourdois/wlr-utils)
-tools (`wlr-chooser`, `wlr-peek`, `wlr-shot`, `wlr-draw`).
+tools (`wlr-chooser`, `wlr-switcher`, `wlr-peek`, `wlr-shot`, `wlr-draw`).
 
 Each tool crate **owns its own** Fluent catalog (`i18n/<lang>/<crate>.ftl`) and its own
 loader — so [`wlr-capture`](../wlr-capture), the engine library, carries no UI strings at

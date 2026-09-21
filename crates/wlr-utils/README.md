@@ -5,7 +5,7 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 The **[wlr-utils](https://github.com/sjourdois/wlr-utils)** suite in a single install —
-five sharp screen tools for **wlroots** compositors, all sharing one capture engine.
+five screen tools for **wlroots and derivatives**, all sharing one capture engine.
 
 ```sh
 cargo install wlr-utils
@@ -22,10 +22,12 @@ This installs every binary at once:
 | `wlr-draw` | Draw on screen — annotation overlay with shapes, text, spotlight, freeze-frame. |
 
 This crate is just a **bundle**: it ships no library and no logic of its own, only thin
-binaries that re-export each tool. Because it pulls every tool with its default features,
-the build needs all of their system dependencies (GPU/`libgbm`, FFmpeg, PipeWire,
-Tesseract, D-Bus). For a lighter, single-purpose install, install a tool on its own —
-`cargo install wlr-shot` — and read that crate's README for its exact requirements.
+binaries that re-export each tool. It is the full-featured build — GPU capture, OCR,
+video and audio recording, tray — so it needs all of their system dependencies
+(GPU/`libgbm`, FFmpeg, PipeWire, Tesseract, D-Bus). `--no-default-features` drops
+`wlr-shot record` and with it the FFmpeg/PipeWire link. For a lighter, single-purpose
+install, install a tool on its own — `cargo install wlr-shot` — and read that crate's
+README for its exact requirements.
 
 ## Prebuilt bundle
 

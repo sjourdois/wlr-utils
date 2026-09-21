@@ -8,9 +8,8 @@ Screen capture for **wlroots** compositors, built on the shared
 [`wlr-capture`](../wlr-capture) engine (`ext-image-copy-capture-v1`, correct
 strides, occlusion-independent).
 
-> **Status:** early. It captures an output, a region (interactive `-s` or
-> `-g`/slurp), or a window — as a screenshot (PNG/JPEG/PPM) or an H.264 recording /
-> timelapse.
+It captures an output, the whole layout, a region (interactive `-s` or `-g`/slurp),
+or a window — as a screenshot (PNG/JPEG/PPM) or an H.264 recording / timelapse.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-shot/select.gif"
@@ -22,10 +21,12 @@ strides, occlusion-independent).
 ## Usage
 
 ```sh
-wlr-shot screenshot [-o NAME | -g GEOM | -w ID | --app-id ID | --pick-window]
+wlr-shot screenshot [-s | -o NAME | --all | -g GEOM | -w ID | --app-id ID | --title TEXT
+                     | --pick-window | -a | --current-output]
                     [--cursor] [-t png|jpeg|ppm] [-q QUALITY] [-c] [FILE|-]
 wlr-shot screenshot --list-outputs | --list-windows
-wlr-shot record [-o NAME | -g GEOM | -w ID | --app-id ID | --pick-window | -s | -a]
+wlr-shot record [-s | -o NAME | -g GEOM | -w ID | --app-id ID | --title TEXT
+                 | --pick-window | -a | --current-output]
                 [--cursor] [--encoder auto|nvenc|vaapi|software] [--crf N] [--fps N]
                 [--timelapse INTERVAL] [-d SECS] FILE
 ```
@@ -52,9 +53,10 @@ Source (pick one; defaults to the sole output):
 - `--current-output` — the focused output.
 
 The last two need the compositor's focus info. Wayland exposes no portable way to
-query focus, so these use compositor IPC: **Sway** (`$SWAYSOCK`) is supported today;
-Hyprland / niri are natural future additions. Without a supported compositor they
-error with a hint (use `--pick-window` / `-o NAME` instead).
+query focus, so these go through a per-compositor backend: **Sway** (`$SWAYSOCK`),
+**Hyprland** (`hyprctl`), **niri** (`niri msg`) and **cosmic-comp**
+(`zcosmic_toplevel_info_v1`, a Wayland protocol — COSMIC has no IPC socket).
+Elsewhere they error with a hint (use `--pick-window` / `-o NAME` instead).
 
 Contents:
 

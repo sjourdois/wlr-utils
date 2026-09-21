@@ -70,7 +70,9 @@ from the start, and `doctor` reports the negotiated fourcc, modifier and plane
 count — quote its `GPU capture:` line in a bug report.
 
 Single captures (screenshots, colour picks, OCR) always use shared memory: they end
-up as CPU pixels anyway, so a GPU round trip would only cost an EGL context.
+up as CPU pixels anyway, so a GPU round trip would only cost an EGL context. An
+output declaring a `wl_output` transform — a rotated or mirrored screen — captures
+through shared memory too, so its frames come out upright.
 
 ## Compositors
 

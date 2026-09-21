@@ -63,8 +63,8 @@ grep 'for pkg in' .github/workflows/publish.yml   # every crate in the publish o
    `.deb` builds and a local checkout all resolve to it, so a green local `clippy` means
    a green CI `clippy`.
 2. **Bump the version.** It lives in `[workspace.package]` **and** in each inter-crate
-   dependency pin (the `version = "X.Y.Z"` next to `path = "../wlr-…"`). `wlr-capture`
-   and `wlr-i18n` inherit via `version.workspace = true`; the tool crates pin the
+   dependency pin (the `version = "X.Y.Z"` next to `path = "../wlr-…"`). Every crate's
+   own version inherits via `version.workspace = true`, but the tool crates pin the
    engine/i18n version explicitly, so those pins must move too. `cargo set-version X.Y.Z`
    (from `cargo-edit`) handles both; verify the pins and refresh `Cargo.lock`.
 3. **Update [`CHANGELOG.md`](CHANGELOG.md)** — a `## X.Y.Z — YYYY-MM-DD` section
