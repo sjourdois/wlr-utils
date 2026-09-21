@@ -71,6 +71,11 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **XWayland windows appear in `wlr-switcher` and `wlr-chooser`** — Steam, games and
+  Java applications were listed as system windows and hidden unless
+  `--include-system` was given. Their application id is now reported everywhere: they
+  show their icon, `wlr-shot --app-id` and `wlr-peek --app-id` select them, and the
+  switcher opens on the right window when one of them has the focus.
 - **Quick Alt-Tabs in `wlr-switcher` switch reliably**
   ([#14](https://github.com/sjourdois/wlr-utils/pull/14), by
   [@bR3iN](https://github.com/bR3iN)) — releasing Alt before the first frame, or

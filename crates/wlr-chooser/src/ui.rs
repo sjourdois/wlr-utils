@@ -158,9 +158,8 @@ pub struct Source {
 
 impl Source {
     /// Whether this source is the window `w` denotes. Windows are matched the way
-    /// they are activated — (app_id, title, creation-order index) — with the same
-    /// blind spot: an XWayland window whose app-id the two foreign-toplevel
-    /// protocols spell differently matches nothing.
+    /// they are activated — (app_id, title, creation-order index) — so only a window
+    /// neither foreign-toplevel protocol names matches nothing.
     fn is(&self, w: &wl::WindowIdentity) -> bool {
         self.is_window
             && self.app_id == w.app_id

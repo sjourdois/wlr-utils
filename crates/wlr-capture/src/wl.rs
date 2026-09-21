@@ -154,7 +154,9 @@ pub struct Toplevel {
     pub identifier: String,
     /// The window title.
     pub title: String,
-    /// The application id (used to match an icon / desktop entry).
+    /// The application id (used to match an icon / desktop entry). Empty only for a
+    /// window neither foreign-toplevel protocol names — typically a system surface;
+    /// an XWayland window carries its X11 class here.
     pub app_id: String,
 }
 
@@ -712,6 +714,13 @@ struct State {
     /// The foreign-toplevel list, kept alive so the compositor keeps emitting
     /// toplevel events. `None` on compositors without window capture (wlroots < 0.20).
     list: Option<ExtForeignToplevelListV1>,
+    /// The same windows as zwlr-foreign-toplevel-management describes them, used
+    /// only to fill in app-ids the `ext` list leaves empty (see
+    /// [`State::complete_app_ids`]).
+    wlr_toplevels: Vec<ZwlrToplevel>,
+    /// The manager those handles come from: it outlives them, and keeping it bound
+    /// keeps the list current. `None` where the compositor lacks the protocol.
+    _wlr_manager: Option<ZwlrForeignToplevelManagerV1>,
     /// linux-dmabuf manager, if the compositor exposes it (enables the GPU path).
     #[cfg(feature = "gpu")]
     dmabuf: Option<ZwpLinuxDmabufV1>,
@@ -802,6 +811,12 @@ impl Client {
             ),
         };
         let list: Option<ExtForeignToplevelListV1> = globals.bind(&qh, 1..=1, ()).ok();
+        // The older window list, bound alongside the `ext` one for its app-ids: on
+        // Sway an XWayland window reaches `ext-foreign-toplevel-list` without one,
+        // and zwlr reports its X11 class. Binding it here rather than on demand
+        // costs no extra roundtrip — the compositor describes its windows within
+        // the two roundtrips below, which we make anyway.
+        let wlr_manager: Option<ZwlrForeignToplevelManagerV1> = globals.bind(&qh, 1..=3, ()).ok();
 
         // Optional: authoritative logical geometry (multi-monitor positions,
         // fractional scale). Absent on a few compositors — we then fall back to
@@ -828,6 +843,7 @@ impl Client {
             out_src,
             screencopy,
             list,
+            _wlr_manager: wlr_manager,
             ..Default::default()
         };
         // Optional: enables the GPU dma-buf path. Absence just means shm-only.
@@ -847,6 +863,7 @@ impl Client {
         };
         queue.roundtrip(&mut state).context("Wayland roundtrip")?;
         queue.roundtrip(&mut state).context("Wayland roundtrip")?;
+        state.complete_app_ids();
         #[cfg(feature = "gpu")]
         if let Some(fb) = feedback {
             fb.destroy();
@@ -913,6 +930,7 @@ impl Client {
         self.queue
             .roundtrip(&mut self.state)
             .context("Wayland roundtrip")?;
+        self.state.complete_app_ids();
         Ok(())
     }
 
@@ -1735,10 +1753,10 @@ struct ZwlrToplevel {
 /// The identity of a window, in the terms both foreign-toplevel protocols share.
 /// Correlates a zwlr handle to a capture [`Toplevel`] (and to a chooser tile).
 ///
-/// The correlation is not airtight: for an XWayland window the two protocols can
-/// disagree — on Sway, `ext-foreign-toplevel-list` reports an empty `app_id` where
-/// zwlr reports the X11 class — and such a window matches nothing. Callers treat a
-/// failed match as "unknown", never as an error.
+/// The app-ids on both sides line up because [`Client`] completes the ones `ext`
+/// leaves empty from this very protocol (see `State::complete_app_ids`); a window
+/// zwlr does not name stays unmatched. Callers treat a failed match as "unknown",
+/// never as an error.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WindowIdentity {
     /// The application id.
@@ -1929,20 +1947,34 @@ impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for ActState {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        use zwlr_foreign_toplevel_handle_v1::Event;
-        if matches!(event, Event::Closed) {
-            state.toplevels.retain(|t| &t.handle != handle);
-            return;
-        }
-        let Some(t) = state.toplevels.iter_mut().find(|t| &t.handle == handle) else {
-            return;
-        };
-        match event {
-            Event::AppId { app_id } => t.app_id = app_id,
-            Event::Title { title } => t.title = title,
-            Event::State { state } => t.activated = has_activated(&state),
-            _ => {}
-        }
+        apply_zwlr_event(&mut state.toplevels, handle, event);
+    }
+}
+
+/// Apply one zwlr toplevel event to a list of [`ZwlrToplevel`]s. Shared by the two
+/// consumers of this protocol: the one-shot activation/focus path ([`ActState`])
+/// and the capture [`Client`], which reads it for the app-ids `ext` omits.
+fn apply_zwlr_event(
+    toplevels: &mut Vec<ZwlrToplevel>,
+    handle: &ZwlrForeignToplevelHandleV1,
+    event: zwlr_foreign_toplevel_handle_v1::Event,
+) {
+    use zwlr_foreign_toplevel_handle_v1::Event;
+    if matches!(event, Event::Closed) {
+        toplevels.retain(|t| &t.handle != handle);
+        // The protocol hands the object back to us on `closed`; a long-lived client
+        // that never destroyed it would leak one object id per window closed.
+        handle.destroy();
+        return;
+    }
+    let Some(t) = toplevels.iter_mut().find(|t| &t.handle == handle) else {
+        return;
+    };
+    match event {
+        Event::AppId { app_id } => t.app_id = app_id,
+        Event::Title { title } => t.title = title,
+        Event::State { state } => t.activated = has_activated(&state),
+        _ => {}
     }
 }
 
@@ -2029,7 +2061,120 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for State {
     }
 }
 
+impl Dispatch<ZwlrForeignToplevelManagerV1, ()> for State {
+    fn event(
+        state: &mut Self,
+        _: &ZwlrForeignToplevelManagerV1,
+        event: zwlr_foreign_toplevel_manager_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let zwlr_foreign_toplevel_manager_v1::Event::Toplevel { toplevel } = event {
+            state.wlr_toplevels.push(ZwlrToplevel {
+                handle: toplevel,
+                app_id: String::new(),
+                title: String::new(),
+                activated: false,
+            });
+        }
+    }
+
+    event_created_child!(State, ZwlrForeignToplevelManagerV1, [
+        zwlr_foreign_toplevel_manager_v1::EVT_TOPLEVEL_OPCODE => (ZwlrForeignToplevelHandleV1, ()),
+    ]);
+}
+
+impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for State {
+    fn event(
+        state: &mut Self,
+        handle: &ZwlrForeignToplevelHandleV1,
+        event: zwlr_foreign_toplevel_handle_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        apply_zwlr_event(&mut state.wlr_toplevels, handle, event);
+    }
+}
+
+/// For each `ext` toplevel `(app_id, title)`, the app-id to adopt from the `zwlr`
+/// view of the same windows, or `None` to leave it as it is.
+///
+/// The title is the only field both protocols spell the same way, so it is the key;
+/// windows sharing a title are told apart by position. Windows the two protocols
+/// already agree on claim their counterpart first, so a nameless window can never
+/// adopt the app-id of a window that has its own.
+fn adopt_app_ids<'a>(ext: &[(&str, &str)], zwlr: &[(&'a str, &'a str)]) -> Vec<Option<&'a str>> {
+    let mut taken = vec![false; zwlr.len()];
+    let mut adopted = vec![None; ext.len()];
+    for &(app_id, title) in ext {
+        if app_id.is_empty() {
+            continue;
+        }
+        if let Some(i) = first_free(zwlr, &taken, |a, t| a == app_id && t == title) {
+            taken[i] = true;
+        }
+    }
+    for (slot, &(app_id, title)) in adopted.iter_mut().zip(ext) {
+        if !app_id.is_empty() {
+            continue;
+        }
+        if let Some(i) = first_free(zwlr, &taken, |a, t| !a.is_empty() && t == title) {
+            taken[i] = true;
+            *slot = Some(zwlr[i].0);
+        }
+    }
+    adopted
+}
+
+/// The first zwlr toplevel not yet claimed that satisfies `pred`.
+fn first_free(
+    zwlr: &[(&str, &str)],
+    taken: &[bool],
+    pred: impl Fn(&str, &str) -> bool,
+) -> Option<usize> {
+    zwlr.iter()
+        .enumerate()
+        .position(|(i, &(a, t))| !taken[i] && pred(a, t))
+}
+
 impl State {
+    /// Give every window an app-id, taking from the zwlr list the ones
+    /// `ext-foreign-toplevel-list` left empty.
+    ///
+    /// Sway announces an XWayland window through `ext` with an empty app-id while
+    /// zwlr reports its X11 class, so Steam, games and Java applications would
+    /// otherwise reach every caller unnamed: unfilterable by `--app-id`, iconless,
+    /// and taken for a system surface by the chooser. A window absent from the zwlr
+    /// list, or unnamed there too, keeps its empty app-id — that is what a real
+    /// system surface looks like.
+    fn complete_app_ids(&mut self) {
+        // A window is named once and keeps that name, so this is a no-op after the
+        // first pass — and free on the sessions that have nothing to complete.
+        if !self.toplevels.iter().any(|t| t.app_id.is_empty()) {
+            return;
+        }
+        let zwlr: Vec<(&str, &str)> = self
+            .wlr_toplevels
+            .iter()
+            .map(|t| (t.app_id.as_str(), t.title.as_str()))
+            .collect();
+        let adopted = {
+            let ext: Vec<(&str, &str)> = self
+                .toplevels
+                .iter()
+                .map(|t| (t.app_id.as_str(), t.title.as_str()))
+                .collect();
+            adopt_app_ids(&ext, &zwlr)
+        };
+        for (t, app_id) in self.toplevels.iter_mut().zip(adopted) {
+            if let Some(app_id) = app_id {
+                t.app_id = app_id.to_string();
+            }
+        }
+    }
+
     /// The `Output` for `wl_output`, created (with neutral geometry) on first sight
     /// so `geometry`/`mode`/`scale` can land before `name`.
     fn output_entry(&mut self, output: &WlOutput) -> &mut Output {
@@ -2322,6 +2467,48 @@ mod tests {
         assert_eq!(dup_index(prior(2), "foot", "a"), 1);
         // A different title is a different window, however alike the app.
         assert_eq!(dup_index(prior(3), "foot", "z"), 0);
+    }
+
+    #[test]
+    fn xwayland_window_adopts_its_x11_class() {
+        // What Sway reports for a Steam window: nothing through `ext`, `steam`
+        // through zwlr. The windows both protocols name are left alone.
+        let ext = [("firefox", "Issue #13"), ("", "Steam")];
+        let zwlr = [("firefox", "Issue #13"), ("steam", "Steam")];
+        assert_eq!(adopt_app_ids(&ext, &zwlr), vec![None, Some("steam")]);
+    }
+
+    #[test]
+    fn a_window_zwlr_does_not_know_keeps_no_app_id() {
+        // A real system surface: no app-id anywhere, so it stays unnamed and the
+        // chooser keeps hiding it.
+        let ext = [("", "Notification"), ("", "Steam")];
+        let zwlr = [("steam", "Steam")];
+        assert_eq!(adopt_app_ids(&ext, &zwlr), vec![None, Some("steam")]);
+        // Listed by zwlr but unnamed there too: still nothing to adopt.
+        assert_eq!(adopt_app_ids(&[("", "Bar")], &[("", "Bar")]), vec![None]);
+    }
+
+    #[test]
+    fn a_named_window_keeps_its_counterpart_to_itself() {
+        // Two windows share the title "foot"; one is named by both protocols. The
+        // nameless one must adopt the *other* zwlr entry, not the taken one.
+        let ext = [("btop", "foot"), ("", "foot")];
+        let zwlr = [("btop", "foot"), ("java-swing", "foot")];
+        assert_eq!(adopt_app_ids(&ext, &zwlr), vec![None, Some("java-swing")]);
+        // Order-independent: the same holds when the nameless window comes first.
+        let ext = [("", "foot"), ("btop", "foot")];
+        assert_eq!(adopt_app_ids(&ext, &zwlr), vec![Some("java-swing"), None]);
+    }
+
+    #[test]
+    fn identical_windows_are_matched_one_to_one() {
+        let ext = [("", "Console"), ("", "Console")];
+        let zwlr = [("java", "Console"), ("java", "Console")];
+        assert_eq!(adopt_app_ids(&ext, &zwlr), vec![Some("java"), Some("java")]);
+        // One zwlr entry for two nameless windows: only the first can take it.
+        let zwlr = [("java", "Console")];
+        assert_eq!(adopt_app_ids(&ext, &zwlr), vec![Some("java"), None]);
     }
 
     #[test]
