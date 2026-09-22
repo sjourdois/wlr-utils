@@ -288,6 +288,44 @@ impl<'a> From<&'a wl::Toplevel> for Candidate<'a> {
     }
 }
 
+/// Which of a set of named things are admitted.
+///
+/// Naming none and naming nothing are different: an `only` that names no window admits
+/// no window, where no `only` at all admits every one.
+#[derive(Clone, Default)]
+pub struct Filter {
+    only: Option<HashSet<String>>,
+    except: HashSet<String>,
+}
+
+impl Filter {
+    /// Admit these and nothing else.
+    pub fn only(names: HashSet<String>) -> Self {
+        Self {
+            only: Some(names),
+            ..Self::default()
+        }
+    }
+
+    /// Admit everything but these.
+    pub fn except(names: HashSet<String>) -> Self {
+        Self {
+            except: names,
+            ..Self::default()
+        }
+    }
+
+    /// Whether nothing was asked for, in which case everything is admitted.
+    pub fn is_empty(&self) -> bool {
+        self.only.is_none() && self.except.is_empty()
+    }
+
+    /// Whether this name passes.
+    pub fn admits(&self, name: &str) -> bool {
+        self.only.as_ref().is_none_or(|o| o.contains(name)) && !self.except.contains(name)
+    }
+}
+
 /// Which windows a run offers at all, as narrowed on the command line. Distinct from
 /// the overlay's own filter field, which only hides tiles that are already captured:
 /// this one is applied before a capture session is opened, so an excluded window costs
@@ -310,6 +348,8 @@ pub struct WindowFilters {
     /// means "never asked about", which is the only thing [`Self::refresh_pids`] acts
     /// on — a window the compositor cannot name is not asked about twice.
     processes: HashMap<String, Option<u32>>,
+    /// Which windows are offered by [`wl::Toplevel::identifier`].
+    identifiers: Filter,
 }
 
 impl WindowFilters {
@@ -320,12 +360,25 @@ impl WindowFilters {
             titles,
             pids,
             processes: HashMap::new(),
+            identifiers: Filter::default(),
         }
+    }
+
+    /// Narrow the run to windows named by identifier.
+    ///
+    /// The names are taken as read rather than queried, and are not looked at again: a
+    /// window that comes to belong in the set while the overlay is up does not change
+    /// what the run offered.
+    pub fn set_identifiers(&mut self, identifiers: Filter) {
+        self.identifiers = identifiers;
     }
 
     /// Whether nothing was asked for, in which case every window is offered.
     pub fn is_empty(&self) -> bool {
-        self.app_ids.is_empty() && self.titles.is_empty() && self.pids.is_empty()
+        self.app_ids.is_empty()
+            && self.titles.is_empty()
+            && self.pids.is_empty()
+            && self.identifiers.is_empty()
     }
 
     /// Whether this run has to know the process behind each window.
@@ -389,7 +442,7 @@ impl WindowFilters {
                 .copied()
                 .flatten()
                 .is_some_and(|pid| self.pids.contains(&pid));
-        app_ok && title_ok && pid_ok
+        app_ok && title_ok && pid_ok && self.identifiers.admits(w.identifier)
     }
 
     /// The filter written back as the flags that produced it, to quote in the message
@@ -400,6 +453,10 @@ impl WindowFilters {
             .map(|a| format!("--app-id {a}"))
             .chain(self.titles.iter().map(|t| format!("--title {t}")))
             .chain(self.pids.iter().map(|p| format!("--pid {p}")))
+            .chain(
+                (!self.identifiers.is_empty())
+                    .then(|| "--scratchpad only|exclude|toggle".to_string()),
+            )
             .collect::<Vec<_>>()
             .join(" ")
     }
