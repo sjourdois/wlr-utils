@@ -8,7 +8,7 @@
 //! This binary *acts*: it focuses what it picked. For the sibling that *answers* —
 //! naming the source on stdout and touching nothing — see `wlr-chooser`.
 
-use crate::ui::{CycleKeys, Live, Mode, Options, View};
+use crate::ui::{CycleKeys, Filter, Live, Mode, Options, View};
 use crate::{FilterArgs, HintRowArg, LayoutArg, OrderArg};
 use crate::{acquire_switch_lock, daemon, run_overlay, shell};
 use crate::{i18n, tr};
@@ -18,7 +18,7 @@ use std::io::IsTerminal;
 use std::str::FromStr;
 use std::time::Instant;
 use wlr_capture::keys::{KeyPress, UnknownKey};
-use wlr_capture::{CaptureError, wl};
+use wlr_capture::{CaptureError, focus, wl};
 
 /// Which tiles show a live preview (CLI mirror of [`Live`]).
 #[derive(Clone, Copy, ValueEnum)]
@@ -36,6 +36,14 @@ impl From<LiveArg> for Live {
             LiveArg::All => Live::All,
         }
     }
+}
+
+/// What a run does about the windows the compositor keeps aside.
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum ScratchpadArg {
+    Only,
+    Exclude,
+    Toggle,
 }
 
 /// [`CycleKeys`] as the command line writes them (CLI mirror).
@@ -130,6 +138,12 @@ struct Cli {
     /// is the same key with the Shift state toggled.
     #[arg(long, value_name = "KEY[:KEY]", default_value_t)]
     cycle_key: CycleKeysArg,
+    /// Switch among the windows the compositor keeps aside — sway's scratchpad:
+    /// `only` offers just those, `exclude` just the others. `toggle` is `only`,
+    /// except that a focused window already shown from the scratchpad is put back
+    /// instead of the overlay opening. Sway-only (needs SWAYSOCK).
+    #[arg(long, value_enum, value_name = "MODE")]
+    scratchpad: Option<ScratchpadArg>,
     /// Label each tile with the key that picks it, taken from a row of the physical
     /// keyboard: `home` (the resting row, default) or `top` (the row above the
     /// letters). The label is whatever the active layout prints on that key, so it
@@ -153,7 +167,8 @@ struct Cli {
 
 /// What a run came to.
 enum Ran {
-    /// The overlay was answered: a window picked, and focused if it could be.
+    /// The run did what it was asked: a window picked from the overlay and focused if
+    /// it could be, or — where no overlay was needed — the focused window put aside.
     Switched,
     /// The user backed out of the overlay, or there was no window to switch to.
     Cancelled,
@@ -278,6 +293,11 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, Str
         auto_select: hold,
         cycle: cli.cycle_key.into(),
     };
+    if let Some(mode) = cli.scratchpad
+        && scratchpad_settled(mode, &mut opts)?
+    {
+        return Ok(Ran::Switched);
+    }
     preflight(&mut opts)?;
 
     let picked = match host {
@@ -302,6 +322,32 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, Str
         });
     }
     Ok(Ran::Switched)
+}
+
+/// Do what `--scratchpad` asks that has to happen before the overlay, and say whether
+/// that was the whole run.
+fn scratchpad_settled(mode: ScratchpadArg, opts: &mut Options) -> Result<bool, String> {
+    let backend = focus::detect().ok_or_else(|| tr!("scratchpad-unsupported"))?;
+    let aside = backend
+        .scratchpad()
+        .ok_or_else(|| tr!("scratchpad-unsupported"))?;
+    let out_on_loan = backend
+        .focus_order()
+        .and_then(|o| o.focused)
+        .filter(|f| aside.contains(f));
+    if mode == ScratchpadArg::Toggle
+        && let Some(window) = out_on_loan
+    {
+        backend
+            .hide_window(&window)
+            .ok_or_else(|| tr!("scratchpad-not-put-aside"))?;
+        return Ok(true);
+    }
+    opts.window_filters.set_identifiers(match mode {
+        ScratchpadArg::Exclude => Filter::except(aside),
+        ScratchpadArg::Only | ScratchpadArg::Toggle => Filter::only(aside),
+    });
+    Ok(false)
 }
 
 /// Settle, before the overlay, everything that decides whether it has anything to

@@ -308,6 +308,29 @@ leaves hold-to-switch off unless `--hold` asks for it, and says what it will do
 whenever it is on and its output is a terminal. Bind a strip to a key with no
 modifier with `--no-hold`, or it switches as soon as it opens.
 
+### sway's scratchpad — `--scratchpad`
+
+Sway keeps windows aside in a **scratchpad**, off every workspace until one is asked
+back. `--scratchpad` points the switcher at that set:
+
+```
+bindsym $mod+minus exec wlr-switcher --scratchpad toggle --cycle-key "Minus:Equal"
+```
+
+- **`only`** offers just the windows in the scratchpad.
+- **`exclude`** offers just the windows that are not.
+- **`toggle`** has semantics similar to sway's own `scratchpad show`: a focused window
+  already shown from the scratchpad goes back, and otherwise the overlay opens on
+  `only` — so one key both fetches a window and puts it away again.
+
+`--cycle-key` keeps the whole gesture on the key the binding is on: hold `$mod`, press
+minus again for the next window and `=` for the previous one, release to switch.
+
+What sway keeps aside is a *container*, which can hold several windows: each is offered
+on its own, and putting one back takes the rest of its container with it.
+
+Sway-only, over its IPC (`$SWAYSOCK`); anywhere else the flag says so and exits.
+
 ## Instant overlays — `wlr-overlayd`
 
 Most of the delay before an overlay appears is initialisation the run then throws away:

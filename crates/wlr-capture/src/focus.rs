@@ -7,12 +7,12 @@
 //! (`niri msg`). cosmic-comp has no IPC socket, so its backend asks the compositor
 //! over Wayland instead, through `zcosmic_toplevel_info_v1`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use crate::wl::Region;
 use rustix::event::{PollFd, PollFlags, Timespec};
-use swayipc::{Connection, Fallible, Node, NodeType};
+use swayipc::{Connection, Fallible, Node, NodeType, ScratchpadState};
 use wayland_client::{
     Connection as WlConnection, Dispatch, Proxy, QueueHandle, event_created_child,
     globals::{GlobalListContents, registry_queue_init},
@@ -61,6 +61,13 @@ impl FocusOrder {
     }
 }
 
+/// The windows the compositor keeps aside, by [`crate::wl::Toplevel::identifier`].
+///
+/// Sway calls this the scratchpad. A window shown from there is still in it until it is
+/// moved back onto a workspace, and one entry can hold several windows — each listed
+/// separately here.
+pub type Scratchpad = HashSet<String>;
+
 /// The process behind each window, by [`crate::wl::Toplevel::identifier`].
 ///
 /// A process commonly owns several windows, so the same pid appears under several
@@ -93,6 +100,17 @@ pub trait FocusBackend {
     /// `None`: the caller can only ask the binary on `PATH`, which need not be the
     /// one running (an upgrade not yet restarted into, a nested session).
     fn version(&self) -> Option<String> {
+        None
+    }
+    /// The windows the compositor keeps aside. No Wayland protocol carries this
+    /// either, and not every compositor has the concept.
+    fn scratchpad(&self) -> Option<Scratchpad> {
+        None
+    }
+    /// Put the window `identifier` names aside, as the compositor's own command for
+    /// it does, together with anything sharing its entry. `None` if that could not be
+    /// carried out.
+    fn hide_window(&self, _identifier: &str) -> Option<()> {
         None
     }
     /// Human-readable backend name, for error messages.
@@ -174,6 +192,19 @@ impl FocusBackend for Sway {
 
     fn window_pids(&self) -> Option<WindowPids> {
         Some(sway_window_pids(&Self::tree()?))
+    }
+
+    fn scratchpad(&self) -> Option<Scratchpad> {
+        Some(sway_scratchpad(&Self::tree()?))
+    }
+
+    fn hide_window(&self, identifier: &str) -> Option<()> {
+        // Sway's criteria cannot name a foreign-toplevel identifier, so a node id
+        // read out of the tree stands in for one.
+        let id = sway_hide_target(&Self::tree()?, identifier)?;
+        let outcomes =
+            Self::with_connection(|c| c.run_command(format!("[con_id={id}] move scratchpad")))?;
+        outcomes.into_iter().all(|o| o.is_ok()).then_some(())
     }
 }
 
@@ -303,6 +334,47 @@ fn collect_window_pids(node: &Node, out: &mut WindowPids) {
     }
     for child in children(node) {
         collect_window_pids(child, out);
+    }
+}
+
+/// Sway marks the scratchpad entry, which is a container: the windows inside one are
+/// not themselves marked.
+fn sway_is_aside(node: &Node) -> bool {
+    !matches!(node.scratchpad_state, None | Some(ScratchpadState::None))
+}
+
+/// The node `move scratchpad` has to name to put the window `identifier` names aside:
+/// the entry holding it, or the window itself when the scratchpad does not hold it yet.
+fn sway_hide_target(node: &Node, identifier: &str) -> Option<i64> {
+    if sway_is_aside(node) && sway_holds(node, identifier) {
+        return Some(node.id);
+    }
+    children(node)
+        .find_map(|c| sway_hide_target(c, identifier))
+        .or_else(|| {
+            (node.foreign_toplevel_identifier.as_deref() == Some(identifier)).then_some(node.id)
+        })
+}
+
+/// Whether this node is, or contains, the window `identifier` names.
+fn sway_holds(node: &Node, identifier: &str) -> bool {
+    node.foreign_toplevel_identifier.as_deref() == Some(identifier)
+        || children(node).any(|c| sway_holds(c, identifier))
+}
+
+fn sway_scratchpad(root: &Node) -> Scratchpad {
+    let mut out = Scratchpad::new();
+    collect_scratchpad(root, false, &mut out);
+    out
+}
+
+fn collect_scratchpad(node: &Node, aside: bool, out: &mut Scratchpad) {
+    let aside = aside || sway_is_aside(node);
+    if aside && let Some(id) = &node.foreign_toplevel_identifier {
+        out.insert(id.clone());
+    }
+    for child in children(node) {
+        collect_scratchpad(child, aside, out);
     }
 }
 
@@ -1030,7 +1102,33 @@ mod tests {
                         }))],
                     })),
                 ],
-            }))],
+            })),
+            // The scratchpad, on the output sway parks it on. What it holds is a
+            // *container*: the mark sits there, it has no identifier of its own, and
+            // the two windows inside it are marked `none` like any other.
+            node(json!({
+                "type": "output", "name": "__i3",
+                "nodes": [node(json!({
+                    "type": "workspace", "name": "__i3_scratch", "visible": false,
+                    "floating_nodes": [node(json!({
+                        "id": 219, "type": "floating_con", "layout": "tabbed",
+                        "scratchpad_state": "fresh", "visible": false,
+                        "nodes": [
+                            node(json!({
+                                "id": 212, "app_id": "kitty", "name": "term",
+                                "scratchpad_state": "none", "visible": false,
+                                "foreign_toplevel_identifier": "ext-kitty",
+                            })),
+                            node(json!({
+                                "id": 220, "app_id": "notes", "name": "Notes",
+                                "scratchpad_state": "none", "visible": false,
+                                "foreign_toplevel_identifier": "ext-notes",
+                            })),
+                        ],
+                    }))],
+                }))],
+            })),
+            ],
         }));
         serde_json::from_value(v).expect("fixture should be a valid sway node")
     }
@@ -1061,7 +1159,10 @@ mod tests {
         let tree = sway_tree();
         let order = sway_focus_order(&tree);
         assert_eq!(order.focused.as_deref(), Some("ext-firefox"));
-        assert_eq!(order.unfocused, ["ext-foot", "ext-editor"]);
+        assert_eq!(
+            order.unfocused,
+            ["ext-foot", "ext-editor", "ext-kitty", "ext-notes"]
+        );
 
         // Workspace 2 alone: its window is ranked, but not focused.
         let order = sway_focus_order(&tree.nodes[0].nodes[1]);
@@ -1078,6 +1179,21 @@ mod tests {
         assert_eq!(pids.get("ext-firefox"), Some(&777));
         // Containers, workspaces and outputs carry no identifier and are not entries.
         assert_eq!(pids.len(), 3);
+    }
+
+    #[test]
+    fn a_scratchpad_entry_offers_every_window_in_it_and_goes_back_whole() {
+        let tree = sway_tree();
+        // The windows are named, though it is their container that carries the mark.
+        assert_eq!(
+            sway_scratchpad(&tree),
+            ["ext-kitty", "ext-notes"].map(String::from).into()
+        );
+        // Either of them names the container, so putting one back takes the other too.
+        assert_eq!(sway_hide_target(&tree, "ext-kitty"), Some(219));
+        assert_eq!(sway_hide_target(&tree, "ext-notes"), Some(219));
+        // A window the scratchpad does not hold answers for itself.
+        assert_eq!(sway_hide_target(&tree, "ext-firefox"), Some(11));
     }
 
     #[test]
