@@ -18,7 +18,7 @@ path = "src/lib.rs"
 # published docs. Enable them explicitly. `audio`/`audio-fallback` stay off: their
 # `pipewire` dep fails to build on docs.rs (whereas `video`'s ffmpeg-next builds fine).
 [package.metadata.docs.rs]
-features = ["gpu", "toolkit", "compose", "focus", "overlay", "mirror", "video"]
+features = ["gpu", "toolkit", "compose", "focus", "input", "overlay", "mirror", "video"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
@@ -89,6 +89,10 @@ focus = ["dep:serde_json", "dep:swayipc"]
 # A seat's pointer and the cursor image it sets (`pointer`), for a windowing host to
 # hold: the wl_pointer plus its cursor-shape-v1 device. Needs sctk.
 pointer = ["dep:smithay-client-toolkit"]
+# Shared keyboard pieces (`keys`): today, a keystroke a user can name. Kept out of
+# `overlay`/`mirror` so a crate with its own windowing host can use them without
+# pulling the overlay in. Needs egui's key names.
+input = ["toolkit"]
 # The shared frozen-screen overlay (`overlay`): a layer-shell surface per output
 # rendering a frozen capture for interactive region/point selection. Needs the
 # toolkit (egui rendering), compose (OutputCapture) and a windowing host (sctk).

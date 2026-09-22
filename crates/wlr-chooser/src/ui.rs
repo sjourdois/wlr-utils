@@ -13,6 +13,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use wlr_capture::capture::WindowFilter;
+use wlr_capture::keys::KeyPress;
 use wlr_capture::render::DmabufImporter;
 use wlr_capture::theme::Theme;
 use wlr_capture::{focus, icons, wl};
@@ -808,6 +809,48 @@ fn thumbnail(img: wl::CapturedImage) -> (usize, usize, Vec<u8>) {
     )
 }
 
+/// The keys that move the highlight, one per direction.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct CycleKeys {
+    /// To the next source.
+    pub next: KeyPress,
+    /// To the previous one.
+    pub prev: KeyPress,
+}
+
+/// `Tab` forward, `Shift+Tab` back.
+impl Default for CycleKeys {
+    fn default() -> Self {
+        let key = egui::Key::Tab;
+        Self {
+            next: KeyPress {
+                key,
+                shifted: false,
+            },
+            prev: KeyPress { key, shifted: true },
+        }
+    }
+}
+
+impl CycleKeys {
+    /// Whether `press` cycles, and forward if it does.
+    pub fn forward(&self, press: KeyPress) -> Option<bool> {
+        if press == self.next {
+            Some(true)
+        } else if press == self.prev {
+            Some(false)
+        } else {
+            None
+        }
+    }
+
+    /// Whether either direction sits on `key`, whatever the Shift state: a tile must
+    /// not advertise a key that cycles instead of picking it.
+    fn claims(&self, key: egui::Key) -> bool {
+        self.next.key == key || self.prev.key == key
+    }
+}
+
 /// How the picker presents and behaves, as resolved from the CLI.
 pub struct Options {
     pub mode: Mode,
@@ -832,6 +875,8 @@ pub struct Options {
     /// arrives, a single visible source is picked outright, and with none at all the
     /// overlay closes as if cancelled.
     pub auto_select: bool,
+    /// The keys that move the highlight.
+    pub cycle: CycleKeys,
 }
 
 /// How long the tiles stay hidden in hold-to-switch mode if keyboard focus
@@ -872,6 +917,8 @@ pub struct App {
     hold: bool,
     /// Which Alt-Tab tiles show a live preview (vs. just the icon).
     live: Live,
+    /// The keys that move the highlight.
+    cycle: CycleKeys,
     /// Set once the host arms hold-to-switch; enables Tab-cycle and
     /// confirm-on-Alt-release.
     armed: bool,
@@ -932,6 +979,7 @@ impl App {
             selected: 0,
             hold: opts.hold,
             live: opts.live,
+            cycle: opts.cycle,
             armed: false,
             pending_auto_select: opts.auto_select,
             pending_initial_select: false,
@@ -979,11 +1027,16 @@ impl App {
     /// The host calls this whenever the keymap arrives or changes, so the labels always
     /// name the keys of the layout in force — and never the ones of the layout the
     /// alphabet happened to be written for.
+    /// A key that cycles labels no tile: its press is spoken for, and a label the
+    /// press would not honour is worse than none.
     pub fn set_keymap(&mut self, keymap: &str) {
         let Some(row) = self.hint_row.filter(|_| self.hints_apply()) else {
             return;
         };
-        self.hints = crate::hints::hints(keymap, row);
+        self.hints = crate::hints::hints(keymap, row)
+            .into_iter()
+            .filter(|h| !egui::Key::from_name(&h.label).is_some_and(|k| self.cycle.claims(k)))
+            .collect();
     }
 
     /// Pick the tile the physical key `code` (an evdev code) labels, and say whether
@@ -1093,7 +1146,13 @@ impl App {
         }
     }
 
-    /// Advance (or retreat) the highlighted source — Tab / Shift+Tab.
+    /// The keys bound to the two directions; the host matches keystrokes against
+    /// them while armed, before egui gets a look.
+    pub fn cycle_keys(&self) -> CycleKeys {
+        self.cycle
+    }
+
+    /// Advance (or retreat) the highlighted source.
     pub fn cycle(&mut self, forward: bool) {
         let n = self.visible().len();
         if n == 0 {
@@ -1268,20 +1327,28 @@ impl App {
 
         // Keyboard (read states first; don't call ctx methods inside ctx.input).
         let vis_len = self.visible().len();
-        // In the views with no search field (exposé grid, Alt-Tab strip), Tab /
-        // Shift+Tab also navigate — even when not armed (e.g. `$mod+Tab` exposé).
-        // When armed, the host intercepts Tab before egui, so this never collides.
+        // In the views with no search field (exposé grid, Alt-Tab strip), the cycle
+        // keys also navigate — even when not armed (e.g. `$mod+Tab` exposé). When
+        // armed, the host intercepts them before egui, so this never collides.
         let switch_nav = matches!(self.view, View::Strip | View::Grid);
+        let cycle = self.cycle;
         let (esc, next, prev, enter) = ctx.input(|i| {
-            let tab = switch_nav && i.key_pressed(egui::Key::Tab);
+            let cycled = switch_nav
+                .then(|| {
+                    [cycle.next, cycle.prev]
+                        .into_iter()
+                        .find(|k| i.key_pressed(k.key) && i.modifiers.shift == k.shifted)
+                })
+                .flatten()
+                .and_then(|k| cycle.forward(k));
             (
                 i.key_pressed(egui::Key::Escape),
                 i.key_pressed(egui::Key::ArrowRight)
                     || i.key_pressed(egui::Key::ArrowDown)
-                    || (tab && !i.modifiers.shift),
+                    || cycled == Some(true),
                 i.key_pressed(egui::Key::ArrowLeft)
                     || i.key_pressed(egui::Key::ArrowUp)
-                    || (tab && i.modifiers.shift),
+                    || cycled == Some(false),
                 i.key_pressed(egui::Key::Enter),
             )
         });
@@ -2097,6 +2164,7 @@ mod tests {
             window_filters: WindowFilters::default(),
             hints: None,
             auto_select: false,
+            cycle: CycleKeys::default(),
         }
     }
 
