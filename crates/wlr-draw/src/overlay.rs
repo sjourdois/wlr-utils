@@ -838,7 +838,7 @@ impl State {
             Tool::Move => pointer::Shape::Grab,
             _ => pointer::Shape::Crosshair,
         };
-        self.pointer.set_cursor(Some(shape));
+        self.pointer.set_cursor(shape);
     }
 
     /// Clear the selection (and finalize any move in progress).
@@ -2731,9 +2731,7 @@ impl PointerHandler for State {
         events: &[PointerEvent],
     ) {
         for e in events {
-            if let PointerEventKind::Enter { serial } = e.kind {
-                self.pointer.enter(serial);
-            }
+            self.pointer.on_event(e);
             match e.kind {
                 PointerEventKind::Enter { .. } | PointerEventKind::Motion { .. } => {
                     if let Some(g) = self.to_global(&e.surface, e.position) {

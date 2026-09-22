@@ -874,12 +874,12 @@ impl PointerHandler for State {
         };
         for e in events {
             let pos = egui::pos2(e.position.0 as f32, e.position.1 as f32);
+            self.pointer.on_event(e);
             match e.kind {
-                PointerEventKind::Enter { serial } => {
+                PointerEventKind::Enter { .. } => {
                     self.pointer_pos = pos;
                     self.hovered = true;
                     self.update_cursor();
-                    self.pointer.enter(serial);
                     self.redraw();
                 }
                 PointerEventKind::Motion { .. } => {
@@ -936,7 +936,7 @@ impl State {
             Hit::Grip => Shape::SeResize,
             Hit::Body => Shape::Move,
         };
-        self.pointer.set_cursor(Some(shape));
+        self.pointer.set_cursor(shape);
     }
 
     /// Left-button press: act on whatever it landed on.

@@ -826,9 +826,7 @@ impl PointerHandler for State {
     ) {
         for e in events {
             let pos = egui::pos2(e.position.0 as f32, e.position.1 as f32);
-            if let PointerEventKind::Enter { serial } = e.kind {
-                self.pointer.enter(serial);
-            }
+            self.pointer.on_event(e);
             match e.kind {
                 PointerEventKind::Enter { .. } | PointerEventKind::Motion { .. } => {
                     self.pointer_pos = pos;

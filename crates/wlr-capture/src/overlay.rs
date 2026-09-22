@@ -619,7 +619,7 @@ fn run(
         done: false,
     };
     // Every mode picks a point or a rectangle off the frozen screen.
-    state.pointer.set_cursor(Some(Shape::Crosshair));
+    state.pointer.set_cursor(Shape::Crosshair);
 
     // Let outputs (and their logical geometry) come in, then build one overlay per
     // output that we have a frozen capture for.
@@ -924,9 +924,7 @@ impl PointerHandler for State {
     ) {
         let mode = self.mode;
         for e in events {
-            if let PointerEventKind::Enter { serial } = e.kind {
-                self.pointer.enter(serial);
-            }
+            self.pointer.on_event(e);
             match e.kind {
                 PointerEventKind::Enter { .. } => {
                     self.pointer_pos = self.to_global(&e.surface, e.position);
