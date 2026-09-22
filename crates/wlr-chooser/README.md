@@ -291,6 +291,10 @@ force it either way with `--hold` / `--no-hold`. With it off, the overlay stays
 open after release — confirm with Enter or a click. Only one switcher opens at a
 time (re-pressing the keybind is a no-op).
 
+With it on, a run that finds only one window to switch to focuses it outright and
+shows no overlay at all: releasing the modifier would switch to that window anyway,
+so there is no choice to put on screen.
+
 With hold-to-switch on, a modifier that is no longer held when the overlay gets the
 keyboard counts as released: a quick tap switches straight away, without showing
 the overlay. Run from a terminal, where no modifier is held, the switcher therefore
