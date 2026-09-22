@@ -828,6 +828,10 @@ pub struct Options {
     /// `None` to leave them bare. Only the views that own the whole keyboard honour
     /// it (see [`App::hints_apply`]).
     pub hints: Option<HintRow>,
+    /// Settle without a choice when there is none to make: once the first source list
+    /// arrives, a single visible source is picked outright, and with none at all the
+    /// overlay closes as if cancelled.
+    pub auto_select: bool,
 }
 
 /// How long the tiles stay hidden in hold-to-switch mode if keyboard focus
@@ -871,6 +875,9 @@ pub struct App {
     /// Set once the host arms hold-to-switch; enables Tab-cycle and
     /// confirm-on-Alt-release.
     armed: bool,
+    /// Once the first source list arrives, settle a run that has no choice to make
+    /// (see [`App::apply_auto_select`]).
+    pending_auto_select: bool,
     /// Once armed with sources present, place the initial selection so that
     /// releasing Alt immediately switches — like a real Alt-Tab where the launching
     /// Tab already advanced once (see [`App::apply_initial_select`]).
@@ -926,6 +933,7 @@ impl App {
             hold: opts.hold,
             live: opts.live,
             armed: false,
+            pending_auto_select: opts.auto_select,
             pending_initial_select: false,
             focused,
             pending_confirm: false,
@@ -1040,6 +1048,26 @@ impl App {
                 Some(first) if now - first >= REVEAL_BACKSTOP_SECS => self.reveal(),
                 _ => {}
             }
+        }
+    }
+
+    /// Settle a run with no choice to make, once sources exist: a lone visible source
+    /// is picked outright, and with none at all the overlay closes as if cancelled.
+    ///
+    /// Only the first source list decides. Once the overlay is up the choice is the
+    /// user's, and a window closing behind it must not make it for them.
+    fn apply_auto_select(&mut self) {
+        if !self.pending_auto_select || self.sources.is_none() {
+            return;
+        }
+        self.pending_auto_select = false;
+        match self.visible().as_slice() {
+            [] => self.closing = true,
+            [only] => {
+                let sel = only.selection();
+                self.choose(sel);
+            }
+            _ => {}
         }
     }
 
@@ -1231,6 +1259,7 @@ impl App {
         self.pump(&ctx, importer);
         ctx.request_repaint(); // keep draining the channel while captures stream in
 
+        self.apply_auto_select();
         self.apply_initial_select();
         self.apply_confirm();
         if self.closing {
@@ -2067,6 +2096,7 @@ mod tests {
             order: Order::ByName,
             window_filters: WindowFilters::default(),
             hints: None,
+            auto_select: false,
         }
     }
 

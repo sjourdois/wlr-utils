@@ -242,6 +242,7 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Option<S
         order: cli.window_order.into(),
         window_filters: cli.filters.into(),
         hints: cli.hints.map(Into::into),
+        auto_select: false,
     };
     preflight(&mut opts, mode)?;
 

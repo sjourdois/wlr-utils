@@ -96,7 +96,7 @@ struct Cli {
 enum Ran {
     /// The overlay was answered: a window picked, and focused if it could be.
     Switched,
-    /// The user backed out of the overlay.
+    /// The user backed out of the overlay, or there was no window to switch to.
     Cancelled,
 }
 
@@ -213,6 +213,10 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, Str
         order: cli.window_order.into(),
         window_filters: cli.filters.into(),
         hints: cli.hints.map(Into::into),
+        // Under hold-to-switch, releasing the modifier switches to the highlighted
+        // window; where only one is on offer, that is where the run ends up whatever
+        // happens in between, so the overlay has no choice left to put on screen.
+        auto_select: hold,
     };
     preflight(&mut opts)?;
 
