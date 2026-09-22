@@ -114,6 +114,10 @@ const CHECKS: &[(&str, &str)] = &[
         "switcher keyboard grab",
     ),
     ("zwp_tablet_manager_v2", "stylus input (wlr-draw)"),
+    (
+        "wp_cursor_shape_manager_v1",
+        "cursor image over an overlay (else it keeps whatever the pointer arrived with)",
+    ),
 ];
 
 /// What the compositor's globals allow: the capture protocol the engine would

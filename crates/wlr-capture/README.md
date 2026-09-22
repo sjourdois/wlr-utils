@@ -45,6 +45,10 @@ The reusable bricks plus the overlay UI helpers they share:
   `zcosmic_toplevel_info_v1`.
 - **`overlay` / `mirror`** *(features)* — the frozen region/point/magnify selector and
   the floating live-mirror (PiP) host.
+- **`pointer`** *(feature)* — a seat's `wl_pointer` with its `cursor-shape-v1` device,
+  for a windowing host to hold. The cursor image is undefined after each enter, so a
+  surface that sets none inherits whatever the last client left. Pulled in by `overlay`
+  and `mirror`; enable it alone for a host that renders its own surfaces.
 - **`video` / `audio`** *(features)* — FFmpeg encoding (H.264 NVENC/VAAPI/libx264, and
   animated GIF/WebP) and native-PipeWire audio capture (with an optional Pulse/ALSA
   fallback via libavdevice).
@@ -71,8 +75,10 @@ features. On by default: `gpu`, `toolkit`.
   (`--no-default-features`) for a headless build that only captures and reads back —
   no `egui`/`resvg`/`fontconfig`.
 - Off by default: **`compose`** (source→image), **`focus`** (compositor IPC),
-  **`overlay`**, **`mirror`**, **`video`** (FFmpeg), **`audio`** (PipeWire;
-  **`audio-fallback`** adds Pulse/ALSA).
+  **`pointer`** (the seat's pointer and its cursor image), **`overlay`**, **`mirror`**,
+  **`video`** (FFmpeg), **`audio`** (PipeWire; **`audio-fallback`** adds Pulse/ALSA).
+  `pointer`, `overlay` and `mirror` are what pull `smithay-client-toolkit`; the core
+  builds without it.
 
 ## License
 

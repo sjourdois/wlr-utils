@@ -44,6 +44,17 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **An overlay no longer comes up with no cursor**
+  ([#16](https://github.com/sjourdois/wlr-utils/pull/16), by
+  [@bR3iN](https://github.com/bR3iN)) — the cursor image is undefined after every
+  `wl_pointer.enter` until the client that has the pointer sets one, and none of ours
+  did: an overlay raised over a window that had hidden the cursor — kitty going idle,
+  say — arrived with nothing to point with. Each overlay now sets its own on every
+  enter: a crosshair over the frozen screen, the current tool's over `wlr-draw`, and
+  move / resize / hand over the floating mirror's body, grip and toolbar. `doctor`
+  reports `wp_cursor_shape_manager_v1`, since without it there is no image to set and
+  the old behaviour stands.
+
 - **An overlay no longer resolves its fonts twice** — the font set a theme asks for
   is resolved once per process and reused, which takes about twenty milliseconds off
   every overlay after the first in a daemon, and changes nothing for a one-shot run.
