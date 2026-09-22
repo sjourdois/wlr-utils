@@ -24,6 +24,10 @@
 //! - [`pointer`](mod@pointer): a seat's pointer and the cursor image it sets — the `wl_pointer`
 //!   plus its `cursor-shape-v1` device.
 //!
+//! Behind the `input` feature (needs egui's key names):
+//! - [`keys`]: keyboard pieces an overlay can share rather than spell out — today, a
+//!   keystroke in the form a user can write down.
+//!
 //! Behind the `focus` feature (compositor IPC, pulls `serde_json`):
 //! - [`focus`]: "the active window" / "the current output" via the compositor's own
 //!   IPC (Sway today). Wayland gives no portable way to query focus.
@@ -90,6 +94,10 @@ pub mod capture;
 #[cfg(feature = "focus")]
 #[cfg_attr(docsrs, doc(cfg(feature = "focus")))]
 pub mod focus;
+
+#[cfg(feature = "input")]
+#[cfg_attr(docsrs, doc(cfg(feature = "input")))]
+pub mod keys;
 
 #[cfg(feature = "pointer")]
 #[cfg_attr(docsrs, doc(cfg(feature = "pointer")))]

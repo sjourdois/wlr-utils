@@ -42,6 +42,7 @@ use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::{
     zwp_keyboard_shortcuts_inhibit_manager_v1::ZwpKeyboardShortcutsInhibitManagerV1,
     zwp_keyboard_shortcuts_inhibitor_v1::ZwpKeyboardShortcutsInhibitorV1,
 };
+use wlr_capture::keys::KeyPress;
 use wlr_capture::pointer::Pointer;
 use wlr_capture::render::Gpu;
 use wlr_capture::theme;
@@ -791,16 +792,19 @@ impl State {
             self.logo_down = pressed;
             self.reconcile();
         }
-        // While armed, Tab / Shift+Tab cycle the highlight instead of reaching
-        // egui (its TextEdit would otherwise eat Tab for focus traversal). Some
-        // compositors send `ISO_Left_Tab` for Shift+Tab.
-        let is_tab = event.keysym == Keysym::Tab || event.keysym == Keysym::ISO_Left_Tab;
+        // While armed, the cycle keys move the highlight instead of reaching egui
+        // (its TextEdit would otherwise eat Tab for focus traversal). Some compositors
+        // send `ISO_Left_Tab` for Shift+Tab, which `map_key` folds back into Tab — so
+        // the keysym carries the Shift the modifier mask may not.
+        let press = map_key(event.keysym).map(|key| KeyPress {
+            key,
+            shifted: self.modifiers.shift || event.keysym == Keysym::ISO_Left_Tab,
+        });
         if self.armed
             && pressed
-            && is_tab
             && let Some(app) = self.app.as_mut()
+            && let Some(forward) = press.and_then(|p| app.cycle_keys().forward(p))
         {
-            let forward = event.keysym == Keysym::Tab && !self.modifiers.shift;
             app.cycle(forward);
             return;
         }
@@ -815,9 +819,9 @@ impl State {
         {
             return;
         }
-        if let Some(key) = map_key(event.keysym) {
+        if let Some(press) = press {
             self.events.push(egui::Event::Key {
-                key,
+                key: press.key,
                 physical_key: None,
                 pressed,
                 repeat: false,
@@ -905,6 +909,10 @@ impl ProvidesRegistryState for State {
     registry_handlers![OutputState, SeatState];
 }
 
+/// Keysym → [`egui::Key`], for the keys the UI acts on. The table covers the
+/// editing and navigation keys; anything else falls back to the character the key
+/// produces, so a key bound to cycle is recognised whatever it is. Text input rides
+/// on `Event::Text`, not on this.
 fn map_key(k: Keysym) -> Option<egui::Key> {
     use egui::Key;
     Some(match k {
@@ -920,7 +928,7 @@ fn map_key(k: Keysym) -> Option<egui::Key> {
         Keysym::Home => Key::Home,
         Keysym::End => Key::End,
         Keysym::space => Key::Space,
-        _ => return None,
+        _ => return k.key_char().and_then(|c| Key::from_name(&c.to_string())),
     })
 }
 

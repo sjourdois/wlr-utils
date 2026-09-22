@@ -8,7 +8,7 @@
 //! This binary *answers*: it names the source and never touches it. For the sibling
 //! that *acts* — focusing the window it picked — see `wlr-switcher`.
 
-use crate::ui::{self, Live, Mode, Options, View};
+use crate::ui::{self, CycleKeys, Live, Mode, Options, View};
 use crate::{FilterArgs, HintRowArg, LayoutArg, OrderArg, daemon, parse_grid, run_overlay, shell};
 use crate::{i18n, tr};
 use clap::{Parser, ValueEnum};
@@ -243,6 +243,7 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Option<S
         window_filters: cli.filters.into(),
         hints: cli.hints.map(Into::into),
         auto_select: false,
+        cycle: CycleKeys::default(),
     };
     preflight(&mut opts, mode)?;
 

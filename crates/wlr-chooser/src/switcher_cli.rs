@@ -8,13 +8,16 @@
 //! This binary *acts*: it focuses what it picked. For the sibling that *answers* —
 //! naming the source on stdout and touching nothing — see `wlr-chooser`.
 
-use crate::ui::{Live, Mode, Options, View};
+use crate::ui::{CycleKeys, Live, Mode, Options, View};
 use crate::{FilterArgs, HintRowArg, LayoutArg, OrderArg};
 use crate::{acquire_switch_lock, daemon, run_overlay, shell};
 use crate::{i18n, tr};
 use clap::{Parser, ValueEnum};
+use std::fmt;
 use std::io::IsTerminal;
+use std::str::FromStr;
 use std::time::Instant;
+use wlr_capture::keys::{KeyPress, UnknownKey};
 use wlr_capture::{CaptureError, wl};
 
 /// Which tiles show a live preview (CLI mirror of [`Live`]).
@@ -32,6 +35,57 @@ impl From<LiveArg> for Live {
             LiveArg::Current => Live::Current,
             LiveArg::All => Live::All,
         }
+    }
+}
+
+/// [`CycleKeys`] as the command line writes them (CLI mirror).
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+struct CycleKeysArg(CycleKeys);
+
+impl From<CycleKeysArg> for CycleKeys {
+    fn from(v: CycleKeysArg) -> Self {
+        v.0
+    }
+}
+
+impl CycleKeysArg {
+    /// The pair `next` alone stands for: the other direction is the same key with
+    /// the Shift state toggled.
+    fn from_next(next: KeyPress) -> Self {
+        Self(CycleKeys {
+            next,
+            prev: KeyPress {
+                shifted: !next.shifted,
+                ..next
+            },
+        })
+    }
+}
+
+/// Writes what [`FromStr`] reads, in the short form where that says the same thing.
+impl fmt::Display for CycleKeysArg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if *self == Self::from_next(self.0.next) {
+            return write!(f, "{}", self.0.next);
+        }
+        write!(f, "{}:{}", self.0.next, self.0.prev)
+    }
+}
+
+/// Reads `<next>` or `<next>:<prev>`.
+impl FromStr for CycleKeysArg {
+    type Err = UnknownKey;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Tried whole first, so that a key egui names with a colon stays writable.
+        if let Ok(next) = s.parse() {
+            return Ok(Self::from_next(next));
+        }
+        let (next, prev) = s.split_once(':').ok_or(UnknownKey)?;
+        Ok(Self(CycleKeys {
+            next: next.parse()?,
+            prev: prev.parse()?,
+        }))
     }
 }
 
@@ -71,6 +125,11 @@ struct Cli {
     /// modifier — confirm with Enter or a click. Overrides the per-layout default.
     #[arg(long, conflicts_with = "hold")]
     no_hold: bool,
+    /// Keys that move the highlight: the key for the next window, optionally
+    /// followed by `:` and the key for the previous one. Left out, the previous one
+    /// is the same key with the Shift state toggled.
+    #[arg(long, value_name = "KEY[:KEY]", default_value_t)]
+    cycle_key: CycleKeysArg,
     /// Label each tile with the key that picks it, taken from a row of the physical
     /// keyboard: `home` (the resting row, default) or `top` (the row above the
     /// letters). The label is whatever the active layout prints on that key, so it
@@ -217,6 +276,7 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, Str
         // window; where only one is on offer, that is where the run ends up whatever
         // happens in between, so the overlay has no choice left to put on screen.
         auto_select: hold,
+        cycle: cli.cycle_key.into(),
     };
     preflight(&mut opts)?;
 
@@ -294,5 +354,32 @@ pub(crate) fn serve(host: &mut shell::Host, args: Vec<String>) -> daemon::Reply 
         Ok(Ran::Switched) => daemon::Reply::Done(String::new()),
         Ok(Ran::Cancelled) => daemon::Reply::Cancelled,
         Err(reason) => daemon::Reply::Err(reason),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn the_cli_definition_holds_up() {
+        // clap's own consistency checks: a name or short flag used twice, a
+        // `conflicts_with` pointing at nothing, and the like. It does not try the
+        // defaults through their parsers.
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn cycle_keys_read_back_as_what_they_printed() {
+        for s in ["Tab", "Shift+Tab", "J:K", "Shift+J:Down"] {
+            let keys: CycleKeysArg = s.parse().unwrap();
+            assert_eq!(keys.to_string(), s);
+        }
+        // The short form is the one written back when it says the same thing.
+        assert_eq!(
+            "Tab:Shift+Tab".parse::<CycleKeysArg>().unwrap().to_string(),
+            "Tab"
+        );
     }
 }

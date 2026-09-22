@@ -286,6 +286,12 @@ bindsym $mod+Tab exec wlr-switcher --layout grid   # full-screen exposé
 - **Releasing the modifier** confirms the highlighted window and switches to it.
 - Mouse click and `Esc` (cancel) still work.
 
+`--cycle-key` moves the cycling elsewhere: `--cycle-key j` puts "next" on `j` and
+leaves "previous" on the same key with Shift toggled, and `--cycle-key <next>:<prev>`
+names both. Keys are written the way egui names them — `Tab`, `Down`, `j`, `F5`, `1`,
+`-` — with an optional `Shift+` in front. A key that cycles never also labels a tile,
+so `--hints` skips it.
+
 Hold-to-switch is **on by default for `strip`** and **off for `grid`/`card`**;
 force it either way with `--hold` / `--no-hold`. With it off, the overlay stays
 open after release — confirm with Enter or a click. Only one switcher opens at a
