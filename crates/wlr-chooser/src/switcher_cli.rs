@@ -39,7 +39,7 @@ impl From<LiveArg> for Live {
 #[derive(Parser)]
 #[command(
     name = "wlr-switcher",
-    version,
+    version = wlr_capture::version!(),
     about = "Window switcher / Alt-Tab / exposé for wlroots (focuses the picked window)"
 )]
 struct Cli {
@@ -113,7 +113,7 @@ pub fn main() {
     i18n::init();
 
     if cli.doctor {
-        if let Err(e) = wlr_capture::doctor::report("wlr-switcher", env!("CARGO_PKG_VERSION")) {
+        if let Err(e) = wlr_capture::doctor::report("wlr-switcher", wlr_capture::version!()) {
             eprintln!("wlr-switcher: {e}");
             std::process::exit(1);
         }

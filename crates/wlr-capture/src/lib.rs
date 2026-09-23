@@ -51,6 +51,25 @@
 // `EGLDisplay` instead of opening a second one. See `overlay::select_region_on`.
 pub use wayland_client::Connection;
 
+/// The version of the wlr-utils git checkout this crate was built from: the release
+/// number on a release tag (`1.9.0`), `git describe` on any other commit
+/// (`1.9.0-17-g7a434c1`), or the crate version plus the commit when no tag is reachable
+/// (`1.9.0-g7a434c1`). `None` outside such a checkout (crates.io, a distro tarball) or
+/// without git. Read it through [`version!`].
+pub const GIT_VERSION: Option<&str> = option_env!("WLR_GIT_VERSION");
+
+/// The version a tool reports (`--version`, `doctor`), as a `&'static str`:
+/// [`GIT_VERSION`] when known, otherwise the calling crate's `CARGO_PKG_VERSION`.
+#[macro_export]
+macro_rules! version {
+    () => {
+        match $crate::GIT_VERSION {
+            Some(version) => version,
+            None => env!("CARGO_PKG_VERSION"),
+        }
+    };
+}
+
 pub mod clipboard;
 mod cosmic_activate;
 mod cosmic_protocol;

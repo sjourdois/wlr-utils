@@ -23,7 +23,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(
     name = "wlr-draw",
-    version,
+    version = wlr_capture::version!(),
     about = "Draw and annotate live on screen (wlroots / layer-shell)",
     long_about = "Run with no subcommand to start the overlay daemon. A wlroots client \
 cannot grab a global hotkey, so further invocations drive the running daemon over a \
@@ -97,7 +97,7 @@ pub fn main() -> anyhow::Result<()> {
         None => overlay::run(),
         // Doctor probes the compositor directly — it doesn't drive the daemon.
         Some(Ctl::Doctor) => {
-            wlr_capture::doctor::report("wlr-draw", env!("CARGO_PKG_VERSION")).map_err(Into::into)
+            wlr_capture::doctor::report("wlr-draw", wlr_capture::version!()).map_err(Into::into)
         }
         Some(ctl) => ipc::send(&ctl_to_cmd(ctl)?),
     }

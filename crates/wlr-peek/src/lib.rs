@@ -16,7 +16,7 @@ mod i18n;
 #[derive(Parser)]
 #[command(
     name = "wlr-peek",
-    version,
+    version = wlr_capture::version!(),
     about = "Inspect the screen on wlroots (colour picker, OCR)"
 )]
 struct Cli {
@@ -104,7 +104,7 @@ pub fn main() {
         #[cfg(feature = "ocr")]
         Cmd::Grep(args) => grep(args),
         Cmd::Doctor => {
-            wlr_capture::doctor::report("wlr-peek", env!("CARGO_PKG_VERSION")).map_err(Into::into)
+            wlr_capture::doctor::report("wlr-peek", wlr_capture::version!()).map_err(Into::into)
         }
         Cmd::ClipboardServe { mime } => clipboard_serve(&mime),
     };

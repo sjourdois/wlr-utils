@@ -22,6 +22,9 @@ All notable changes to this project are documented here. The format is based on
   released, and switched before showing anything. It is now off by default when
   stdin is a terminal (`--hold` still forces it), and a run with it on says so
   whenever stderr is a terminal.
+- **A build from git names its commit** — `--version` and `doctor` report
+  `1.9.0-17-g7a434c1` instead of the release number when the binary is not built
+  from a release tag.
 
 ### Fixed
 

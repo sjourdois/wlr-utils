@@ -97,6 +97,14 @@ jobs:
             makepkg --printsrcinfo > .SRCINFO
           '
 
+      # The -bin package repackages the cargo-dist archive, checked by `release-check`.
+      - name: Check every binary reports the release version
+        if: matrix.name == 'wlr-utils'
+        env:
+          PKGVER: ${{ steps.ver.outputs.pkgver }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: packaging/check-version.sh "packaging/aur/src/wlr-utils-$PKGVER/target/release" "$TAG"
+
       - name: Install the AUR deploy key
         if: env.HAS_AUR_KEY == 'true'
         env:

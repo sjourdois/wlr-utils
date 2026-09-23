@@ -18,7 +18,7 @@ mod i18n;
 #[derive(Parser)]
 #[command(
     name = "wlr-shot",
-    version,
+    version = wlr_capture::version!(),
     about = "Screen capture for wlroots (screenshots, recording, timelapse)"
 )]
 struct Cli {
@@ -135,7 +135,7 @@ pub fn main() {
         #[cfg(feature = "video")]
         Cmd::Record(args) => record(args),
         Cmd::Doctor => {
-            wlr_capture::doctor::report("wlr-shot", env!("CARGO_PKG_VERSION")).map_err(Into::into)
+            wlr_capture::doctor::report("wlr-shot", wlr_capture::version!()).map_err(Into::into)
         }
         Cmd::ClipboardServe { mime } => clipboard_serve(&mime),
     };

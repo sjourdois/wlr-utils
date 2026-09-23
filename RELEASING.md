@@ -95,9 +95,14 @@ grep 'for pkg in' .github/workflows/publish.yml   # every crate in the publish o
    - The `aur` workflow publishes both AUR packages from an Arch container: it rewrites
      `pkgver` from the tag, runs `updpkgsums`, regenerates `.SRCINFO` and pushes. The
      `pkgver` committed in `packaging/aur/` is only kept in sync for readability.
-5. **Replay a failed tag workflow** without re-tagging: `deb` and `aur` take a
-   `workflow_dispatch` with the tag as an input; `publish` takes one on the version
-   currently in `Cargo.toml`.
+   - Every binary built off a git checkout reports its commit (`X.Y.Z-N-gHASH`); only
+     a build of the exact tag reports `X.Y.Z`. `packaging/check-version.sh` enforces
+     it: `deb` and `aur` (source package) run it on what they built before shipping it,
+     and `release-check`, also chained to `release`, runs it on the published
+     cargo-dist archive.
+5. **Replay a failed tag workflow** without re-tagging: `deb`, `aur` and
+   `release-check` take a `workflow_dispatch` with the tag as an input; `publish` takes
+   one on the version currently in `Cargo.toml`.
 
 ## Checks before tagging
 

@@ -1,0 +1,61 @@
+name: Release check
+
+# Check the prebuilt archive `Release` (cargo-dist) attached to the GitHub release:
+# every binary must report exactly the tag's version. The dist-generated workflow
+# offers no hook after its build, so this chains off it like `deb` and `aur` do.
+
+on:
+  workflow_run:
+    workflows: ['Release']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to check (e.g. v1.9.0)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && startsWith(github.event.workflow_run.head_branch, 'v')) }}
+    runs-on: ubuntu-24.04
+    env:
+      # Through the environment, never interpolated into a script: a `workflow_run`
+      # head_branch may hold shell metacharacters. Refused below unless it reads as a
+      # release tag.
+      TAG: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
+    steps:
+      - name: Refuse a tag that is not one
+        run: |
+          set -eu
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "refusing '$TAG': a release tag is vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+      # The default branch, for the check script; the release's code is never run
+      # from a checkout here.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # Same runner image and packages as the dist build (dist-workspace.toml), whose
+      # -dev packages pull in the runtime libraries the binaries link.
+      - name: Install the libraries the binaries link
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwayland-dev libxkbcommon-dev libfontconfig-dev libgbm-dev \
+            libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev \
+            libavdevice-dev libswscale-dev libswresample-dev libva-dev \
+            libpipewire-0.3-dev libtesseract-dev libleptonica-dev libdbus-1-dev
+      - name: Download the release archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -eux
+          gh release download "$TAG" --pattern 'wlr-utils-x86_64-unknown-linux-gnu.tar.xz' --dir "$RUNNER_TEMP"
+          tar -xJf "$RUNNER_TEMP/wlr-utils-x86_64-unknown-linux-gnu.tar.xz" -C "$RUNNER_TEMP"
+      - name: Check every binary reports the release version
+        run: packaging/check-version.sh "$RUNNER_TEMP/wlr-utils-x86_64-unknown-linux-gnu" "$TAG"

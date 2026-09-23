@@ -20,7 +20,7 @@ use wlr_capture::focus;
 /// Prints the chosen source to stdout (`Window: <id>` / `Monitor: <name>`); exits
 /// non-zero if cancelled.
 #[derive(Parser)]
-#[command(name = "wlr-chooser", version, about)]
+#[command(name = "wlr-chooser", version = wlr_capture::version!(), about)]
 struct Cli {
     /// Capture through shared memory instead of the zero-copy dma-buf path.
     /// Use it if previews or captures come out broken on your driver; also
@@ -153,7 +153,7 @@ pub fn main() {
     i18n::init();
 
     if cli.doctor {
-        if let Err(e) = wlr_capture::doctor::report("wlr-chooser", env!("CARGO_PKG_VERSION")) {
+        if let Err(e) = wlr_capture::doctor::report("wlr-chooser", wlr_capture::version!()) {
             eprintln!("wlr-chooser: {e}");
             std::process::exit(1);
         }

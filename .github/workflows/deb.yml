@@ -80,6 +80,8 @@ jobs:
         run: cargo install cargo-deb --locked
       - name: Build the .deb (one bundle package with every binary)
         run: cargo deb -p wlr-utils ${{ matrix.debargs }}
+      - name: Check every binary reports the release version
+        run: packaging/check-version.sh target/release "$TAG"
       - name: Tag the artifact with its distro codename
         run: |
           set -eux

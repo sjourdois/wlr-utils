@@ -23,7 +23,7 @@ use std::time::Instant;
 #[derive(Parser)]
 #[command(
     name = "wlr-overlayd",
-    version,
+    version = wlr_capture::version!(),
     about = "Overlay daemon for wlr-switcher and wlr-chooser (instant overlays)",
     long_about = "Runs in the foreground holding the Wayland connection and the GPU \
 context an overlay would otherwise build from scratch every time — some ninety \
