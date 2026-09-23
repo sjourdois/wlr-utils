@@ -42,7 +42,7 @@ use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::{
     zwp_keyboard_shortcuts_inhibit_manager_v1::ZwpKeyboardShortcutsInhibitManagerV1,
     zwp_keyboard_shortcuts_inhibitor_v1::ZwpKeyboardShortcutsInhibitorV1,
 };
-use wlr_capture::keys::KeyPress;
+use wlr_capture::keys::{KeyPress, is_cancel};
 use wlr_capture::pointer::Pointer;
 use wlr_capture::render::Gpu;
 use wlr_capture::theme;
@@ -792,14 +792,21 @@ impl State {
             self.logo_down = pressed;
             self.reconcile();
         }
-        // While armed, the cycle keys move the highlight instead of reaching egui
-        // (its TextEdit would otherwise eat Tab for focus traversal). Some compositors
-        // send `ISO_Left_Tab` for Shift+Tab, which `map_key` folds back into Tab — so
-        // the keysym carries the Shift the modifier mask may not.
-        let press = map_key(event.keysym).map(|key| KeyPress {
+        // `Ctrl+[` is the cancel chord every tool here honours; the UI knows only
+        // Esc, so it is handed over as that.
+        let key = if is_cancel(event.keysym, self.modifiers.ctrl) {
+            Some(egui::Key::Escape)
+        } else {
+            map_key(event.keysym)
+        };
+        // Some compositors send `ISO_Left_Tab` for Shift+Tab, which `map_key` folds
+        // back into Tab — so the keysym carries the Shift the modifier mask may not.
+        let press = key.map(|key| KeyPress {
             key,
             shifted: self.modifiers.shift || event.keysym == Keysym::ISO_Left_Tab,
         });
+        // While armed, the cycle keys move the highlight instead of reaching egui
+        // (its TextEdit would otherwise eat Tab for focus traversal).
         if self.armed
             && pressed
             && let Some(app) = self.app.as_mut()

@@ -89,18 +89,18 @@ focus = ["dep:serde_json", "dep:swayipc"]
 # A seat's pointer and the cursor image it sets (`pointer`), for a windowing host to
 # hold: the wl_pointer plus its cursor-shape-v1 device. Needs sctk.
 pointer = ["dep:smithay-client-toolkit"]
-# Shared keyboard pieces (`keys`): today, a keystroke a user can name. Kept out of
-# `overlay`/`mirror` so a crate with its own windowing host can use them without
-# pulling the overlay in. Needs egui's key names.
-input = ["toolkit"]
+# Shared keyboard pieces (`keys`): the keystrokes that mean cancel, and a keystroke a
+# user can name. Its own feature so a crate with its own windowing host can use them
+# without pulling the overlay in. Needs sctk's keysyms and egui's key names.
+input = ["dep:smithay-client-toolkit", "toolkit"]
 # The shared frozen-screen overlay (`overlay`): a layer-shell surface per output
 # rendering a frozen capture for interactive region/point selection. Needs the
 # toolkit (egui rendering), compose (OutputCapture) and a windowing host (sctk).
-overlay = ["toolkit", "compose", "pointer"]
+overlay = ["toolkit", "compose", "pointer", "input"]
 # The floating live-mirror host (`mirror`): an xdg-toplevel egui window that streams
 # a source (a window, or a magnified region) live. Shared by `wlr-peek mirror`. Needs
 # the toolkit (egui rendering) and a windowing host (sctk, with its calloop + xdg).
-mirror = ["toolkit", "pointer"]
+mirror = ["toolkit", "pointer", "input"]
 # Hardware/software video encoding (`video`): a FrameSink that encodes a capture
 # stream to a file via FFmpeg (NVENC / VAAPI / libx264). Headless — no toolkit. Pulls
 # `ffmpeg-next`, which links the system libav* libraries (needs the `-dev` packages).

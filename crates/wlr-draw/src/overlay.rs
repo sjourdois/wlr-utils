@@ -65,6 +65,7 @@ use wayland_protocols::wp::tablet::zv2::client::{
     zwp_tablet_tool_v2::{self, ZwpTabletToolV2},
     zwp_tablet_v2::{self, ZwpTabletV2},
 };
+use wlr_capture::keys::is_cancel;
 // Imported as a module: this file's own `Shape` is a drawn shape, not a cursor.
 use wlr_capture::pointer::{self, Pointer};
 use wlr_capture::render::Gpu;
@@ -1142,11 +1143,12 @@ impl State {
     /// also arrives over the socket, so these are a convenience, not the only way.
     fn on_key(&mut self, event: &KeyEvent) {
         if self.text_edit.is_some() {
+            if is_cancel(event.keysym, self.ctrl_held) {
+                self.text_edit = None; // discard the in-progress label
+                self.dirty = true;
+                return;
+            }
             match event.keysym {
-                Keysym::Escape => {
-                    self.text_edit = None; // discard the in-progress label
-                    self.dirty = true;
-                }
                 Keysym::Return | Keysym::KP_Enter => self.commit_text(),
                 Keysym::BackSpace => {
                     if let Some((_, buf)) = self.text_edit.as_mut() {
@@ -1199,8 +1201,8 @@ impl State {
             }
             return;
         }
-        // Esc peels back one layer at a time (popup → frozen → draw mode).
-        if event.keysym == Keysym::Escape {
+        // Esc (or Ctrl+[) peels back one layer at a time (popup → frozen → draw mode).
+        if is_cancel(event.keysym, self.ctrl_held) {
             if self.show_palette {
                 self.show_palette = false;
                 self.dirty = true;

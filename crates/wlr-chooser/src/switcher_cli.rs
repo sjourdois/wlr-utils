@@ -141,7 +141,7 @@ struct Cli {
     /// Switch among the windows the compositor keeps aside — sway's scratchpad:
     /// `only` offers just those, `exclude` just the others. `toggle` is `only`,
     /// except that a focused window already shown from the scratchpad is put back
-    /// instead of the overlay opening. Sway-only (needs SWAYSOCK).
+    /// instead of the overlay opening. Sway-only (needs `$SWAYSOCK`).
     #[arg(long, value_enum, value_name = "MODE")]
     scratchpad: Option<ScratchpadArg>,
     /// Label each tile with the key that picks it, taken from a row of the physical

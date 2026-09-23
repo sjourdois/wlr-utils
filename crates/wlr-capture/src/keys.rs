@@ -4,10 +4,21 @@
 //! holds what more than one of them would otherwise spell out for itself.
 
 use egui::Key;
+use smithay_client_toolkit::seat::keyboard::Keysym;
 use std::fmt;
 use std::str::FromStr;
 
 const SHIFT: &str = "Shift+";
+
+/// True for the keystrokes that mean "cancel".
+///
+/// That is `Esc`, or the terminal-style `Ctrl+[` — the chord that has sent the same
+/// byte (`0x1b`) since the ASCII days. `ctrl` is the Control state at the time of the
+/// press: xkb leaves the keysym as `bracketleft`, so only the modifier tells the two
+/// apart.
+pub fn is_cancel(keysym: Keysym, ctrl: bool) -> bool {
+    keysym == Keysym::Escape || (ctrl && keysym == Keysym::bracketleft)
+}
 
 /// A key, held with Shift or without.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

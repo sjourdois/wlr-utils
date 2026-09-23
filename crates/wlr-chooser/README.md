@@ -314,7 +314,7 @@ Sway keeps windows aside in a **scratchpad**, off every workspace until one is a
 back. `--scratchpad` points the switcher at that set:
 
 ```
-bindsym $mod+minus exec wlr-switcher --scratchpad toggle --cycle-key "Minus:Equal"
+bindsym $mod+minus exec wlr-switcher --scratchpad toggle --cycle-key "Minus:Equal --hold"
 ```
 
 - **`only`** offers just the windows in the scratchpad.
