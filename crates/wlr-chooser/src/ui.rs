@@ -1084,6 +1084,7 @@ impl App {
     /// The host calls this whenever the keymap arrives or changes, so the labels always
     /// name the keys of the layout in force — and never the ones of the layout the
     /// alphabet happened to be written for.
+    ///
     /// A key that cycles labels no tile: its press is spoken for, and a label the
     /// press would not honour is worse than none.
     pub fn set_keymap(&mut self, keymap: &str) {

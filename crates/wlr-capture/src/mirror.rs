@@ -13,6 +13,7 @@
 //! ratio; collapsing shrinks it, and any new frame while collapsed restores it.
 
 use crate::error::{CaptureError, Context, Result};
+use crate::keys::is_cancel;
 use crate::pointer::{Pointer, Shape};
 use crate::render::{DmabufImporter, Gpu};
 use crate::stream;
@@ -340,6 +341,8 @@ struct State {
     frozen: bool,
 
     start: Instant,
+    /// Control held, so `Ctrl+[` can be told from a bare `[` — one keysym for both.
+    ctrl: bool,
     closing: bool,
     configured: bool,
     /// Args to re-exec ourselves with on re-pick (`r`); empty disables it.
@@ -529,6 +532,7 @@ pub fn run_on(conn: &Connection, source: Source, config: Config) -> Result<()> {
         opacity: 1.0,
         frozen: false,
         start: Instant::now(),
+        ctrl: false,
         closing: false,
         configured: false,
         relaunch,
@@ -854,10 +858,11 @@ impl KeyboardHandler for State {
         _: &QueueHandle<Self>,
         _: &wl_keyboard::WlKeyboard,
         _: u32,
-        _: Modifiers,
+        modifiers: Modifiers,
         _: RawModifiers,
         _: u32,
     ) {
+        self.ctrl = modifiers.ctrl;
     }
 }
 
@@ -955,8 +960,12 @@ impl State {
 
     /// Keyboard shortcuts (the window must hold keyboard focus — click it first).
     fn on_key(&mut self, key: Keysym) {
+        if is_cancel(key, self.ctrl) {
+            self.closing = true;
+            return;
+        }
         match key {
-            Keysym::Escape | Keysym::q => self.closing = true,
+            Keysym::q => self.closing = true,
             Keysym::space => {
                 self.frozen = !self.frozen;
                 self.redraw();
