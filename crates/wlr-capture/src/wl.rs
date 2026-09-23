@@ -471,11 +471,36 @@ impl PixelLayout {
     }
 }
 
+/// The properties a toplevel has announced since its last `done`, held until that
+/// `done` makes them visible. `ext-foreign-toplevel-list-v1` sends every property
+/// change as its own event and closes the batch with `done`, so a window renaming
+/// itself must not be read half-applied; a property the batch leaves `None` is one
+/// the compositor did not resend, and it keeps its current value.
 #[derive(Default)]
 struct PendingToplevel {
-    identifier: String,
-    title: String,
-    app_id: String,
+    identifier: Option<String>,
+    title: Option<String>,
+    app_id: Option<String>,
+}
+
+/// The batch `handle` is accumulating, started if this is its first property event
+/// since the last `done`.
+///
+/// Published toplevels get an entry here too: the compositor keeps describing a
+/// window for as long as it lives, and looking only at the not-yet-published ones
+/// would drop every rename after the first `done`.
+fn batch_for<'a, H: PartialEq + Clone>(
+    pending: &'a mut Vec<(H, PendingToplevel)>,
+    handle: &H,
+) -> &'a mut PendingToplevel {
+    let i = match pending.iter().position(|(h, _)| h == handle) {
+        Some(i) => i,
+        None => {
+            pending.push((handle.clone(), PendingToplevel::default()));
+            pending.len() - 1
+        }
+    };
+    &mut pending[i].1
 }
 
 /// Opaque handle to a capture session, valid until [`Client::close_session`].
@@ -745,6 +770,8 @@ struct OpenSession {
 #[derive(Default)]
 struct State {
     toplevels: Vec<Toplevel>,
+    /// Handles the compositor has announced whose current batch of properties is
+    /// still open, published ones included: see [`PendingToplevel`].
     pending: Vec<(ExtForeignToplevelHandleV1, PendingToplevel)>,
     outputs: Vec<Output>,
     shm: Option<WlShm>,
@@ -2225,25 +2252,15 @@ impl Dispatch<ExtForeignToplevelHandleV1, ()> for State {
         _: &QueueHandle<Self>,
     ) {
         use ext_foreign_toplevel_handle_v1::Event;
-        let Some((_, p)) = state.pending.iter_mut().find(|(h, _)| h == handle) else {
-            return;
-        };
         match event {
-            Event::Identifier { identifier } => p.identifier = identifier,
-            Event::Title { title } => p.title = title,
-            Event::AppId { app_id } => p.app_id = app_id,
-            Event::Done => {
-                if let Some(pos) = state.pending.iter().position(|(h, _)| h == handle) {
-                    let (h, p) = state.pending.remove(pos);
-                    state.toplevels.push(Toplevel {
-                        handle: h,
-                        identifier: p.identifier,
-                        title: p.title,
-                        app_id: p.app_id,
-                    });
-                }
+            Event::Identifier { identifier } => {
+                batch_for(&mut state.pending, handle).identifier = Some(identifier);
             }
+            Event::Title { title } => batch_for(&mut state.pending, handle).title = Some(title),
+            Event::AppId { app_id } => batch_for(&mut state.pending, handle).app_id = Some(app_id),
+            Event::Done => state.commit_toplevel(handle),
             Event::Closed => {
+                // A handle can be closed mid-batch, so drop it from both sides.
                 state.pending.retain(|(h, _)| h != handle);
                 state.toplevels.retain(|t| &t.handle != handle);
             }
@@ -2331,6 +2348,34 @@ fn first_free(
 }
 
 impl State {
+    /// Apply the batch a `done` closes: the first one publishes the window, every
+    /// later one updates the published entry in place — in one step, so no caller
+    /// ever reads a window half-renamed. A property the batch does not carry is one
+    /// the compositor did not resend, and keeps its value; the identifier is fixed
+    /// for the toplevel's lifetime, so only the first `done` reads it.
+    fn commit_toplevel(&mut self, handle: &ExtForeignToplevelHandleV1) {
+        let Some(pos) = self.pending.iter().position(|(h, _)| h == handle) else {
+            return; // a `done` closing an empty batch: nothing changed
+        };
+        let (handle, p) = self.pending.remove(pos);
+        match self.toplevels.iter_mut().find(|t| t.handle == handle) {
+            Some(t) => {
+                if let Some(title) = p.title {
+                    t.title = title;
+                }
+                if let Some(app_id) = p.app_id {
+                    t.app_id = app_id;
+                }
+            }
+            None => self.toplevels.push(Toplevel {
+                handle,
+                identifier: p.identifier.unwrap_or_default(),
+                title: p.title.unwrap_or_default(),
+                app_id: p.app_id.unwrap_or_default(),
+            }),
+        }
+    }
+
     /// Give every window an app-id, taking from the zwlr list the ones
     /// `ext-foreign-toplevel-list` left empty.
     ///
@@ -2659,6 +2704,42 @@ mod tests {
         assert!(!has_activated(&flags(&[maximized])));
         // No state at all: the window is not focused (and sends this on unfocus).
         assert!(!has_activated(&[]));
+    }
+
+    #[test]
+    fn a_property_event_after_done_opens_a_new_batch() {
+        // `done` takes the batch away (what `commit_toplevel` does with it); the
+        // events that follow must open another one rather than be dropped, since a
+        // window renaming itself is announced exactly this way — long after the
+        // `done` that first published it.
+        let mut pending: Vec<(u32, PendingToplevel)> = Vec::new();
+        let handle = 7;
+
+        batch_for(&mut pending, &handle).identifier = Some("id".into());
+        batch_for(&mut pending, &handle).title = Some("first".into());
+        let first = pending.remove(0).1;
+        assert_eq!(first.identifier.as_deref(), Some("id"));
+        assert_eq!(first.title.as_deref(), Some("first"));
+
+        batch_for(&mut pending, &handle).title = Some("second".into());
+        let second = &pending[0].1;
+        assert_eq!(second.title.as_deref(), Some("second"));
+        // Carrying only the title, so the published app-id and identifier stand.
+        assert!(second.app_id.is_none() && second.identifier.is_none());
+    }
+
+    #[test]
+    fn each_window_accumulates_its_own_batch() {
+        let mut pending: Vec<(u32, PendingToplevel)> = Vec::new();
+        batch_for(&mut pending, &1).title = Some("a".into());
+        batch_for(&mut pending, &2).title = Some("b".into());
+        batch_for(&mut pending, &1).app_id = Some("foot".into());
+
+        assert_eq!(pending.len(), 2);
+        assert_eq!(pending[0].1.title.as_deref(), Some("a"));
+        assert_eq!(pending[0].1.app_id.as_deref(), Some("foot"));
+        assert_eq!(pending[1].1.title.as_deref(), Some("b"));
+        assert!(pending[1].1.app_id.is_none());
     }
 
     #[test]

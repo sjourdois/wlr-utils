@@ -171,7 +171,7 @@ impl WindowOrder {
 }
 
 /// One pickable source, as shown in the grid.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Source {
     pub key: String,   // texture key (window identifier or "out:<name>")
     pub token: String, // what we print on stdout: "Window: …" / "Monitor: …"
@@ -462,7 +462,8 @@ pub(crate) fn capture_thread(
     let mut sessions: HashMap<String, wl::SessionId> = HashMap::new(); // source key -> session
     let mut by_id: HashMap<wl::SessionId, String> = HashMap::new(); // reverse, to label frames
     let mut iconed: HashSet<String> = HashSet::new();
-    let mut last_keys: Vec<String> = Vec::new();
+    // The last list handed to the UI, compared against to keep it current.
+    let mut last_sent: Vec<Source> = Vec::new();
     // Whether the focus history has been confronted with a window list yet.
     let mut mru_checked = false;
     let budget = round_budget();
@@ -506,19 +507,18 @@ pub(crate) fn capture_thread(
                 eprintln!("{}", tr!("mru-unmatched"));
             }
         }
-        let keys: Vec<String> = current.iter().map(|(s, _)| s.key.clone()).collect();
-
-        // Announce the source list only when it actually changes (set or order).
-        if keys != last_keys {
-            let srcs: Vec<Source> = current.iter().map(|(s, _)| s.clone()).collect();
-            if tx.send(Msg::Sources(srcs)).is_err() {
+        // Announce the source list only when it actually changes — its set, its order,
+        // or a window renaming itself, which moves both the label and the identity the
+        // pick is activated by.
+        if !current.iter().map(|(s, _)| s).eq(last_sent.iter()) {
+            last_sent = current.iter().map(|(s, _)| s.clone()).collect();
+            if tx.send(Msg::Sources(last_sent.clone())).is_err() {
                 break;
             }
-            last_keys = keys.clone();
         }
 
         // Close sessions for windows that vanished and tell the UI to drop them.
-        let present: HashSet<&str> = keys.iter().map(String::as_str).collect();
+        let present: HashSet<&str> = current.iter().map(|(s, _)| s.key.as_str()).collect();
         let gone: Vec<String> = sessions
             .keys()
             .filter(|k| !present.contains(k.as_str()))
