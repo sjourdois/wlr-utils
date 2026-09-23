@@ -10,37 +10,10 @@ All notable changes to this project are documented here. The format is based on
 
 - **`wlr-overlayd`, so the overlay appears at once**
   ([#11](https://github.com/sjourdois/wlr-utils/issues/11), requested by
-  [@aoterman12365](https://github.com/aoterman12365)) — a new binary that holds what
-  an overlay costs to build and then throws away: the Wayland connection, the EGL
-  context with its compiled shaders, the glyph atlas. With one running, `wlr-switcher`
-  and `wlr-chooser` hand it the run over a control socket and the overlay is on screen
-  in about ten milliseconds — measured on an NVIDIA driver at 2560×1440, where
-  building it all takes 93 to 109 ms.
-  - **One daemon for both**, because they are one overlay: the same egui app on the
-    same engine, differing only in what they do with the pick. Two daemons would warm
-    two GPU contexts for it.
-  - Nothing starts it for you: put `exec wlr-overlayd` in your session autostart, or
-    install the systemd `--user` unit shipped as
-    `crates/wlr-chooser/contrib/wlr-overlayd.service`. With none listening, both tools show the overlay themselves exactly as
-    before, so existing keybindings and the portal need no change either way. An
-    invocation that finds no daemon says so on stderr, since paying the full startup
-    is otherwise invisible; `--no-daemon` says nothing, having asked for it.
-  - **Nothing is captured while it idles.** The capture thread is spawned for each
-    overlay and dies with it; between two, the daemon holds a connection and a GPU
-    context and reads no window contents. What an overlay put on the GPU is freed
-    when it closes, imported window buffers included, so the daemon holds on to no
-    window it is no longer showing.
-  - Each overlay gets its own layer surface, so it still opens on the screen you are
-    working on, and outputs can come and go under an idle daemon.
-  - It shows one overlay at a time and says so at once. For `wlr-switcher` that is
-    the no-op pressing the keybinding twice has always been; `wlr-chooser` shows its
-    own overlay instead, so a portal asking for a screen-share picker is never left
-    with no answer.
-  - `--no-daemon` shows the overlay in the calling process; `wlr-overlayd --quit`
-    stops a daemon. A run that asks for `--no-gpu` or `--doctor` never goes through
-    it: they change what the whole process does.
-  - Exit statuses and the `wlr-chooser` stdout contract are what they always were,
-    whichever process showed the overlay.
+  [@aoterman12365](https://github.com/aoterman12365)) — a daemon that keeps the
+  Wayland connection, GPU context and glyph atlas warm for `wlr-switcher` and
+  `wlr-chooser`: with it running, the overlay is on screen in about ten milliseconds
+  instead of around a hundred.
 
 ### Changed
 
@@ -52,35 +25,10 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
-- **`wlr-overlayd` no longer dies on a scaled output**
-  ([#18](https://github.com/sjourdois/wlr-utils/issues/18), reported by
-  [@bR3iN](https://github.com/bR3iN)) — the daemon bound each overlay's surface before
-  knowing its size, and Mesa presents the first frame at the size a surface was bound
-  at: a 1×1 buffer on a surface of scale 2, which the compositor answers by closing
-  the connection. The surface is now bound at its first frame, and bound anew when the
-  scale changes under an open overlay; a new overlay also no longer inherits the
-  previous one's scale or input clock.
-
-- **`Tab` cycles again in an Alt-Tab switcher shown without the daemon**
-  ([#17](https://github.com/sjourdois/wlr-utils/issues/17), reported by
-  [@bR3iN](https://github.com/bR3iN)) — a one-shot run built its overlay before it
-  knew the seat, so it never asked the compositor to stop its shortcuts, and sway kept
-  the held chord's `Tab` for its own binding.
-
 - **An overlay no longer comes up with no cursor**
   ([#16](https://github.com/sjourdois/wlr-utils/pull/16), by
-  [@bR3iN](https://github.com/bR3iN)) — the cursor image is undefined after every
-  `wl_pointer.enter` until the client that has the pointer sets one, and none of ours
-  did: an overlay raised over a window that had hidden the cursor — kitty going idle,
-  say — arrived with nothing to point with. Each overlay now sets its own on every
-  enter: a crosshair over the frozen screen, the current tool's over `wlr-draw`, and
-  move / resize / hand over the floating mirror's body, grip and toolbar. `doctor`
-  reports `wp_cursor_shape_manager_v1`, since without it there is no image to set and
-  the old behaviour stands.
-
-- **An overlay no longer resolves its fonts twice** — the font set a theme asks for
-  is resolved once per process and reused, which takes about twenty milliseconds off
-  every overlay after the first in a daemon, and changes nothing for a one-shot run.
+  [@bR3iN](https://github.com/bR3iN)) — raised over a window that had hidden the
+  cursor, an overlay showed none. Each overlay now sets its own.
 
 ## 1.9.0 — 2026-09-21
 
