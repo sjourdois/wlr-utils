@@ -73,7 +73,9 @@ Runtime libraries:
 ## Install
 
 Every route below installs the same six binaries (`wlr-chooser`, `wlr-switcher`,
-`wlr-overlayd`, `wlr-peek`, `wlr-shot`, `wlr-draw`).
+`wlr-overlayd`, `wlr-peek`, `wlr-shot`, `wlr-draw`). The AUR and `.deb` packages also
+install the systemd `--user` units for the `wlr-overlayd` and `wlr-draw` daemons; enable
+the one you want with `systemctl --user enable --now wlr-overlayd.service`.
 
 ### Arch Linux
 
@@ -155,7 +157,8 @@ build: Tesseract for OCR, FFmpeg for recording, and `libgbm-dev` for the GPU cap
 
 ### Uninstall
 
-Package installs come off the usual way (`paru -R wlr-utils-bin`, `apt remove wlr-utils`).
+Package installs come off the usual way (`paru -R wlr-utils-bin`, `apt remove wlr-utils`);
+run `systemctl --user disable --now` first on any unit you enabled.
 A `cargo install` drops the binaries in `~/.cargo/bin`; remove the bundle with
 `cargo uninstall wlr-utils`, or an individual tool the same way:
 
@@ -171,9 +174,9 @@ checkbox in its tray menu, or delete the files by hand (honouring `$XDG_CONFIG_H
 ```sh
 rm -f ~/.config/autostart/wlr-draw.desktop \
       ~/.local/state/wlr-draw/autostart-initialized
-# and, if you installed the systemd unit:
+# and, if you enabled the systemd unit:
 systemctl --user disable --now wlr-draw.service
-rm -f ~/.config/systemd/user/wlr-draw.service
+rm -f ~/.config/systemd/user/wlr-draw.service   # only if you copied it there
 ```
 
 If you started `wlr-overlayd` from its systemd unit, take that one out the same way —
@@ -181,7 +184,7 @@ otherwise it is only a line in your compositor's config:
 
 ```sh
 systemctl --user disable --now wlr-overlayd.service
-rm -f ~/.config/systemd/user/wlr-overlayd.service
+rm -f ~/.config/systemd/user/wlr-overlayd.service   # only if you copied it there
 ```
 
 ## Documentation

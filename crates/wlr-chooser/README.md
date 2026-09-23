@@ -325,8 +325,14 @@ Or, if you would rather have it in the journal and restarted with the session, t
 provided systemd `--user` unit ([`contrib/wlr-overlayd.service`](contrib/wlr-overlayd.service)):
 
 ```sh
-install -Dm644 contrib/wlr-overlayd.service ~/.config/systemd/user/wlr-overlayd.service
 systemctl --user enable --now wlr-overlayd.service
+```
+
+The AUR and `.deb` packages install it in `/usr/lib/systemd/user`. With `cargo install`,
+copy it in place first:
+
+```sh
+install -Dm644 contrib/wlr-overlayd.service ~/.config/systemd/user/wlr-overlayd.service
 ```
 
 It is bound to `graphical-session.target`, so it comes up with the Wayland session and

@@ -209,8 +209,14 @@ Or the provided systemd `--user` unit
 if it ever dies:
 
 ```sh
-install -Dm644 contrib/wlr-draw.service ~/.config/systemd/user/wlr-draw.service
 systemctl --user enable --now wlr-draw.service
+```
+
+The AUR and `.deb` packages install it in `/usr/lib/systemd/user`. With `cargo install`,
+copy it in place first:
+
+```sh
+install -Dm644 contrib/wlr-draw.service ~/.config/systemd/user/wlr-draw.service
 ```
 
 It is bound to `graphical-session.target`, so it comes up with the Wayland session and
@@ -311,7 +317,7 @@ rm -f ~/.config/autostart/wlr-draw.desktop \
       ~/.local/state/wlr-draw/autostart-initialized
 # optional systemd unit:
 systemctl --user disable --now wlr-draw.service
-rm -f ~/.config/systemd/user/wlr-draw.service
+rm -f ~/.config/systemd/user/wlr-draw.service   # only if you copied it there
 ```
 
 ## License
