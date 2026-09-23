@@ -5,7 +5,8 @@
 //! (and bug reports) can tell at a glance whether — and how well — the suite works here.
 //! The capability core is a plain read of [`wl::advertised_globals`] plus a string table;
 //! the environment block reads `/etc/os-release`, the desktop env vars and (best-effort)
-//! the compositor's own `--version`, so exposing it from every binary adds no dependencies.
+//! the compositor's version — from its IPC when the focus backend speaks it, else its
+//! own `--version` — so exposing it from every binary adds no dependencies.
 
 use crate::error::{Context, Result};
 use crate::wl;
@@ -260,23 +261,29 @@ fn parse_pretty_name(os_release: &str) -> Option<String> {
 }
 
 /// Best-effort compositor identification: a name — from the focus backend when the
-/// `focus` feature is on, else the desktop environment variables — plus its
-/// self-reported version line when we recognise the compositor.
+/// `focus` feature is on, else the desktop environment variables — plus its version:
+/// the running compositor's own answer over IPC when the backend has one, else the
+/// self-reported version line of a compositor we recognise.
 fn compositor() -> String {
-    match detected_name() {
+    #[cfg(feature = "focus")]
+    if let Some(b) = crate::focus::detect() {
+        let version = b.version().or_else(|| self_reported_version(b.name()));
+        return describe(b.name(), version);
+    }
+    match desktop_name() {
         None => "unknown (XDG_CURRENT_DESKTOP unset or unrecognised)".to_string(),
-        Some(name) => match self_reported_version(&name) {
-            Some(v) => format!("{name} — {v}"),
-            None => name,
-        },
+        Some(name) => describe(&name, self_reported_version(&name)),
     }
 }
 
-fn detected_name() -> Option<String> {
-    #[cfg(feature = "focus")]
-    if let Some(b) = crate::focus::detect() {
-        return Some(b.name().to_string());
+fn describe(name: &str, version: Option<String>) -> String {
+    match version {
+        Some(v) => format!("{name} — {v}"),
+        None => name.to_string(),
     }
+}
+
+fn desktop_name() -> Option<String> {
     std::env::var("XDG_CURRENT_DESKTOP")
         .or_else(|_| std::env::var("XDG_SESSION_DESKTOP"))
         .ok()
@@ -286,26 +293,32 @@ fn detected_name() -> Option<String> {
 /// Ask a recognised compositor for its version (`sway --version`, `hyprctl version`,
 /// `niri --version`, `cosmic-comp --version`) and return the first non-empty output
 /// line. Best-effort: returns `None` if the compositor is unrecognised or the command
-/// isn't runnable.
+/// isn't runnable. Only `hyprctl` asks the running instance; the others describe the
+/// binary on `PATH`, and the line says so.
 fn self_reported_version(name: &str) -> Option<String> {
     let n = name.to_ascii_lowercase();
-    let (cmd, args): (&str, &[&str]) = if n.contains("sway") {
-        ("sway", &["--version"])
+    let (cmd, args, asks_running): (&str, &[&str], bool) = if n.contains("sway") {
+        ("sway", &["--version"], false)
     } else if n.contains("hypr") {
-        ("hyprctl", &["version"])
+        ("hyprctl", &["version"], true)
     } else if n.contains("niri") {
-        ("niri", &["--version"])
+        ("niri", &["--version"], false)
     } else if n.contains("cosmic") {
-        ("cosmic-comp", &["--version"])
+        ("cosmic-comp", &["--version"], false)
     } else {
         return None;
     };
     let out = std::process::Command::new(cmd).args(args).output().ok()?;
-    String::from_utf8_lossy(&out.stdout)
+    let line = String::from_utf8_lossy(&out.stdout)
         .lines()
         .map(str::trim)
         .find(|l| !l.is_empty())
-        .map(String::from)
+        .map(String::from)?;
+    Some(if asks_running {
+        line
+    } else {
+        format!("{line} [`{cmd}` on PATH, may differ from the running compositor]")
+    })
 }
 
 #[cfg(test)]

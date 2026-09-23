@@ -89,6 +89,12 @@ pub trait FocusBackend {
     fn window_pids(&self) -> Option<WindowPids> {
         None
     }
+    /// The running compositor's version, as it reports it over its IPC. Default
+    /// `None`: the caller can only ask the binary on `PATH`, which need not be the
+    /// one running (an upgrade not yet restarted into, a nested session).
+    fn version(&self) -> Option<String> {
+        None
+    }
     /// Human-readable backend name, for error messages.
     fn name(&self) -> &'static str;
 }
@@ -130,6 +136,10 @@ impl Sway {
 impl FocusBackend for Sway {
     fn name(&self) -> &'static str {
         "sway"
+    }
+
+    fn version(&self) -> Option<String> {
+        Self::with_connection(|c| c.get_version()).map(|v| v.human_readable)
     }
 
     fn focused_output(&self) -> Option<String> {

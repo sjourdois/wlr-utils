@@ -32,6 +32,8 @@ All notable changes to this project are documented here. The format is based on
   ([#16](https://github.com/sjourdois/wlr-utils/pull/16), by
   [@bR3iN](https://github.com/bR3iN)) — raised over a window that had hidden the
   cursor, an overlay showed none. Each overlay now sets its own.
+- **`doctor` reports the running sway's version** — it read the `sway` binary on
+  `PATH`, which can differ after an upgrade or in a nested session.
 
 ## 1.9.0 — 2026-09-21
 
