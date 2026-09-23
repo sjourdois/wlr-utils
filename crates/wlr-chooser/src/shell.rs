@@ -358,13 +358,6 @@ impl State {
         layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
         layer.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
         layer.set_exclusive_zone(-1); // cover everything, including bars
-        // Stop the compositor from eating our own keybinding chord (e.g. `Mod1+Tab`)
-        // while we're up, so Tab reaches us to cycle. Tied to the surface, so it is
-        // asked for again with every overlay.
-        if let (Some(mgr), Some(seat)) = (&self.shortcuts_mgr, &self.seat) {
-            self.shortcuts_inhibitor =
-                Some(mgr.inhibit_shortcuts(layer.wl_surface(), seat, qh, ()));
-        }
         // A context built earlier draws to the new surface from here on; at the last
         // size we knew, which the first configure corrects.
         if let Some(gpu) = self.gpu.as_mut() {
@@ -375,6 +368,22 @@ impl State {
             );
         }
         self.layer = Some(layer);
+        self.inhibit_shortcuts(qh);
+    }
+
+    /// Stop the compositor from eating our own keybinding chord (e.g. `Mod1+Tab`)
+    /// while we're up, so Tab reaches us to cycle. It names both the overlay's surface
+    /// and the seat, so it is asked for once both exist: at [`State::begin`] on a
+    /// warm host, when the seat turns up on a fresh one — its first dispatch comes
+    /// after the surface.
+    fn inhibit_shortcuts(&mut self, qh: &QueueHandle<Self>) {
+        if self.shortcuts_inhibitor.is_none()
+            && let (Some(mgr), Some(seat), Some(layer)) =
+                (&self.shortcuts_mgr, &self.seat, &self.layer)
+        {
+            self.shortcuts_inhibitor =
+                Some(mgr.inhibit_shortcuts(layer.wl_surface(), seat, qh, ()));
+        }
     }
 
     /// Take the overlay down: the surface goes, which hands the keyboard back and
@@ -584,6 +593,7 @@ impl SeatHandler for State {
             // names a surface, and every overlay brings a new one (see
             // [`State::begin`]).
             self.seat = Some(seat.clone());
+            self.inhibit_shortcuts(qh);
         }
         if cap == Capability::Pointer {
             self.pointer.create(&mut self.seat_state, &seat, qh);
