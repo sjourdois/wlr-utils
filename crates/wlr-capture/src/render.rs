@@ -251,6 +251,10 @@ impl Gpu {
     /// several builds a fresh one each time and binds it here. Only the window surface
     /// follows — the display, the context, the compiled shaders and the glyph atlas
     /// are what cost, and they stay.
+    ///
+    /// Bind at the size the surface was configured to: Mesa sizes the back buffer when
+    /// the context is made current on it and applies a resize only from the next swap,
+    /// so a surface bound too small presents one frame at that size.
     pub fn bind(&mut self, surface: &WlSurface, pw: i32, ph: i32) {
         self.unbind();
         self.target = Some(Target::new(
@@ -262,6 +266,11 @@ impl Gpu {
             pw,
             ph,
         ));
+    }
+
+    /// Whether a window surface is bound, i.e. whether there is anywhere to draw.
+    pub fn is_bound(&self) -> bool {
+        self.target.is_some()
     }
 
     /// Release the window surface, keeping the context and everything realised on it.

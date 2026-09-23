@@ -57,9 +57,6 @@ struct State {
     /// picks which output a layer surface belongs to when it is created, so the next
     /// overlay — which may want another output — gets one of its own.
     layer: Option<LayerSurface>,
-    /// A surface with no role, never committed, kept only so a prewarmed host has
-    /// somewhere to realise its EGL context before any overlay exists.
-    scratch: Option<wl_surface::WlSurface>,
     keyboard: Option<wl_keyboard::WlKeyboard>,
     pointer: Pointer,
     /// The seat the keyboard came from, to inhibit its shortcuts on each overlay's
@@ -190,7 +187,6 @@ impl Host {
             compositor,
             layer_shell,
             layer: None,
-            scratch: None,
             keyboard: None,
             pointer: Pointer::new(&globals, &qh),
             seat: None,
@@ -236,15 +232,16 @@ impl Host {
         tlog(t0, "theme applied (fonts)");
         // The context has to be realised on *some* surface, and no overlay exists yet
         // — nor would its surface outlive it. A role-less `wl_surface`, never
-        // committed and so never shown, is enough to build it on; each overlay then
-        // takes it over with `Gpu::bind`.
+        // committed and so never shown, is enough to build it on; it goes once the
+        // atlas is up, and each overlay binds its own at its first frame.
         let scratch = self.state.compositor.create_surface(&self.queue.handle());
         self.state.ensure_gpu(&self.conn, &scratch);
-        self.state.scratch = Some(scratch);
         let ctx = self.state.egui_ctx.clone();
         if let Some(gpu) = self.state.gpu.as_mut() {
             gpu.prewarm(&ctx);
+            gpu.unbind();
         }
+        scratch.destroy();
         tlog(t0, "glyph atlas uploaded");
         Ok(())
     }
@@ -322,6 +319,10 @@ impl State {
         // overlay from inheriting the first one's; the fonts and the glyph atlas live
         // elsewhere and survive, which is the whole point of reusing the context.
         self.egui_ctx.memory_mut(|m| *m = Default::default());
+        // Its input state too: the clock restarts with every overlay (see
+        // `self.start` below), and the pointer history it keeps must not hold times
+        // from a previous one.
+        self.egui_ctx.input_mut(|i| *i = Default::default());
         app.apply_theme(&self.egui_ctx);
         tlog(t0, "theme applied (fonts)");
         self.hold = app.hold();
@@ -329,6 +330,9 @@ impl State {
         if let (Some(app), Some(keymap)) = (self.app.as_mut(), self.keymap.as_ref()) {
             app.set_keymap(keymap);
         }
+        // A new surface starts at buffer scale 1; the compositor says if its output
+        // wants another.
+        self.scale = 1;
         self.start = Instant::now();
         self.events.clear();
         self.modifiers = egui::Modifiers::default();
@@ -358,15 +362,6 @@ impl State {
         layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
         layer.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
         layer.set_exclusive_zone(-1); // cover everything, including bars
-        // A context built earlier draws to the new surface from here on; at the last
-        // size we knew, which the first configure corrects.
-        if let Some(gpu) = self.gpu.as_mut() {
-            gpu.bind(
-                layer.wl_surface(),
-                (self.width * self.scale) as i32,
-                (self.height * self.scale) as i32,
-            );
-        }
         self.layer = Some(layer);
         self.inhibit_shortcuts(qh);
     }
@@ -404,19 +399,25 @@ impl State {
         self.layer = None;
     }
 
+    /// Have a context drawing to `surface`: build it on the first call, and on a
+    /// reused host bind the overlay's surface to the context an earlier one left.
+    ///
+    /// Both happen at the first frame, once `configure` has given the size. A host
+    /// built ahead of any overlay has none yet and builds at 1×1 — what costs is
+    /// realising the context, not the size it is realised at — but never draws there.
     fn ensure_gpu(&mut self, conn: &Connection, surface: &wl_surface::WlSurface) {
-        if self.gpu.is_some() {
-            return;
-        }
-        // A host built ahead of any overlay has no configure yet, so no size: build
-        // at 1×1 and let the first `configure` resize. What costs is realising the
-        // context, not the size it is realised at.
         let (pw, ph) = (
             (self.width * self.scale).max(1) as i32,
             (self.height * self.scale).max(1) as i32,
         );
-        self.gpu = Some(Gpu::new(conn, surface, pw, ph));
-        tlog(self.t0, "gpu ready (egl init + shader compile)");
+        match self.gpu.as_mut() {
+            None => {
+                self.gpu = Some(Gpu::new(conn, surface, pw, ph));
+                tlog(self.t0, "gpu ready (egl init + shader compile)");
+            }
+            Some(gpu) if !gpu.is_bound() => gpu.bind(surface, pw, ph),
+            Some(_) => {}
+        }
     }
 
     fn render(&mut self) {
@@ -479,9 +480,6 @@ impl Drop for State {
         if let Some(gpu) = self.gpu.as_mut() {
             gpu.unbind();
         }
-        if let Some(scratch) = self.scratch.take() {
-            scratch.destroy();
-        }
     }
 }
 
@@ -493,12 +491,24 @@ impl CompositorHandler for State {
         _: &wl_surface::WlSurface,
         new_factor: i32,
     ) {
-        self.scale = new_factor.max(1) as u32;
-        if let Some(layer) = self.layer.as_ref() {
-            layer.wl_surface().set_buffer_scale(new_factor.max(1));
+        let scale = new_factor.max(1) as u32;
+        if scale == self.scale {
+            return;
         }
-        if let (Some(gpu), true) = (self.gpu.as_ref(), self.width > 0) {
-            gpu.resize(
+        self.scale = scale;
+        let Some(layer) = self.layer.as_ref() else {
+            return;
+        };
+        layer.wl_surface().set_buffer_scale(new_factor.max(1));
+        // Bound anew rather than resized: Mesa resizes from the swap after next, so the
+        // next commit would carry the new scale on a buffer of the old size — a fatal
+        // protocol error whenever the scale does not divide it.
+        if let Some(gpu) = self.gpu.as_mut()
+            && gpu.is_bound()
+            && self.width > 0
+        {
+            gpu.bind(
+                layer.wl_surface(),
                 (self.width * self.scale) as i32,
                 (self.height * self.scale) as i32,
             );

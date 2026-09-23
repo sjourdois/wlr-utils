@@ -52,6 +52,15 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **`wlr-overlayd` no longer dies on a scaled output**
+  ([#18](https://github.com/sjourdois/wlr-utils/issues/18), reported by
+  [@bR3iN](https://github.com/bR3iN)) — the daemon bound each overlay's surface before
+  knowing its size, and Mesa presents the first frame at the size a surface was bound
+  at: a 1×1 buffer on a surface of scale 2, which the compositor answers by closing
+  the connection. The surface is now bound at its first frame, and bound anew when the
+  scale changes under an open overlay; a new overlay also no longer inherits the
+  previous one's scale or input clock.
+
 - **`Tab` cycles again in an Alt-Tab switcher shown without the daemon**
   ([#17](https://github.com/sjourdois/wlr-utils/issues/17), reported by
   [@bR3iN](https://github.com/bR3iN)) — a one-shot run built its overlay before it
