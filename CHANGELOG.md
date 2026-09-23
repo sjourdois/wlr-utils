@@ -42,7 +42,21 @@ All notable changes to this project are documented here. The format is based on
   - Exit statuses and the `wlr-chooser` stdout contract are what they always were,
     whichever process showed the overlay.
 
+### Changed
+
+- **`wlr-switcher` run from a terminal shows its overlay** — hold-to-switch, on by
+  default for the strip, read the modifier a terminal never holds as a tap already
+  released, and switched before showing anything. It is now off by default when
+  stdin is a terminal (`--hold` still forces it), and a run with it on says so
+  whenever stderr is a terminal.
+
 ### Fixed
+
+- **`Tab` cycles again in an Alt-Tab switcher shown without the daemon**
+  ([#17](https://github.com/sjourdois/wlr-utils/issues/17), reported by
+  [@bR3iN](https://github.com/bR3iN)) — a one-shot run built its overlay before it
+  knew the seat, so it never asked the compositor to stop its shortcuts, and sway kept
+  the held chord's `Tab` for its own binding.
 
 - **An overlay no longer comes up with no cursor**
   ([#16](https://github.com/sjourdois/wlr-utils/pull/16), by

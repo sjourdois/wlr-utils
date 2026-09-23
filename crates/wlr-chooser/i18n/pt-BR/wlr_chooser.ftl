@@ -23,3 +23,4 @@ daemon-not-running = Nenhum daemon wlr-overlayd está em execução, então esta
 daemon-busy = O daemon wlr-overlayd já está exibindo uma sobreposição, então esta é exibida aqui e paga toda a inicialização.
 daemon-bypassed = Esta execução não passa pelo daemon — --no-gpu muda o comportamento de todo o processo — portanto paga toda a inicialização.
 daemon-cannot-serve = Um daemon não pode assumir esta execução: --no-gpu e --doctor mudam o comportamento de todo o processo. Execute-a com --no-daemon.
+hold-no-modifier = O modo segurar para alternar está ativo: o seletor alterna assim que nenhuma tecla Alt ou Super estiver pressionada — na hora e sem mostrar nada se nenhuma estiver pressionada ao abrir. Passe --no-hold para manter a sobreposição aberta.

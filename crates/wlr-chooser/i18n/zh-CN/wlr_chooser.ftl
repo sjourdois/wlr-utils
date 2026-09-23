@@ -23,3 +23,4 @@ daemon-not-running = 没有正在运行的 wlr-overlayd 守护进程，因此本
 daemon-busy = wlr-overlayd 守护进程已在显示另一个浮层，因此本次浮层在此进程中显示，要承担全部启动开销。
 daemon-bypassed = 本次运行不经过守护进程——--no-gpu 会改变整个进程的行为——因此要承担全部启动开销。
 daemon-cannot-serve = 守护进程无法承接此次运行：--no-gpu 和 --doctor 会改变整个进程的行为。请加上 --no-daemon 运行。
+hold-no-modifier = 按住切换已开启：一旦没有按住 Alt 或 Super 键，切换器就会切换——若打开时没有按住任何一个，则立即切换，不显示任何内容。加上 --no-hold 可让浮层保持打开。

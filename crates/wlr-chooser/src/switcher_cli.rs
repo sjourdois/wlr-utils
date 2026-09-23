@@ -13,6 +13,7 @@ use crate::{FilterArgs, HintRowArg, LayoutArg, OrderArg};
 use crate::{acquire_switch_lock, daemon, run_overlay, shell};
 use crate::{i18n, tr};
 use clap::{Parser, ValueEnum};
+use std::io::IsTerminal;
 use std::time::Instant;
 use wlr_capture::{CaptureError, wl};
 
@@ -60,9 +61,10 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = OrderArg::Mru)]
     window_order: OrderArg,
     /// Hold-to-switch: confirm and close the moment the held launch modifier
-    /// (Alt/Super) is released. Default: on for `strip`, off for `grid`/`card`.
-    /// Bind it to a held modifier — e.g. `Mod1+Tab exec wlr-switcher` — for a
-    /// true Alt-Tab. Use this to force it on for `grid`/`card`.
+    /// (Alt/Super) is released. Default: on for `strip`, off for `grid`/`card`,
+    /// and off when run from a terminal, where no modifier is held. Bind it to a
+    /// held modifier — e.g. `Mod1+Tab exec wlr-switcher` — for a true Alt-Tab.
+    /// Use this to force it on for `grid`/`card`.
     #[arg(long)]
     hold: bool,
     /// Disable hold-to-switch: the overlay stays open after releasing the
@@ -103,8 +105,8 @@ pub fn main() {
     // Kept before clap eats them: what a daemon is handed is the invocation itself,
     // so `wlr-switcher --layout grid` means the same thing whether the daemon shows
     // it or this process does.
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let cli = Cli::parse();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let mut cli = Cli::parse();
     if cli.no_gpu {
         wlr_capture::wl::disable_gpu_globally();
     }
@@ -116,6 +118,20 @@ pub fn main() {
             std::process::exit(1);
         }
         return;
+    }
+
+    // A terminal holds no launch modifier, and hold-to-switch reads that as a tap
+    // released before the overlay got the keyboard: it would switch before showing
+    // anything. Settled here, where the terminal is, and handed on to a daemon like
+    // any flag.
+    if !cli.hold && !cli.no_hold && std::io::stdin().is_terminal() {
+        cli.no_hold = true;
+        args.push("--no-hold".into());
+    }
+    // Whatever gave hold-to-switch to a run someone is watching, say what it will do
+    // with no modifier held.
+    if hold(&cli) && std::io::stderr().is_terminal() {
+        eprintln!("{}", tr!("hold-no-modifier"));
     }
 
     // Hand the run to the daemon if the user is running one. None of this starts
@@ -155,6 +171,18 @@ pub fn main() {
     }
 }
 
+/// Whether the run switches on the modifier's release: by default for the strip (a
+/// true Alt-Tab) and not for the exposé/card; --hold / --no-hold force either.
+fn hold(cli: &Cli) -> bool {
+    if cli.hold {
+        true
+    } else if cli.no_hold {
+        false
+    } else {
+        cli.layout == LayoutArg::Strip
+    }
+}
+
 /// Whether this invocation is one a daemon could take on.
 ///
 /// `--no-gpu` (and `WLR_NO_GPU`) turns off the zero-copy path for the whole process,
@@ -174,15 +202,7 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, Str
     crate::reject_hints_on_card(cli.hints, cli.layout)?;
 
     let view = View::from(cli.layout);
-    // Hold-to-switch defaults on for the strip (a true Alt-Tab) and off for the
-    // exposé/card; --hold / --no-hold force either.
-    let hold = if cli.hold {
-        true
-    } else if cli.no_hold {
-        false
-    } else {
-        cli.layout == LayoutArg::Strip
-    };
+    let hold = hold(&cli);
     let mut opts = Options {
         mode: Mode::Windows,
         show_system: cli.include_system,

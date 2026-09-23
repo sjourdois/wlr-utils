@@ -23,3 +23,4 @@ daemon-not-running = Żaden demon wlr-overlayd nie działa, więc ta nakładka p
 daemon-busy = Demon wlr-overlayd pokazuje już nakładkę, więc ta jest pokazywana tutaj i płaci pełny koszt uruchomienia.
 daemon-bypassed = To uruchomienie nie przechodzi przez demona — --no-gpu zmienia zachowanie całego procesu — więc płaci pełny koszt uruchomienia.
 daemon-cannot-serve = Demon nie może obsłużyć tego uruchomienia: --no-gpu i --doctor zmieniają zachowanie całego procesu. Uruchom je z --no-daemon.
+hold-no-modifier = Tryb przytrzymania jest włączony: przełącznik przełącza, gdy tylko żaden klawisz Alt ani Super nie jest przytrzymany — od razu i bez pokazywania czegokolwiek, jeśli żaden nie jest przytrzymany przy otwarciu. Podaj --no-hold, aby nakładka pozostała otwarta.

@@ -23,3 +23,4 @@ daemon-not-running = Es läuft kein wlr-overlayd-Daemon, daher zahlt dieses Over
 daemon-busy = Der wlr-overlayd-Daemon zeigt bereits ein Overlay, daher wird dieses hier gezeigt und zahlt den vollen Start.
 daemon-bypassed = Dieser Lauf geht nicht über den Daemon — --no-gpu ändert das Verhalten des gesamten Prozesses — und zahlt daher den vollen Start.
 daemon-cannot-serve = Ein Daemon kann diesen Lauf nicht übernehmen: --no-gpu und --doctor ändern das Verhalten des gesamten Prozesses. Führe ihn mit --no-daemon aus.
+hold-no-modifier = Halten-zum-Wechseln ist aktiv: Der Umschalter wechselt, sobald keine Alt- oder Super-Taste gehalten wird — sofort und ohne etwas anzuzeigen, wenn beim Öffnen keine gehalten wird. Übergib --no-hold, damit das Overlay offen bleibt.

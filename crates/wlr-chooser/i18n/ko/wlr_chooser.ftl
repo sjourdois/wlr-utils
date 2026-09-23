@@ -23,3 +23,4 @@ daemon-not-running = 실행 중인 wlr-overlayd 데몬이 없어 이 오버레�
 daemon-busy = wlr-overlayd 데몬이 이미 다른 오버레이를 표시하고 있어 이 오버레이는 여기서 표시되며 시작 비용을 전부 치릅니다.
 daemon-bypassed = 이 실행은 데몬을 거치지 않습니다. --no-gpu가 프로세스 전체의 동작을 바꾸기 때문이며, 시작 비용을 전부 치릅니다.
 daemon-cannot-serve = 데몬은 이 실행을 맡을 수 없습니다. --no-gpu와 --doctor는 프로세스 전체의 동작을 바꿉니다. --no-daemon으로 실행하세요.
+hold-no-modifier = 홀드 전환이 켜져 있습니다. Alt나 Super 키를 누르고 있지 않은 순간 전환됩니다. 열릴 때 아무 키도 누르고 있지 않으면 아무것도 표시하지 않고 즉시 전환됩니다. 오버레이를 열어 두려면 --no-hold를 쓰세요.

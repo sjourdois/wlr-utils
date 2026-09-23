@@ -293,8 +293,10 @@ time (re-pressing the keybind is a no-op).
 
 With hold-to-switch on, a modifier that is no longer held when the overlay gets the
 keyboard counts as released: a quick tap switches straight away, without showing
-the overlay. Bind a strip to a key with no modifier (or run it from a terminal) with
-`--no-hold`, or it switches as soon as it opens.
+the overlay. Run from a terminal, where no modifier is held, the switcher therefore
+leaves hold-to-switch off unless `--hold` asks for it, and says what it will do
+whenever it is on and its output is a terminal. Bind a strip to a key with no
+modifier with `--no-hold`, or it switches as soon as it opens.
 
 ## Instant overlays — `wlr-overlayd`
 
