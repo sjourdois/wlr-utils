@@ -32,7 +32,7 @@ build() {
 	cd "$pkgname-$pkgver"
 	export RUSTUP_TOOLCHAIN=stable
 	export CARGO_TARGET_DIR=target
-	# The `wlr-utils` bundle crate builds all five binaries in one shot (it is kept
+	# The `wlr-utils` bundle crate builds all six binaries in one shot (it is kept
 	# out of the workspace default set, so it must be named explicitly).
 	cargo build --frozen --release -p wlr-utils
 }
@@ -45,9 +45,12 @@ check() {
 
 package() {
 	cd "$pkgname-$pkgver"
-	for _bin in wlr-chooser wlr-switcher wlr-peek wlr-shot wlr-draw; do
+	for _bin in wlr-chooser wlr-switcher wlr-overlayd wlr-peek wlr-shot wlr-draw; do
 		install -Dm755 "target/release/$_bin" "$pkgdir/usr/bin/$_bin"
 	done
+	install -Dm644 -t "$pkgdir/usr/lib/systemd/user" \
+		crates/wlr-chooser/contrib/wlr-overlayd.service \
+		crates/wlr-draw/contrib/wlr-draw.service
 	install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
 	install -Dm644 LICENSE-MIT "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
 	install -Dm644 LICENSE-APACHE "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"

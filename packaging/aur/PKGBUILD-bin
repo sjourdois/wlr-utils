@@ -18,16 +18,21 @@ optdepends=('noto-fonts-cjk: render CJK (Japanese/Chinese/Korean) text'
 provides=('wlr-utils')
 conflicts=('wlr-utils')
 _archive="wlr-utils-x86_64-unknown-linux-gnu"
-source=("$_archive-$pkgver.tar.xz::$url/releases/download/v$pkgver/$_archive.tar.xz")
-sha256sums=('SKIP') # run `updpkgsums` to fill before publishing
+_raw="https://raw.githubusercontent.com/sjourdois/wlr-utils/v$pkgver"
+source=("$_archive-$pkgver.tar.xz::$url/releases/download/v$pkgver/$_archive.tar.xz"
+        "wlr-overlayd-$pkgver.service::$_raw/crates/wlr-chooser/contrib/wlr-overlayd.service"
+        "wlr-draw-$pkgver.service::$_raw/crates/wlr-draw/contrib/wlr-draw.service")
+sha256sums=('SKIP' 'SKIP' 'SKIP') # run `updpkgsums` to fill before publishing
 
 package() {
 	# The cargo-dist archive unpacks into a single top-level directory named after
-	# the target triple, holding the five binaries plus the READMEs and licences.
+	# the target triple, holding the six binaries plus the READMEs and licences.
 	cd "$_archive"
-	for _bin in wlr-chooser wlr-switcher wlr-peek wlr-shot wlr-draw; do
+	for _bin in wlr-chooser wlr-switcher wlr-overlayd wlr-peek wlr-shot wlr-draw; do
 		install -Dm755 "$_bin" "$pkgdir/usr/bin/$_bin"
 	done
+	install -Dm644 "$srcdir/wlr-overlayd-$pkgver.service" "$pkgdir/usr/lib/systemd/user/wlr-overlayd.service"
+	install -Dm644 "$srcdir/wlr-draw-$pkgver.service" "$pkgdir/usr/lib/systemd/user/wlr-draw.service"
 	install -Dm644 README.md "$pkgdir/usr/share/doc/wlr-utils/README.md"
 	install -Dm644 LICENSE-MIT "$pkgdir/usr/share/licenses/$pkgname/LICENSE-MIT"
 	install -Dm644 LICENSE-APACHE "$pkgdir/usr/share/licenses/$pkgname/LICENSE-APACHE"
