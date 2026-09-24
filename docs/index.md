@@ -64,7 +64,7 @@ with hold-to-switch a lone window left is switched to at once.
 bindsym Mod1+Tab exec wlr-switcher
 bindsym Mod1+grave exec wlr-switcher --layout grid --hints --app-id foot
 # sway's scratchpad: one key fetches a window, and puts it back.
-bindsym $mod+minus exec wlr-switcher --scratchpad toggle --cycle-key Minus:Equal --hold
+bindsym $mod+minus exec wlr-switcher --scratchpad toggle --cycle-key Minus:Equal
 ```
 
 Start `wlr-overlayd` with your session — `exec wlr-overlayd` — and the overlay

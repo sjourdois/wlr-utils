@@ -294,10 +294,9 @@ names both. Keys are written the way egui names them — `Tab`, `Down`, `j`, `F5
 `-` — with an optional `Shift+` in front. A key that cycles never also labels a tile,
 so `--hints` skips it.
 
-Hold-to-switch is **on by default for `strip`** and **off for `grid`/`card`**;
-force it either way with `--hold` / `--no-hold`. With it off, the overlay stays
-open after release — confirm with Enter or a click. Only one switcher opens at a
-time (re-pressing the keybind is a no-op).
+Hold-to-switch is **on by default for `strip`** and **off for `grid`/`card`**. With
+it off (`--no-hold`), the overlay stays open after release — confirm with Enter or a
+click. Only one switcher opens at a time (re-pressing the keybind is a no-op).
 
 When a filter narrows the windows (`--app-id`, `--title`, `--pid`, `--scratchpad`)
 and hold-to-switch is on, a run that finds only one window switches to it outright
@@ -305,12 +304,14 @@ and shows no overlay: releasing the modifier would land there anyway. An unfilte
 Alt-Tab keeps its overlay. `--auto-select` forces this on — with no filter, or with
 `--no-hold` — and `--no-auto-select` turns it off.
 
-With hold-to-switch on, a modifier that is no longer held when the overlay gets the
-keyboard counts as released: a quick tap switches straight away, without showing
-the overlay. Run from a terminal, where no modifier is held, the switcher therefore
-leaves hold-to-switch off unless `--hold` asks for it, and says what it will do
-whenever it is on and its output is a terminal. Bind a strip to a key with no
-modifier with `--no-hold`, or it switches as soon as it opens.
+By default the strip arms hold-to-switch only once it sees Alt or Super held when it
+gets the keyboard. Started with none held — from a terminal, a bar, a launcher or a
+script — it stays open like any overlay. So does a tap quick enough to be over by
+then, which with `wlr-overlayd` running takes a very quick one: the overlay has the
+keyboard within milliseconds. `--hold` says the run is bound to a held modifier, so
+one already released then was released early, and the switch is made straight away
+without showing anything — the quickest Alt-Tab, and the way to turn hold-to-switch on
+for `grid`/`card`. Run from a terminal, `--hold` says what it will do.
 
 ### sway's scratchpad — `--scratchpad`
 
@@ -318,7 +319,7 @@ Sway keeps windows aside in a **scratchpad**, off every workspace until one is a
 back. `--scratchpad` points the switcher at that set:
 
 ```
-bindsym $mod+minus exec wlr-switcher --scratchpad toggle --cycle-key Minus:Equal --hold
+bindsym $mod+minus exec wlr-switcher --scratchpad toggle --cycle-key Minus:Equal
 ```
 
 - **`only`** offers just the windows in the scratchpad.

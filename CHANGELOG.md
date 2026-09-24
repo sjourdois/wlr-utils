@@ -34,11 +34,11 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
-- **`wlr-switcher` run from a terminal shows its overlay** — hold-to-switch, on by
-  default for the strip, read the modifier a terminal never holds as a tap already
-  released, and switched before showing anything. It is now off by default when
-  stdin is a terminal (`--hold` still forces it), and a run with it on says so
-  whenever stderr is a terminal.
+- **`wlr-switcher` waits unless it sees a modifier held** — hold-to-switch, on by
+  default for the strip, took a modifier found released as a tap already over, so a
+  run from a terminal, a bar or a script switched before showing anything. It now arms
+  only on a modifier it sees held; `--hold` keeps the old reading, for the quickest
+  Alt-Tab.
 - **A build from git names its commit** — `--version` and `doctor` report
   `1.9.0-17-g7a434c1` instead of the release number when the binary is not built
   from a release tag.
