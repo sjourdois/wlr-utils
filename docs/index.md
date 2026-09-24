@@ -54,8 +54,9 @@ workspaces* — even occluded ones. Real moving thumbnails, not icons.
 
 Press a letter to jump straight to a window: the label is whatever your keyboard
 layout prints on that key, so it names the key under your finger — `a` on QWERTY,
-`q` on AZERTY, same position. Narrow the list first with `--app-id`, `--title` or
-`--pid`; the windows left out are never captured.
+`q` on AZERTY, same position. Narrow the list first with `--app-id`, `--title`,
+`--pid` or, on sway, `--scratchpad`; the windows left out are never captured, and
+with hold-to-switch a lone window left is switched to at once.
 
 ```sh
 # A true Alt-Tab: bind it to a held modifier.

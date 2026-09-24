@@ -31,7 +31,7 @@ single-tool install can produce it too.
 | `linux-dmabuf` (`zwp_linux_dmabuf_v1`) | zero-copy GPU capture (CPU `wl_shm` is the fallback) | live previews: `wlr-chooser`, `wlr-switcher`, `wlr-peek mirror`, `wlr-shot record` |
 | `xdg-output` (`zxdg_output_manager_v1`) | accurate logical geometry (fractional scale, positions) | recommended; falls back to `wl_output` |
 | `tablet-v2` (`zwp_tablet_manager_v2`) | graphics tablet (stylus) input | optional, `wlr-draw`; without it, mouse only |
-| compositor IPC, or `cosmic-toplevel-info` (`zcosmic_toplevel_info_v1`, v2+) on COSMIC | "the active window" / "the current output" (`-a`, `--current-output`); an IPC also names the process behind a window (`--pid`), which no Wayland protocol does | a per-compositor focus backend |
+| compositor IPC, or `cosmic-toplevel-info` (`zcosmic_toplevel_info_v1`, v2+) on COSMIC | "the active window" / "the current output" (`-a`, `--current-output`); an IPC also names the process behind a window (`--pid`) and, on sway, the windows in its scratchpad (`--scratchpad`), which no Wayland protocol does | a per-compositor focus backend |
 
 The engine drives `ext-image-copy-capture-v1` where it is available, and
 `wlr-screencopy` otherwise. `ext-image-capture-source-v1` landed in two steps: the base
@@ -82,7 +82,7 @@ backend (for `-a` / `--current-output`). Run `wlr-peek doctor` to check your own
 
 | Compositor | Screen capture | Window capture | Overlays (layer-shell) | Focus IPC |
 | --- | --- | --- | --- | --- |
-| **Sway** | ✅ ≥ 1.11 (wlroots 0.19) | ✅ ≥ 1.12 (wlroots 0.20) | ✅ | ✅ `$SWAYSOCK` (MRU, pid) |
+| **Sway** | ✅ ≥ 1.11 (wlroots 0.19) | ✅ ≥ 1.12 (wlroots 0.20) | ✅ | ✅ `$SWAYSOCK` (MRU, pid, scratchpad) |
 | **Hyprland** | ✅ ≥ v0.54 | ✅ ≥ v0.54 | ✅ | ✅ `hyprctl` (MRU, pid) |
 | **labwc** | ✅ ≥ 0.9 (wlroots 0.19) | 🟡 ≥ 0.20 (partial) | ✅ | ❌ |
 | **cosmic-comp** | ✅ | ✅ | ✅ | ✅ `zcosmic_toplevel_info_v1` |
@@ -95,8 +95,9 @@ backend (for `-a` / `--current-output`). Run `wlr-peek doctor` to check your own
 
 ✅ full · 🟡 partial · ❌ none. "MRU" marks a backend that also reports the window focus
 history, for `--window-order mru`; "pid" one that names the process behind a window, for
-`--pid`. Versions are from each project's release notes / merge requests (the
-per-interface numbers on wayland.app are unreliable snapshots).
+`--pid`; "scratchpad" one that reports the windows kept aside, for `--scratchpad`.
+Versions are from each project's release notes / merge requests (the per-interface
+numbers on wayland.app are unreliable snapshots).
 
 Tested on **Sway** ≥ 1.12 (the development compositor), **Hyprland 0.56.2**,
 **niri 26.04**, **KWin 6.7.5** and **Mutter 50.5**. On **cosmic-comp 1.8.0** the

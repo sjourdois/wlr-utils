@@ -49,6 +49,9 @@ The reusable bricks plus the overlay UI helpers they share:
   for a windowing host to hold. The cursor image is undefined after each enter, so a
   surface that sets none inherits whatever the last client left. Pulled in by `overlay`
   and `mirror`; enable it alone for a host that renders its own surfaces.
+- **`keys`** *(feature)* — keyboard pieces the tools share: the keystrokes that mean
+  cancel (`Esc`, and the terminal's `Ctrl+[`), and a keystroke a user can write down
+  (`Shift+Tab`). Pulled in by `overlay` and `mirror`.
 - **`video` / `audio`** *(features)* — FFmpeg encoding (H.264 NVENC/VAAPI/libx264, and
   animated GIF/WebP) and native-PipeWire audio capture (with an optional Pulse/ALSA
   fallback via libavdevice).
@@ -75,10 +78,10 @@ features. On by default: `gpu`, `toolkit`.
   (`--no-default-features`) for a headless build that only captures and reads back —
   no `egui`/`resvg`/`fontconfig`.
 - Off by default: **`compose`** (source→image), **`focus`** (compositor IPC),
-  **`pointer`** (the seat's pointer and its cursor image), **`overlay`**, **`mirror`**,
-  **`video`** (FFmpeg), **`audio`** (PipeWire; **`audio-fallback`** adds Pulse/ALSA).
-  `pointer`, `overlay` and `mirror` are what pull `smithay-client-toolkit`; the core
-  builds without it.
+  **`pointer`** (the seat's pointer and its cursor image), **`keys`** (shared
+  keystrokes), **`overlay`**, **`mirror`**, **`video`** (FFmpeg), **`audio`**
+  (PipeWire; **`audio-fallback`** adds Pulse/ALSA). `pointer`, `keys`, `overlay` and
+  `mirror` are what pull `smithay-client-toolkit`; the core builds without it.
 
 ## License
 

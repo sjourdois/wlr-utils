@@ -43,7 +43,7 @@ cargo build -p wlr-utils          # the bundle isn't in the default set
 
 The engine has feature combinations worth checking when you touch it, e.g.
 `cargo clippy -p wlr-capture --no-default-features --features overlay` (and
-`mirror`, `compose`, `focus`, `video`, `gpu`).
+`mirror`, `compose`, `focus`, `pointer`, `keys`, `video`, `gpu`).
 
 ## Testing the overlays without disturbing your screen
 

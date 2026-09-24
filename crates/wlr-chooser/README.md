@@ -142,8 +142,8 @@ focused output. You can pass options in `chooser_cmd`, e.g.
 -V, --version          Print version
 ```
 
-In the overlay: type to filter, arrows to move, Enter/click to pick, Escape or
-click-outside to cancel, and the tab bar switches All / Windows / Screens.
+In the overlay: type to filter, arrows to move, Enter/click to pick, Escape (or
+`Ctrl+[`) or click-outside to cancel, and the tab bar switches All / Windows / Screens.
 
 The three presentations of `--layout` are the ones `wlr-switcher` offers, with the
 card as the default here: the portal runs the chooser with no argument, so that path
@@ -260,7 +260,9 @@ bindsym $mod+e exec wlr-switcher --pid $(pidof -s emacs)
 ```
 
 The windows they leave out are never captured. If no open window matches,
-`wlr-switcher` says so and exits rather than opening an empty overlay.
+`wlr-switcher` says so and exits rather than opening an empty overlay; if only one
+does, a hold-to-switch run switches to it without one (see `--auto-select` below). On
+sway, `--scratchpad` narrows the list the same way.
 
 Windows are listed most recently focused first where the compositor reports it
 (Sway, Hyprland, niri), by name otherwise; `--window-order by-name` always orders
@@ -284,7 +286,7 @@ bindsym $mod+Tab exec wlr-switcher --layout grid   # full-screen exposé
 - The overlay appears while the modifier (Alt **or** Super) is held.
 - **`Tab`** moves to the next window, **`Shift+Tab`** to the previous one.
 - **Releasing the modifier** confirms the highlighted window and switches to it.
-- Mouse click and `Esc` (cancel) still work.
+- Mouse click still works, and `Esc` (or `Ctrl+[`) cancels.
 
 `--cycle-key` moves the cycling elsewhere: `--cycle-key j` puts "next" on `j` and
 leaves "previous" on the same key with Shift toggled, and `--cycle-key <next>:<prev>`
@@ -297,9 +299,11 @@ force it either way with `--hold` / `--no-hold`. With it off, the overlay stays
 open after release — confirm with Enter or a click. Only one switcher opens at a
 time (re-pressing the keybind is a no-op).
 
-With it on, a run that finds only one window to switch to focuses it outright and
-shows no overlay at all: releasing the modifier would switch to that window anyway,
-so there is no choice to put on screen.
+When a filter narrows the windows (`--app-id`, `--title`, `--pid`, `--scratchpad`)
+and hold-to-switch is on, a run that finds only one window switches to it outright
+and shows no overlay: releasing the modifier would land there anyway. An unfiltered
+Alt-Tab keeps its overlay. `--auto-select` forces this on — with no filter, or with
+`--no-hold` — and `--no-auto-select` turns it off.
 
 With hold-to-switch on, a modifier that is no longer held when the overlay gets the
 keyboard counts as released: a quick tap switches straight away, without showing
@@ -322,6 +326,10 @@ bindsym $mod+minus exec wlr-switcher --scratchpad toggle --cycle-key "Minus:Equa
 - **`toggle`** has semantics similar to sway's own `scratchpad show`: a focused window
   already shown from the scratchpad goes back, and otherwise the overlay opens on
   `only` — so one key both fetches a window and puts it away again.
+
+With a single window in the scratchpad, `only` and `toggle` bring it back straight
+away (see `--auto-select` above); with none, the switcher says the scratchpad is empty
+and exits.
 
 `--cycle-key` keeps the whole gesture on the key the binding is on: hold `$mod`, press
 minus again for the next window and `=` for the previous one, release to switch.

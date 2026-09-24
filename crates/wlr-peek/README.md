@@ -38,7 +38,8 @@ $ wlr-peek color --clipboard      # copy to the Wayland clipboard instead
 
 - Move the cursor; the loupe magnifies the pixels around it.
 - **Click** (or **Enter**) to pick the pixel under the crosshair.
-- **Esc** to cancel (exit status 1).
+- **Esc** to cancel (exit status 1). `Ctrl+[` does the same, here and wherever an
+  overlay below takes `Esc`.
 
 `--format hex|rgb|plain` chooses the output. `--clipboard` runs a small background
 daemon that serves the colour as text on the wlroots clipboard until replaced.
