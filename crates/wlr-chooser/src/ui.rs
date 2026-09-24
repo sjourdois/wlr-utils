@@ -348,8 +348,9 @@ pub struct WindowFilters {
     /// means "never asked about", which is the only thing [`Self::refresh_pids`] acts
     /// on — a window the compositor cannot name is not asked about twice.
     processes: HashMap<String, Option<u32>>,
-    /// Which windows are offered by [`wl::Toplevel::identifier`].
-    identifiers: Filter,
+    /// Which windows are offered by [`wl::Toplevel::identifier`], with the flag that
+    /// asked for it as the command line wrote it.
+    identifiers: Option<(Filter, String)>,
 }
 
 impl WindowFilters {
@@ -360,7 +361,7 @@ impl WindowFilters {
             titles,
             pids,
             processes: HashMap::new(),
-            identifiers: Filter::default(),
+            identifiers: None,
         }
     }
 
@@ -369,8 +370,11 @@ impl WindowFilters {
     /// The names are taken as read rather than queried, and are not looked at again: a
     /// window that comes to belong in the set while the overlay is up does not change
     /// what the run offered.
-    pub fn set_identifiers(&mut self, identifiers: Filter) {
-        self.identifiers = identifiers;
+    ///
+    /// `flag` is the option that asked for it, as written, for [`Self::describe`] to
+    /// quote: the names alone no longer say which option picked them.
+    pub fn set_identifiers(&mut self, identifiers: Filter, flag: String) {
+        self.identifiers = Some((identifiers, flag));
     }
 
     /// Whether nothing was asked for, in which case every window is offered.
@@ -378,7 +382,7 @@ impl WindowFilters {
         self.app_ids.is_empty()
             && self.titles.is_empty()
             && self.pids.is_empty()
-            && self.identifiers.is_empty()
+            && self.identifiers.as_ref().is_none_or(|(f, _)| f.is_empty())
     }
 
     /// Whether this run has to know the process behind each window.
@@ -442,7 +446,11 @@ impl WindowFilters {
                 .copied()
                 .flatten()
                 .is_some_and(|pid| self.pids.contains(&pid));
-        app_ok && title_ok && pid_ok && self.identifiers.admits(w.identifier)
+        let identifier_ok = self
+            .identifiers
+            .as_ref()
+            .is_none_or(|(f, _)| f.admits(w.identifier));
+        app_ok && title_ok && pid_ok && identifier_ok
     }
 
     /// The filter written back as the flags that produced it, to quote in the message
@@ -453,10 +461,7 @@ impl WindowFilters {
             .map(|a| format!("--app-id {a}"))
             .chain(self.titles.iter().map(|t| format!("--title {t}")))
             .chain(self.pids.iter().map(|p| format!("--pid {p}")))
-            .chain(
-                (!self.identifiers.is_empty())
-                    .then(|| "--scratchpad only|exclude|toggle".to_string()),
-            )
+            .chain(self.identifiers.iter().map(|(_, flag)| flag.clone()))
             .collect::<Vec<_>>()
             .join(" ")
     }

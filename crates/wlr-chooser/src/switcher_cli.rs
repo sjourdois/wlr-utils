@@ -343,10 +343,20 @@ fn scratchpad_settled(mode: ScratchpadArg, opts: &mut Options) -> Result<bool, S
             .ok_or_else(|| tr!("scratchpad-not-put-aside"))?;
         return Ok(true);
     }
-    opts.window_filters.set_identifiers(match mode {
+    // Said in its own words, as sway's `scratchpad show` does, rather than as a filter
+    // that happens to match nothing.
+    if mode != ScratchpadArg::Exclude && aside.is_empty() {
+        return Err(tr!("scratchpad-empty"));
+    }
+    let flag = mode
+        .to_possible_value()
+        .map(|v| format!("--scratchpad {}", v.get_name()))
+        .unwrap_or_default();
+    let filter = match mode {
         ScratchpadArg::Exclude => Filter::except(aside),
         ScratchpadArg::Only | ScratchpadArg::Toggle => Filter::only(aside),
-    });
+    };
+    opts.window_filters.set_identifiers(filter, flag);
     Ok(false)
 }
 
