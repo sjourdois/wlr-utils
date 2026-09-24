@@ -122,6 +122,13 @@ pub(crate) struct FilterArgs {
     pid: Vec<u32>,
 }
 
+impl FilterArgs {
+    /// Whether none of the flags was given.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.app_id.is_empty() && self.title.is_empty() && self.pid.is_empty()
+    }
+}
+
 impl From<FilterArgs> for ui::WindowFilters {
     fn from(a: FilterArgs) -> Self {
         Self::new(a.app_id, a.title, a.pid)

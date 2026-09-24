@@ -133,6 +133,15 @@ struct Cli {
     /// modifier — confirm with Enter or a click. Overrides the per-layout default.
     #[arg(long, conflicts_with = "hold")]
     no_hold: bool,
+    /// With a single window to offer, switch to it without showing the overlay; with
+    /// none, exit as if cancelled. Default: on when a filter narrows the windows
+    /// (`--app-id`, `--title`, `--pid`, `--scratchpad`) under hold-to-switch, off
+    /// otherwise. Use this to force it on.
+    #[arg(long)]
+    auto_select: bool,
+    /// Show the overlay even with a single window to offer. Overrides the default.
+    #[arg(long, conflicts_with = "auto_select")]
+    no_auto_select: bool,
     /// Keys that move the highlight: the key for the next window, optionally
     /// followed by `:` and the key for the previous one. Left out, the previous one
     /// is the same key with the Shift state toggled.
@@ -257,6 +266,22 @@ fn hold(cli: &Cli) -> bool {
     }
 }
 
+/// Whether a run with a single window to offer switches to it outright.
+///
+/// A filter on the command line asks for a window rather than for the whole set; under
+/// hold-to-switch, releasing the modifier would land on that lone window anyway, so the
+/// overlay has no choice left to show. An unfiltered Alt-Tab keeps its overlay.
+/// --auto-select / --no-auto-select force either.
+fn auto_select(cli: &Cli, hold: bool) -> bool {
+    if cli.auto_select {
+        true
+    } else if cli.no_auto_select {
+        false
+    } else {
+        hold && (!cli.filters.is_empty() || cli.scratchpad.is_some())
+    }
+}
+
 /// Whether this invocation is one a daemon could take on.
 ///
 /// `--no-gpu` (and `WLR_NO_GPU`) turns off the zero-copy path for the whole process,
@@ -277,6 +302,7 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, Str
 
     let view = View::from(cli.layout);
     let hold = hold(&cli);
+    let auto_select = auto_select(&cli, hold);
     let mut opts = Options {
         mode: Mode::Windows,
         show_system: cli.include_system,
@@ -287,10 +313,7 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, Str
         order: cli.window_order.into(),
         window_filters: cli.filters.into(),
         hints: cli.hints.map(Into::into),
-        // Under hold-to-switch, releasing the modifier switches to the highlighted
-        // window; where only one is on offer, that is where the run ends up whatever
-        // happens in between, so the overlay has no choice left to put on screen.
-        auto_select: hold,
+        auto_select,
         cycle: cli.cycle_key.into(),
     };
     if let Some(mode) = cli.scratchpad
@@ -424,6 +447,20 @@ mod tests {
         // `conflicts_with` pointing at nothing, and the like. It does not try the
         // defaults through their parsers.
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn only_a_filtered_hold_run_auto_selects_by_default() {
+        let auto = |args: &[&str]| {
+            let cli = Cli::try_parse_from([&["wlr-switcher"], args].concat()).unwrap();
+            auto_select(&cli, hold(&cli))
+        };
+        assert!(!auto(&[]));
+        assert!(auto(&["--app-id", "firefox"]));
+        assert!(auto(&["--scratchpad", "toggle"]));
+        assert!(!auto(&["--app-id", "firefox", "--no-hold"]));
+        assert!(!auto(&["--app-id", "firefox", "--no-auto-select"]));
+        assert!(auto(&["--auto-select", "--no-hold"]));
     }
 
     #[test]
