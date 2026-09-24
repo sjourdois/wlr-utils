@@ -1,6 +1,6 @@
 # Maintainer: Stéphane Jourdois <stephane@jourdois.fr>
 pkgname=wlr-utils
-pkgver=1.8.0
+pkgver=1.10.0
 pkgrel=1
 pkgdesc='Native screen tools for wlroots compositors: pick, switch, capture, inspect and annotate — one capture engine'
 arch=('x86_64')

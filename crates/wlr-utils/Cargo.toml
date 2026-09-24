@@ -52,10 +52,10 @@ recording = ["wlr-shot/video", "wlr-shot/audio"]
 # (GPU capture, OCR, video+audio recording, tray). Pull a single tool instead for a
 # lighter footprint: `cargo install wlr-shot`, etc. wlr-shot's recording is gated behind
 # this crate's `recording` feature (above) so a .deb can be built without FFmpeg/PipeWire.
-wlr-chooser = { path = "../wlr-chooser", version = "1.9.0" }
-wlr-peek = { path = "../wlr-peek", version = "1.9.0" }
-wlr-shot = { path = "../wlr-shot", version = "1.9.0", default-features = false, features = ["i18n"] }
-wlr-draw = { path = "../wlr-draw", version = "1.9.0" }
+wlr-chooser = { path = "../wlr-chooser", version = "1.10.0" }
+wlr-peek = { path = "../wlr-peek", version = "1.10.0" }
+wlr-shot = { path = "../wlr-shot", version = "1.10.0", default-features = false, features = ["i18n"] }
+wlr-draw = { path = "../wlr-draw", version = "1.10.0" }
 anyhow.workspace = true
 
 # A single Debian package shipping every tool, in place of one .deb per crate. EGL/GL and

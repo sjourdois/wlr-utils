@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 1.10.0 — 2026-09-24
 
 ### Added
 
@@ -51,6 +51,8 @@ All notable changes to this project are documented here. The format is based on
   cursor, an overlay showed none. Each overlay now sets its own.
 - **`doctor` reports the running sway's version** — it read the `sway` binary on
   `PATH`, which can differ after an upgrade or in a nested session.
+- **A window renamed under an open overlay shows its new title** — the tiles kept the
+  title and app id the window had when the overlay opened.
 
 ## 1.9.0 — 2026-09-21
 
