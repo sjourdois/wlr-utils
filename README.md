@@ -214,7 +214,11 @@ Bug reports, translations and patches welcome — see
 - [Ben Reinhold](https://github.com/bR3iN) — faster overlay startup through fontconfig's
   cache ([#10](https://github.com/sjourdois/wlr-utils/pull/10)); most recently used
   window order and reliable quick Alt-Tab in wlr-switcher
-  ([#14](https://github.com/sjourdois/wlr-utils/pull/14))
+  ([#14](https://github.com/sjourdois/wlr-utils/pull/14)); overlays that set their own
+  cursor, so one hidden by another window shows again
+  ([#16](https://github.com/sjourdois/wlr-utils/pull/16)); sway's scratchpad, custom
+  cycle keys and one-window auto-select in wlr-switcher
+  ([#20](https://github.com/sjourdois/wlr-utils/pull/20))
 
 ## License
 

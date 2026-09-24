@@ -62,6 +62,8 @@ with hold-to-switch a lone window left is switched to at once.
 # A true Alt-Tab: bind it to a held modifier.
 bindsym Mod1+Tab exec wlr-switcher
 bindsym Mod1+grave exec wlr-switcher --layout grid --hints --app-id foot
+# sway's scratchpad: one key fetches a window, and puts it back.
+bindsym $mod+minus exec wlr-switcher --scratchpad toggle --cycle-key Minus:Equal --hold
 ```
 
 Start `wlr-overlayd` with your session — `exec wlr-overlayd` — and the overlay

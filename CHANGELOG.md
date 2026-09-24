@@ -14,6 +14,23 @@ All notable changes to this project are documented here. The format is based on
   Wayland connection, GPU context and glyph atlas warm for `wlr-switcher` and
   `wlr-chooser`: with it running, the overlay is on screen in about ten milliseconds
   instead of around a hundred.
+- **`--scratchpad` on `wlr-switcher`**
+  ([#20](https://github.com/sjourdois/wlr-utils/pull/20), by
+  [@bR3iN](https://github.com/bR3iN)) — on sway, `only` offers the windows kept in
+  the scratchpad, `exclude` the others, and `toggle` works like `scratchpad show`:
+  one key brings a window out and puts it back.
+- **`--cycle-key` on `wlr-switcher`**
+  ([#20](https://github.com/sjourdois/wlr-utils/pull/20), by
+  [@bR3iN](https://github.com/bR3iN)) — cycles on keys other than `Tab` /
+  `Shift+Tab`, such as the one the binding itself is on.
+- **A lone window is switched to at once**
+  ([#20](https://github.com/sjourdois/wlr-utils/pull/20), by
+  [@bR3iN](https://github.com/bR3iN)) — when a filter leaves `wlr-switcher` a single
+  window under hold-to-switch, it focuses it without showing the overlay.
+  `--auto-select` / `--no-auto-select` force either way.
+- **`Ctrl+[` cancels like `Esc`**
+  ([#20](https://github.com/sjourdois/wlr-utils/pull/20), by
+  [@bR3iN](https://github.com/bR3iN)) — in every overlay.
 
 ### Changed
 
