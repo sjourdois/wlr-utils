@@ -29,7 +29,7 @@ tray = ["dep:ksni"]
 # plus the one-shot output capture (`compose`) used for the freeze-frame backdrop and
 # the seat's pointer with its cursor image (`pointer`). The overlay is otherwise a
 # transparent vector layer (no live stream).
-wlr-capture = { path = "../wlr-capture", version = "1.9.0", default-features = false, features = ["toolkit", "compose", "pointer", "input"] }
+wlr-capture = { path = "../wlr-capture", version = "1.9.0", default-features = false, features = ["toolkit", "compose", "pointer", "keys"] }
 # This crate owns its own localised catalog (`i18n/`); wlr-i18n is the shared loader plumbing.
 wlr-i18n = { path = "../wlr-i18n", version = "1.9.0", default-features = false }
 # For the `#[derive(RustEmbed)]` over this crate's `i18n/` folder (the `i18n` feature).

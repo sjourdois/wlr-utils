@@ -24,7 +24,7 @@
 //! - [`pointer`](mod@pointer): a seat's pointer and the cursor image it sets — the `wl_pointer`
 //!   plus its `cursor-shape-v1` device.
 //!
-//! Behind the `input` feature (needs sctk's keysyms and egui's key names):
+//! Behind the `keys` feature (needs sctk's keysyms and egui's key names):
 //! - [`keys`]: keyboard pieces an overlay can share rather than spell out — the
 //!   keystrokes that mean cancel, and a keystroke a user can write down.
 //!
@@ -95,8 +95,8 @@ pub mod capture;
 #[cfg_attr(docsrs, doc(cfg(feature = "focus")))]
 pub mod focus;
 
-#[cfg(feature = "input")]
-#[cfg_attr(docsrs, doc(cfg(feature = "input")))]
+#[cfg(feature = "keys")]
+#[cfg_attr(docsrs, doc(cfg(feature = "keys")))]
 pub mod keys;
 
 #[cfg(feature = "pointer")]
