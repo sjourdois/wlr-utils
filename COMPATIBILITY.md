@@ -30,6 +30,7 @@ single-tool install can produce it too.
 | `keyboard-shortcuts-inhibit` (`zwp_keyboard_shortcuts_inhibit_manager_v1`) | grabbing keys under a layer-shell grab | `wlr-switcher` (so `Alt+Tab` reaches it) |
 | `linux-dmabuf` (`zwp_linux_dmabuf_v1`) | zero-copy GPU capture (CPU `wl_shm` is the fallback) | live previews: `wlr-chooser`, `wlr-switcher`, `wlr-peek mirror`, `wlr-shot record` |
 | `xdg-output` (`zxdg_output_manager_v1`) | accurate logical geometry (fractional scale, positions) | recommended; falls back to `wl_output` |
+| `cursor-shape-v1` (`wp_cursor_shape_manager_v1`) | an overlay setting its own cursor | recommended, every overlay; without it the overlay shows whatever cursor the last client left — none, if that one hid it |
 | `tablet-v2` (`zwp_tablet_manager_v2`) | graphics tablet (stylus) input | optional, `wlr-draw`; without it, mouse only |
 | compositor IPC, or `cosmic-toplevel-info` (`zcosmic_toplevel_info_v1`, v2+) on COSMIC | "the active window" / "the current output" (`-a`, `--current-output`); an IPC also names the process behind a window (`--pid`) and, on sway, the windows in its scratchpad (`--scratchpad`), which no Wayland protocol does | a per-compositor focus backend |
 
@@ -86,10 +87,10 @@ backend (for `-a` / `--current-output`). Run `wlr-peek doctor` to check your own
 | **Hyprland** | ✅ ≥ v0.54 | ✅ ≥ v0.54 | ✅ | ✅ `hyprctl` (MRU, pid) |
 | **labwc** | ✅ ≥ 0.9 (wlroots 0.19) | 🟡 ≥ 0.20 (partial) | ✅ | ❌ |
 | **cosmic-comp** | ✅ | ✅ | ✅ | ✅ `zcosmic_toplevel_info_v1` |
-| **Wayfire** | ✅ ≥ 0.10 (wlroots 0.19) | ❌ (until its 0.20 branch ships) | ✅ | ❌ |
-| **river** | ✅ ≥ 0.3 (wlroots 0.19) | ❌ | ✅ | ❌ |
+| **Wayfire** | ✅ ≥ 0.10 (wlroots 0.19) | ❌ (0.11 is on wlroots 0.20 but ships no window source) | ✅ | ❌ |
+| **river** | ✅ ≥ 0.3 (wlroots 0.19) | ✅ ≥ 0.4 | ✅ | ❌ |
 | **niri** | ✅ (`wlr-screencopy`) | ❌ | ✅ | 🟡 `niri msg` (MRU, pid, `-a` n/a) |
-| **dwl** | ✅ (`wlr-screencopy`) | ❌ | ✅ | ❌ |
+| **dwl** | ✅ (`wlr-screencopy`; `ext` ≥ 0.9) | 🟡 ≥ 0.9 (no focusing) | ✅ | ❌ |
 | **Mutter** (GNOME) | ❌ | ❌ | ❌ | ❌ |
 | **KWin** (KDE) | ❌ | ❌ | ✅ | ❌ |
 
@@ -103,14 +104,17 @@ Tested on **Sway** ≥ 1.12 (the development compositor), **Hyprland 0.56.2**,
 **niri 26.04**, **KWin 6.7.5** and **Mutter 50.5**. On **cosmic-comp 1.8.0** the
 advertised protocols, the focus backend and `wlr-switcher`'s focus change were checked in
 a software-rendered virtual machine, where frame capture could not be exercised. The other
-rows are untested.
+rows are untested: they were checked against each project's latest release and its
+source on 2026-09-24.
 
 Three caveats:
 
 - **Mutter / KWin** — unsupported: neither exposes a capture protocol. `wlr-draw` does run
   on KWin, without its freeze and save.
-- **niri / dwl** expose `wlr-screencopy` and none of the `ext` capture protocols, so the
-  screen features work there and the window features do not.
+- **niri** (26.04) exposes `wlr-screencopy` and none of the `ext` capture protocols, so
+  the screen features work there and the window features do not. So did **dwl** before
+  0.9; from 0.9 it captures windows too, but has no `wlr-foreign-toplevel-management`,
+  so `wlr-switcher` previews the windows and cannot focus the one picked.
 - **cosmic-comp** exposes no `wlr-foreign-toplevel-management`. `wlr-switcher` focuses the
   picked window through `cosmic-toplevel-management` there, and addresses it by its
   `ext-foreign-toplevel-list-v1` identifier.
@@ -135,6 +139,9 @@ Two things vary by compositor:
   `zcosmic_toplevel_info_v1` names no process, so COSMIC cannot answer. Without it
   `--pid` says so and exits; `--app-id` and `--title` need nothing of the sort and work
   wherever windows can be listed.
+
+  **The scratchpad** (`--scratchpad`) is Sway's: the switcher reads it from Sway's tree
+  and puts windows back through its IPC. Elsewhere the flag says so and exits.
 
   **Which tile `wlr-switcher` starts on** needs no backend: the window you are on comes
   from `wlr-foreign-toplevel-management`'s `activated` state. A quick `Alt+Tab` therefore

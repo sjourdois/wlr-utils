@@ -1,6 +1,6 @@
 //! Video encoding sink: turn a capture stream into a file via FFmpeg.
 //!
-//! A [`VideoEncoder`] implements [`FrameSink`](crate::sink::FrameSink), so the same
+//! A [`VideoEncoder`] implements [`FrameSink`], so the same
 //! capture loop that feeds a screenshot can feed a recorder. The pixel path is
 //! deliberately simple and portable: each RGBA frame is scaled to the encoder's
 //! pixel format (NV12 / YUV420P) by libswscale on the CPU, then handed to the
@@ -110,12 +110,11 @@ pub struct Options {
     /// DRM render node for the VAAPI backend (ignored otherwise).
     pub device: Option<PathBuf>,
     /// Mux an AAC audio stream fed by [`VideoEncoder::push_audio`] (the PCM source is
-    /// the caller's concern — see [`crate::audio`]). Ignored for timelapse.
+    /// the caller's concern — the `audio` feature provides one). Ignored for timelapse.
     pub audio: bool,
     /// Constant-quality level on the usual H.264 scale: 0 is lossless, 51 is the
     /// coarsest, and lower means better and bigger. `None` leaves every backend on
-    /// its own default. Each backend gets its native equivalent — see
-    /// [`Backend::quality_options`].
+    /// its own default. Each backend gets its native equivalent.
     pub crf: Option<u8>,
 }
 
@@ -643,9 +642,9 @@ impl FrameSink for VideoEncoder {
         p.encode_audio(&mut self.audio_buf)
     }
 
-    /// Buffer interleaved PCM ([`AUDIO_CHANNELS`] per frame, [`AUDIO_RATE`] Hz); it is
-    /// muxed on the next [`FrameSink::push`]. A no-op unless `opts.audio` is set. Bounded
-    /// while the pipeline warms up (no video frame yet) so it can't grow without limit.
+    /// Buffer interleaved PCM (stereo, 48 kHz); it is muxed on the next
+    /// [`FrameSink::push`]. A no-op unless `opts.audio` is set. Bounded while the pipeline
+    /// warms up (no video frame yet) so it can't grow without limit.
     fn push_audio(&mut self, pcm: &[f32]) {
         if !self.opts.audio {
             return;

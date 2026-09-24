@@ -39,7 +39,7 @@ mod imp {
 pub use imp::{fallback, init};
 
 /// Look up a UI message, optionally with `name = value` arguments. With the `i18n` feature
-/// this is a Fluent lookup against this crate's [`LOADER`]; without it, the English text
+/// this is a Fluent lookup against this crate's Fluent loader; without it, the English text
 /// generated from the `en` catalog at build time.
 #[cfg(feature = "i18n")]
 #[macro_export]

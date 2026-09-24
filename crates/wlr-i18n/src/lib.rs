@@ -50,7 +50,7 @@ pub use runtime::{FluentLanguageLoader, I18nAssets, build_loader, rust_embed, se
 
 /// Build-script helper for the English fallback used when the `i18n` feature is off. Pure
 /// `std`; a consuming crate depends on this crate `default-features = false` as a
-/// build-dependency and calls [`generate_fallback`] from its `build.rs`.
+/// build-dependency and calls [`generate_fallback`](build::generate_fallback) from its `build.rs`.
 pub mod build {
     use std::fmt::Write as _;
     use std::path::Path;

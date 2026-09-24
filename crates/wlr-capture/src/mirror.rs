@@ -2,7 +2,7 @@
 //!
 //! A normal floating window (so the compositor handles stacking; pair with sway
 //! rules `floating enable, sticky enable` for always-on-top across workspaces).
-//! Rendering uses the shared [`wlr_capture::render::Gpu`]. Capture frames arrive
+//! Rendering uses the shared [`crate::render::Gpu`]. Capture frames arrive
 //! over a calloop channel, so we only repaint when there is new content or an
 //! interaction — no free-running render loop for an always-on tile.
 //!

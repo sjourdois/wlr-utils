@@ -1,8 +1,8 @@
 //! `wlr-draw` — draw and annotate live on screen on wlroots compositors.
 //!
 //! With no subcommand it runs the daemon: a transparent always-on-top overlay you draw
-//! on (see [`overlay`]). Every other invocation is a one-shot control message sent to
-//! the running daemon over a Unix socket ([`ipc`]) — `toggle`, `clear`, `tool arrow`,
+//! on (the `overlay` module). Every other invocation is a one-shot control message sent to
+//! the running daemon over a Unix socket (the `ipc` module) — `toggle`, `clear`, `tool arrow`,
 //! `color #00ff00`, … — so you bind them to compositor keys.
 
 #[cfg(feature = "tray")]

@@ -956,7 +956,7 @@ pub struct Options {
     pub window_filters: WindowFilters,
     /// Label the tiles with a key that picks them, taken from this physical row, or
     /// `None` to leave them bare. Only the views that own the whole keyboard honour
-    /// it (see [`App::hints_apply`]).
+    /// it: the strip and the grid, which have no filter field.
     pub hints: Option<HintRow>,
     /// Settle without a choice when there is none to make: once the first source list
     /// arrives, a single visible source is picked outright, and with none at all the
@@ -1159,8 +1159,8 @@ impl App {
             .map(|h| h.label.as_str())
     }
 
-    /// Arm hold-to-switch: enable Tab-cycle and confirm-on-release, and arm the
-    /// initial selection (see [`App::apply_initial_select`]).
+    /// Arm hold-to-switch: enable Tab-cycle and confirm-on-release, and move the
+    /// highlight off the window the user is on as soon as sources exist.
     pub fn arm(&mut self) {
         if !self.armed {
             self.armed = true;

@@ -166,7 +166,7 @@ with `cargo uninstall <name>`; see the
 
 They run on wlroots compositors that implement `ext-image-copy-capture-v1`
 (**sway**, **Hyprland**, **cosmic-comp**, …), and on the screen features alone where
-only `wlr-screencopy` is exposed (**niri**, **dwl**). See the
+only `wlr-screencopy` is exposed (**niri**, and **dwl** before 0.9). See the
 [compatibility matrix](https://github.com/sjourdois/wlr-utils/blob/main/COMPATIBILITY.md).
 
 <p align="center"><sub>All media on this page is generated reproducibly by

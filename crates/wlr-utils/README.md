@@ -17,6 +17,7 @@ This installs every binary at once:
 | --- | --- |
 | `wlr-chooser` | Window & screen picker for `xdg-desktop-portal-wlr` (rofi-like, live thumbnails). |
 | `wlr-switcher` | Alt-Tab / exposé window switcher with live previews. |
+| `wlr-overlayd` | Optional daemon that keeps the switcher's and the chooser's overlay warm, so it appears at once. |
 | `wlr-peek` | Inspect the screen — colour picker, loupe, OCR, live mirror, change monitor, visual grep. |
 | `wlr-shot` | Screenshots (PNG/JPEG/PPM) and recording (H.264, GIF/WebP) with system audio. |
 | `wlr-draw` | Draw on screen — annotation overlay with shapes, text, spotlight, freeze-frame. |

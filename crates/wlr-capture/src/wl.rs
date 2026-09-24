@@ -59,7 +59,9 @@ const DRM_MOD_INVALID: u64 = 0x00ff_ffff_ffff_ffff;
 /// run; `WLR_NO_GPU` covers the same ground from the environment.
 static GPU_DISABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Capture through shm in every [`Client`] created from now on. See [`GPU_DISABLED`].
+/// Capture through shm in every [`Client`] created from now on, for the rest of the
+/// process: the `--no-gpu` flag, taken once for the whole run (`WLR_NO_GPU` does the
+/// same from the environment).
 pub fn disable_gpu_globally() {
     GPU_DISABLED.store(true, std::sync::atomic::Ordering::Relaxed);
 }
@@ -1039,7 +1041,7 @@ impl Client {
 
     /// Open a persistent capture session for a window. The session and its buffer
     /// live until [`Client::close_session`] (or the source disappears); re-arm a
-    /// frame each cycle with [`Client::capture`].
+    /// frame each cycle with [`Client::poll`].
     pub fn open_toplevel_session(&mut self, t: &Toplevel) -> Result<SessionId, CaptureError> {
         let (Some(tl_src), Some(copy)) = (self.state.tl_src.clone(), self.state.copy.clone())
         else {
@@ -2057,7 +2059,7 @@ pub fn active_window() -> Result<Option<WindowIdentity>> {
 /// `zwlr-foreign-toplevel-management` comes first: it is the portable one, and the one
 /// `active_window` already reads. Where it is absent — cosmic-comp — the COSMIC toplevel
 /// manager takes over, addressing the window by its `identifier` alone (see
-/// [`crate::cosmic_activate`]). A compositor with neither gets
+/// `zcosmic_toplevel_manager_v1`). A compositor with neither gets
 /// [`CaptureError::ActivationUnsupported`].
 ///
 /// `identifier` is the `ext-foreign-toplevel-list-v1` identifier of the target, i.e.
