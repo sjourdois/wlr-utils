@@ -8,7 +8,7 @@
 //! This binary *acts*: it focuses what it picked. For the sibling that *answers* —
 //! naming the source on stdout and touching nothing — see `wlr-chooser`.
 
-use crate::ui::{CycleKeys, Filter, Live, Mode, Options, View};
+use crate::ui::{CycleKeys, Filter, Hold, Live, Mode, Options, View};
 use crate::{FilterArgs, HintRowArg, LayoutArg, OrderArg};
 use crate::{acquire_switch_lock, daemon, run_overlay, shell};
 use crate::{i18n, tr};
@@ -123,10 +123,11 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = OrderArg::Mru)]
     window_order: OrderArg,
     /// Hold-to-switch: confirm and close the moment the held launch modifier
-    /// (Alt/Super) is released. Default: on for `strip`, off for `grid`/`card`,
-    /// and off when run from a terminal, where no modifier is held. Bind it to a
-    /// held modifier — e.g. `Mod1+Tab exec wlr-switcher` — for a true Alt-Tab.
-    /// Use this to force it on for `grid`/`card`.
+    /// (Alt/Super) is released. By default the strip does this once it sees a
+    /// modifier held, and otherwise stays open. This flag says the run is bound to a
+    /// held modifier — e.g. `Mod1+Tab exec wlr-switcher --hold` — so a modifier
+    /// already released when the overlay gets the keyboard still switches: the
+    /// quickest Alt-Tab. It also turns hold-to-switch on for `grid`/`card`.
     #[arg(long)]
     hold: bool,
     /// Disable hold-to-switch: the overlay stays open after releasing the
@@ -188,8 +189,8 @@ pub fn main() {
     // Kept before clap eats them: what a daemon is handed is the invocation itself,
     // so `wlr-switcher --layout grid` means the same thing whether the daemon shows
     // it or this process does.
-    let mut args: Vec<String> = std::env::args().skip(1).collect();
-    let mut cli = Cli::parse();
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let cli = Cli::parse();
     if cli.no_gpu {
         wlr_capture::wl::disable_gpu_globally();
     }
@@ -203,17 +204,9 @@ pub fn main() {
         return;
     }
 
-    // A terminal holds no launch modifier, and hold-to-switch reads that as a tap
-    // released before the overlay got the keyboard: it would switch before showing
-    // anything. Settled here, where the terminal is, and handed on to a daemon like
-    // any flag.
-    if !cli.hold && !cli.no_hold && std::io::stdin().is_terminal() {
-        cli.no_hold = true;
-        args.push("--no-hold".into());
-    }
-    // Whatever gave hold-to-switch to a run someone is watching, say what it will do
-    // with no modifier held.
-    if hold(&cli) && std::io::stderr().is_terminal() {
+    // `--hold` on a run someone is watching: say what it will do with no modifier
+    // held.
+    if hold(&cli) == Hold::Assumed && std::io::stderr().is_terminal() {
         eprintln!("{}", tr!("hold-no-modifier"));
     }
 
@@ -254,15 +247,16 @@ pub fn main() {
     }
 }
 
-/// Whether the run switches on the modifier's release: by default for the strip (a
-/// true Alt-Tab) and not for the exposé/card; --hold / --no-hold force either.
-fn hold(cli: &Cli) -> bool {
+/// Whether the run switches on the modifier's release. By default the strip does once
+/// it sees the modifier held (a true Alt-Tab) and the exposé/card do not; --hold assumes
+/// a held modifier whatever the layout, and --no-hold turns it off.
+fn hold(cli: &Cli) -> Hold {
     if cli.hold {
-        true
-    } else if cli.no_hold {
-        false
+        Hold::Assumed
+    } else if cli.no_hold || cli.layout != LayoutArg::Strip {
+        Hold::Off
     } else {
-        cli.layout == LayoutArg::Strip
+        Hold::Observed
     }
 }
 
@@ -272,13 +266,13 @@ fn hold(cli: &Cli) -> bool {
 /// hold-to-switch, releasing the modifier would land on that lone window anyway, so the
 /// overlay has no choice left to show. An unfiltered Alt-Tab keeps its overlay.
 /// --auto-select / --no-auto-select force either.
-fn auto_select(cli: &Cli, hold: bool) -> bool {
+fn auto_select(cli: &Cli, hold: Hold) -> bool {
     if cli.auto_select {
         true
     } else if cli.no_auto_select {
         false
     } else {
-        hold && (!cli.filters.is_empty() || cli.scratchpad.is_some())
+        hold.is_on() && (!cli.filters.is_empty() || cli.scratchpad.is_some())
     }
 }
 
@@ -447,6 +441,17 @@ mod tests {
         // `conflicts_with` pointing at nothing, and the like. It does not try the
         // defaults through their parsers.
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn only_hold_assumes_a_held_modifier() {
+        let hold =
+            |args: &[&str]| hold(&Cli::try_parse_from([&["wlr-switcher"], args].concat()).unwrap());
+        assert_eq!(hold(&[]), Hold::Observed);
+        assert_eq!(hold(&["--layout", "grid"]), Hold::Off);
+        assert_eq!(hold(&["--no-hold"]), Hold::Off);
+        assert_eq!(hold(&["--hold"]), Hold::Assumed);
+        assert_eq!(hold(&["--hold", "--layout", "card"]), Hold::Assumed);
     }
 
     #[test]

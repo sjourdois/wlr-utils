@@ -913,6 +913,32 @@ impl CycleKeys {
     }
 }
 
+/// Hold-to-switch: confirm and close when the held launch modifier (Alt/Super) is
+/// released.
+///
+/// A client learns the keyboard state only once it has the focus, and a modifier found
+/// released then could have been released before the overlay was listening — or never
+/// held at all, by a run started from a terminal, a bar or a script. Only the command
+/// line can tell those apart, so it says which to assume.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Hold {
+    /// The overlay stays open until a pick is confirmed.
+    Off,
+    /// On once a launch modifier is seen held; a run that finds none held at focus-in
+    /// goes on as if [`Hold::Off`].
+    Observed,
+    /// On from the start: the run was bound to a held modifier, so one found released at
+    /// focus-in was released before the overlay was listening, and its switch is made.
+    Assumed,
+}
+
+impl Hold {
+    /// Whether the launch modifier is watched at all.
+    pub fn is_on(self) -> bool {
+        self != Self::Off
+    }
+}
+
 /// How the picker presents and behaves, as resolved from the CLI.
 pub struct Options {
     pub mode: Mode,
@@ -921,9 +947,8 @@ pub struct Options {
     pub grid: Option<(u32, u32)>,
     /// How sources are presented (card / strip / grid).
     pub view: View,
-    /// Hold-to-switch: confirm and close when the held launch modifier (Alt/Super)
-    /// is released. Default on for the switcher, off for the portal picker.
-    pub hold: bool,
+    /// Hold-to-switch (see [`Hold`]). Off for the portal picker.
+    pub hold: Hold,
     /// Which Alt-Tab tiles show a live preview (vs. just the icon).
     pub live: Live,
     pub order: Order,
@@ -976,7 +1001,7 @@ pub struct App {
     /// Selected index into the *visible* list, for keyboard navigation.
     selected: usize,
     /// Hold-to-switch: release of the launch modifier confirms (host-driven).
-    hold: bool,
+    hold: Hold,
     /// Which Alt-Tab tiles show a live preview (vs. just the icon).
     live: Live,
     /// The keys that move the highlight.
@@ -1048,7 +1073,7 @@ impl App {
             focused,
             pending_confirm: false,
             // Without hold-to-switch there is no tap to mistake the first frames for.
-            revealed: !opts.hold,
+            revealed: !opts.hold.is_on(),
             first_frame_at_secs: None,
             focus_filter: true,
             closing: false,
@@ -1069,9 +1094,9 @@ impl App {
         self.closing = true;
     }
 
-    /// Whether hold-to-switch is on; the host uses this to decide whether to watch
-    /// the launch modifier (Alt/Super) and confirm on its release.
-    pub fn hold(&self) -> bool {
+    /// How hold-to-switch runs; the host uses this to decide whether to watch the
+    /// launch modifier (Alt/Super) and confirm on its release.
+    pub fn hold(&self) -> Hold {
         self.hold
     }
 
@@ -2221,7 +2246,7 @@ mod tests {
             show_system: false,
             grid: None,
             view: View::Strip,
-            hold: false,
+            hold: Hold::Off,
             live: Live::All,
             order: Order::ByName,
             window_filters: WindowFilters::default(),
@@ -2377,7 +2402,7 @@ mod tests {
     #[test]
     fn a_release_before_the_source_list_switches_once_it_arrives() {
         let hold = Options {
-            hold: true,
+            hold: Hold::Assumed,
             order: Order::Mru,
             ..options()
         };
@@ -2398,7 +2423,7 @@ mod tests {
         // The source list is already in when the modifier is seen held, and the modifier
         // is released before another frame is drawn.
         let hold = Options {
-            hold: true,
+            hold: Hold::Assumed,
             order: Order::Mru,
             ..options()
         };
@@ -2416,7 +2441,7 @@ mod tests {
         // Arming with nothing on offer advances past nothing; windows turning up later
         // don't catch up on it.
         let hold = Options {
-            hold: true,
+            hold: Hold::Assumed,
             order: Order::Mru,
             ..options()
         };
@@ -2439,7 +2464,7 @@ mod tests {
         // the one to switch to.
         for focused in [None, Some(focus("")), Some(focus("steam"))] {
             let hold = Options {
-                hold: true,
+                hold: Hold::Assumed,
                 ..options()
             };
             let mut h = Harness::focused_on(hold, focused.clone());
@@ -2465,7 +2490,7 @@ mod tests {
         // switcher that offered the window you are already on would switch nowhere.
         for (order, name) in [(Order::ByName, "by-name"), (Order::Mru, "mru")] {
             let hold = Options {
-                hold: true,
+                hold: Hold::Assumed,
                 order,
                 ..options()
             };
@@ -2483,7 +2508,7 @@ mod tests {
         // By name, the window the user is on is second: the first tile is already
         // somewhere else to go, and stepping over would skip it for nothing.
         let hold = Options {
-            hold: true,
+            hold: Hold::Assumed,
             ..options()
         };
         let mut h = Harness::focused_on(hold, Some(focus("firefox")));
@@ -2498,7 +2523,7 @@ mod tests {
     fn the_only_window_is_selected_even_when_it_is_the_current_one() {
         // There is nowhere else to go: switching to itself beats switching to nothing.
         let hold = Options {
-            hold: true,
+            hold: Hold::Assumed,
             ..options()
         };
         let mut h = Harness::focused_on(hold, Some(focus("foot")));
@@ -2514,7 +2539,7 @@ mod tests {
         // Two windows of the same app with the same title: only the ordinal says which
         // one the user is on, and the other one is where the switch goes.
         let hold = Options {
-            hold: true,
+            hold: Hold::Assumed,
             ..options()
         };
         let second = wl::WindowIdentity {
@@ -2534,7 +2559,7 @@ mod tests {
         // Sources in and a frame painted, and still not a pixel: until a held modifier
         // settles it, a quick tap may yet be on its way past.
         let mut h = Harness::new(Options {
-            hold: true,
+            hold: Hold::Assumed,
             ..options()
         });
         h.send(vec![window("a", "foot"), window("b", "firefox")]);
@@ -2549,7 +2574,7 @@ mod tests {
     #[test]
     fn revealing_brings_back_the_dimmed_backdrop() {
         let mut h = Harness::new(Options {
-            hold: true,
+            hold: Hold::Assumed,
             ..options()
         });
         h.app.reveal();
@@ -2851,7 +2876,7 @@ mod tests {
         // without one — which is the only way it is any use in a switcher.
         let mut h = Harness::focused_on(
             Options {
-                hold: true,
+                hold: Hold::Assumed,
                 hints: Some(HintRow::Home),
                 ..options()
             },

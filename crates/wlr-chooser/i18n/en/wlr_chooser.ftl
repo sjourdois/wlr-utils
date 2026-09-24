@@ -26,4 +26,4 @@ daemon-not-running = No wlr-overlayd daemon is running, so this overlay pays the
 daemon-busy = The wlr-overlayd daemon is already showing an overlay, so this one is shown here and pays the full startup.
 daemon-bypassed = This run does not go through the daemon — --no-gpu changes what the whole process does — so it pays the full startup.
 daemon-cannot-serve = A daemon cannot take this run on: --no-gpu and --doctor change what the whole process does. Run it with --no-daemon.
-hold-no-modifier = Hold-to-switch is on: the switcher switches the moment no Alt or Super key is held — at once, without showing anything, if none is held when it opens. Pass --no-hold to keep the overlay open.
+hold-no-modifier = Hold-to-switch is on: the switcher switches the moment no Alt or Super key is held — at once, without showing anything, if none is held when it opens. Leave out --hold for the overlay to wait when no modifier is held.

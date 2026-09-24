@@ -10,7 +10,7 @@
 //! ([`run`]) builds one, shows one overlay and drops it, while the switcher's daemon
 //! keeps one for the whole session and shows every overlay on it.
 
-use crate::ui::App;
+use crate::ui::{App, Hold};
 use rustix::event::{PollFd, PollFlags, poll};
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState, FrameCallbackData},
@@ -96,8 +96,9 @@ struct State {
     pointer_pos: egui::Pos2,
 
     // --- Hold-to-switch state ---
-    /// Hold-to-switch on: watch the launch modifier (Alt/Super) to arm + confirm.
-    hold: bool,
+    /// Hold-to-switch: whether to watch the launch modifier (Alt/Super) to arm +
+    /// confirm, and what a modifier found released at focus-in means (see [`Hold`]).
+    hold: Hold,
     /// A launch modifier was observed held → Tab cycles and its release confirms.
     armed: bool,
     /// Current physical state of Alt / Super (from the modifier mask + raw keysyms).
@@ -212,7 +213,7 @@ impl Host {
             events: Vec::new(),
             modifiers: egui::Modifiers::default(),
             pointer_pos: egui::Pos2::ZERO,
-            hold: false,
+            hold: Hold::Off,
             armed: false,
             alt_down: false,
             logo_down: false,
@@ -642,7 +643,7 @@ impl KeyboardHandler for State {
     ) {
         // Primary arming: the set of keys already held at focus-in. On wlroots the
         // modifier that triggered the chord (Alt or Super) is still down here.
-        if !self.hold {
+        if !self.hold.is_on() {
             return;
         }
         self.alt_down = keysyms.iter().copied().any(is_alt);
@@ -743,7 +744,7 @@ impl KeyboardHandler for State {
         self.logo_down = modifiers.logo;
         self.reconcile();
         if std::mem::take(&mut self.awaiting_enter_modifiers) {
-            self.infer_release();
+            self.settle_enter();
         }
     }
 }
@@ -757,7 +758,7 @@ impl State {
     /// Reconcile hold-to-switch state from the current Alt/Super flags: arm once one is
     /// held, then confirm the selection on the release edge.
     fn reconcile(&mut self) {
-        if !self.hold {
+        if !self.hold.is_on() {
             return;
         }
         if !self.armed
@@ -785,14 +786,30 @@ impl State {
         self.prev_held = held;
     }
 
-    /// Confirm if no launch modifier is held once focus-in's modifier state is known:
-    /// it was released before we got focus, so no release event will come.
-    fn infer_release(&mut self) {
-        if !self.armed
-            && let Some(app) = self.app.as_mut()
-        {
-            app.arm();
-            app.confirm_release();
+    /// Settle a focus-in that found no launch modifier held, once its modifier state is
+    /// known.
+    ///
+    /// Under [`Hold::Assumed`] the modifier was released before we got focus, so no
+    /// release event will come and the switch is made now. Under [`Hold::Observed`] no
+    /// modifier ever steered this run: hold-to-switch is off for the rest of it, and the
+    /// overlay shows and waits like any other.
+    fn settle_enter(&mut self) {
+        if self.armed {
+            return;
+        }
+        let Some(app) = self.app.as_mut() else {
+            return;
+        };
+        match self.hold {
+            Hold::Assumed => {
+                app.arm();
+                app.confirm_release();
+            }
+            Hold::Observed => {
+                self.hold = Hold::Off;
+                app.reveal();
+            }
+            Hold::Off => {}
         }
     }
 
