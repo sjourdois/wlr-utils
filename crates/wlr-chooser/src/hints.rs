@@ -11,7 +11,7 @@
 use xkbcommon::xkb;
 
 /// Wayland reports a key by its evdev code; xkb numbers the same key eight higher.
-const EVDEV_OFFSET: u32 = 8;
+pub(crate) const EVDEV_OFFSET: u32 = 8;
 
 /// The home row, left to right, without the two keys under the little fingers'
 /// stretch: `asdfghjkl` on QWERTY, `qsdfghjkl` on AZERTY.

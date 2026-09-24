@@ -46,6 +46,7 @@ use wlr_capture::keys::{KeyPress, is_cancel};
 use wlr_capture::pointer::Pointer;
 use wlr_capture::render::Gpu;
 use wlr_capture::theme;
+use xkbcommon::xkb;
 
 struct State {
     registry_state: RegistryState,
@@ -78,6 +79,11 @@ struct State {
     /// the keyboard: an overlay created later would otherwise never learn what the
     /// physical keys its hints name actually print.
     keymap: Option<String>,
+    /// The same keymap, compiled, to name the key under a keystroke whatever the
+    /// modifiers made of it (see [`named_key`]).
+    xkb_keymap: Option<xkb::Keymap>,
+    /// The layout (xkb group) in force, as the last modifier event reported it.
+    layout: xkb::LayoutIndex,
 
     // logical size (points) and integer scale.
     width: u32,
@@ -197,6 +203,8 @@ impl Host {
             app: None,
             gpu: None,
             keymap: None,
+            xkb_keymap: None,
+            layout: 0,
             width: 0,
             height: 0,
             scale: 1,
@@ -699,6 +707,12 @@ impl KeyboardHandler for State {
         if let Some(app) = self.app.as_mut() {
             app.set_keymap(&keymap);
         }
+        self.xkb_keymap = xkb::Keymap::new_from_string(
+            &xkb::Context::new(xkb::CONTEXT_NO_FLAGS),
+            keymap.clone(),
+            xkb::KEYMAP_FORMAT_TEXT_V1,
+            xkb::KEYMAP_COMPILE_NO_FLAGS,
+        );
         self.keymap = Some(keymap);
     }
 
@@ -710,8 +724,9 @@ impl KeyboardHandler for State {
         _: u32,
         modifiers: Modifiers,
         _: RawModifiers,
-        _: u32,
+        layout: u32,
     ) {
+        self.layout = layout;
         let mods = egui::Modifiers {
             alt: modifiers.alt,
             ctrl: modifiers.ctrl,
@@ -797,7 +812,10 @@ impl State {
         let key = if is_cancel(event.keysym, self.modifiers.ctrl) {
             Some(egui::Key::Escape)
         } else {
-            map_key(event.keysym)
+            self.xkb_keymap
+                .as_ref()
+                .and_then(|k| named_key(k, self.layout, event.raw_code))
+                .or_else(|| map_key(event.keysym))
         };
         // Some compositors send `ISO_Left_Tab` for Shift+Tab, which `map_key` folds
         // back into Tab — so the keysym carries the Shift the modifier mask may not.
@@ -935,8 +953,26 @@ fn map_key(k: Keysym) -> Option<egui::Key> {
         Keysym::Home => Key::Home,
         Keysym::End => Key::End,
         Keysym::space => Key::Space,
+        _ if k.is_function_key() => {
+            return Key::from_name(&format!("F{}", k.raw() - Keysym::F1.raw() + 1));
+        }
         _ => return k.key_char().and_then(|c| Key::from_name(&c.to_string())),
     })
+}
+
+/// The key `code` (an evdev code) is, as egui names it: the first of the symbols
+/// `layout` puts on it that egui has a name for, from the bare key up.
+///
+/// A keysym is what the modifiers made of the key, and cannot name it: Shift turns
+/// Minus into `underscore`, which egui has no name for, and Equals into `plus`, which
+/// it calls another key. Reading the key's own symbols keeps it Minus or Equals under
+/// any modifier — and makes the AZERTY key that prints `&` bare and `1` shifted the
+/// `1` key, where egui has no `&`.
+fn named_key(keymap: &xkb::Keymap, layout: xkb::LayoutIndex, code: u32) -> Option<egui::Key> {
+    let key = xkb::Keycode::new(code + crate::hints::EVDEV_OFFSET);
+    (0..keymap.num_levels_for_key(key, layout))
+        .flat_map(|level| keymap.key_get_syms_by_level(key, layout, level))
+        .find_map(|&sym| map_key(sym))
 }
 
 // keyboard-shortcuts-inhibit: neither object carries events we act on (the
@@ -966,3 +1002,40 @@ impl Dispatch<ZwpKeyboardShortcutsInhibitorV1, ()> for State {
 
 delegate_dispatch2!(State);
 delegate_registry!(State);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui::Key;
+
+    fn keymap(layout: &str) -> xkb::Keymap {
+        xkb::Keymap::new_from_names(
+            &xkb::Context::new(xkb::CONTEXT_NO_FLAGS),
+            "",
+            "",
+            layout,
+            "",
+            None,
+            xkb::KEYMAP_COMPILE_NO_FLAGS,
+        )
+        .expect("the layouts under test come with xkeyboard-config")
+    }
+
+    #[test]
+    fn a_key_is_named_after_itself_not_after_what_shift_makes_of_it() {
+        let us = keymap("us");
+        // Evdev codes: Tab, J, Minus, Equals, F5.
+        for (code, key) in [
+            (15, Key::Tab),
+            (36, Key::J),
+            (12, Key::Minus),
+            (13, Key::Equals),
+            (63, Key::F5),
+        ] {
+            assert_eq!(named_key(&us, 0, code), Some(key), "evdev code {code}");
+        }
+        // AZERTY prints `&` on that key bare, which egui has no name for, and `1`
+        // shifted.
+        assert_eq!(named_key(&keymap("fr"), 0, 2), Some(Key::Num1));
+    }
+}
