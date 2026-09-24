@@ -46,7 +46,7 @@ instead of ninety — see [Instant overlays](#instant-overlays--wlr-overlayd).
   the GPU path (default) the dma-buf is imported straight as a texture — no
   read-back, near-zero CPU. Falls back to CPU shm where the GPU path isn't usable.
 - **Doubles as a window switcher**: the `wlr-switcher` binary picks a window to focus it.
-- **Native Wayland** (no XWayland), built in Rust with [egui]; opens near-instantly.
+- **Wayland-native**, built in Rust with [egui]; opens near-instantly.
 - **Themeable** (8 ready palettes incl. Catppuccin), **localised** (13 languages,
   with CJK font fallback), and a configurable thumbnail grid.
 

@@ -13,7 +13,8 @@ layout: default
 <span>⚡ Zero-copy GPU capture</span>
 <span>👁️ Sees occluded windows</span>
 <span>🖥️ Across workspaces</span>
-<span>🦀 Rust · native Wayland</span>
+<span>🦀 Rust</span>
+<span>🪟 Wayland-native</span>
 <span>🎨 Themeable</span>
 <span>🌍 13 languages</span>
 </p>

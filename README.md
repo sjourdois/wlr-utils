@@ -6,8 +6,8 @@
 
 ### Capture · switch · inspect · annotate your screen — the native Wayland way.
 
-⚡ Zero-copy GPU capture &nbsp;·&nbsp; 👁️ Sees occluded & off-workspace windows
-&nbsp;·&nbsp; 🦀 Rust, no XWayland &nbsp;·&nbsp; 🎨 Themeable &nbsp;·&nbsp; 🌍 13 languages
+⚡&nbsp;Zero-copy GPU capture &nbsp;·&nbsp; 👁️&nbsp;Sees occluded & off-workspace windows
+&nbsp;·&nbsp; 🦀&nbsp;Rust &nbsp;·&nbsp; 🪟&nbsp;Wayland-native &nbsp;·&nbsp; 🎨&nbsp;Themeable &nbsp;·&nbsp; 🌍&nbsp;13&nbsp;languages
 
 Five graphical tools for **wlroots and derivatives**.
 
