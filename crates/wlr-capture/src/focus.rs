@@ -113,6 +113,12 @@ pub trait FocusBackend {
     fn hide_window(&self, _identifier: &str) -> Option<()> {
         None
     }
+    /// Move the window `identifier` names onto the current workspace, together with
+    /// anything the compositor hides and shows as one unit with it. Does not
+    /// necessarily move focus. `None` if that could not be carried out.
+    fn show_window(&self, _identifier: &str) -> Option<()> {
+        None
+    }
     /// Human-readable backend name, for error messages.
     fn name(&self) -> &'static str;
 }
@@ -201,9 +207,19 @@ impl FocusBackend for Sway {
     fn hide_window(&self, identifier: &str) -> Option<()> {
         // Sway's criteria cannot name a foreign-toplevel identifier, so a node id
         // read out of the tree stands in for one.
-        let id = sway_hide_target(&Self::tree()?, identifier)?;
+        let id = sway_move_target(&Self::tree()?, identifier)?;
         let outcomes =
             Self::with_connection(|c| c.run_command(format!("[con_id={id}] move scratchpad")))?;
+        outcomes.into_iter().all(|o| o.is_ok()).then_some(())
+    }
+
+    fn show_window(&self, identifier: &str) -> Option<()> {
+        // `current` is the focused workspace. Sway shows a hidden scratchpad entry
+        // there on its way, and leaves a container already on it where it is.
+        let id = sway_move_target(&Self::tree()?, identifier)?;
+        let outcomes = Self::with_connection(|c| {
+            c.run_command(format!("[con_id={id}] move container to workspace current"))
+        })?;
         outcomes.into_iter().all(|o| o.is_ok()).then_some(())
     }
 }
@@ -343,14 +359,15 @@ fn sway_is_aside(node: &Node) -> bool {
     !matches!(node.scratchpad_state, None | Some(ScratchpadState::None))
 }
 
-/// The node `move scratchpad` has to name to put the window `identifier` names aside:
-/// the entry holding it, or the window itself when the scratchpad does not hold it yet.
-fn sway_hide_target(node: &Node, identifier: &str) -> Option<i64> {
+/// The node a `move` has to name to take the window `identifier` names along with its
+/// scratchpad entry: the entry holding it, or the window itself when the scratchpad
+/// does not hold it.
+fn sway_move_target(node: &Node, identifier: &str) -> Option<i64> {
     if sway_is_aside(node) && sway_holds(node, identifier) {
         return Some(node.id);
     }
     children(node)
-        .find_map(|c| sway_hide_target(c, identifier))
+        .find_map(|c| sway_move_target(c, identifier))
         .or_else(|| {
             (node.foreign_toplevel_identifier.as_deref() == Some(identifier)).then_some(node.id)
         })
@@ -1190,10 +1207,10 @@ mod tests {
             ["ext-kitty", "ext-notes"].map(String::from).into()
         );
         // Either of them names the container, so putting one back takes the other too.
-        assert_eq!(sway_hide_target(&tree, "ext-kitty"), Some(219));
-        assert_eq!(sway_hide_target(&tree, "ext-notes"), Some(219));
+        assert_eq!(sway_move_target(&tree, "ext-kitty"), Some(219));
+        assert_eq!(sway_move_target(&tree, "ext-notes"), Some(219));
         // A window the scratchpad does not hold answers for itself.
-        assert_eq!(sway_hide_target(&tree, "ext-firefox"), Some(11));
+        assert_eq!(sway_move_target(&tree, "ext-firefox"), Some(11));
     }
 
     #[test]
