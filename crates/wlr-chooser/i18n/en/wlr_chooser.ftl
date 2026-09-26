@@ -17,6 +17,7 @@ pid-unsupported = This compositor does not report the process behind a window, s
 scratchpad-unsupported = This compositor has no scratchpad to switch among, so --scratchpad cannot be applied. It needs sway's IPC ($SWAYSOCK). Run `wlr-peek doctor` to see whether a focus backend was detected.
 scratchpad-empty = The scratchpad holds no window. Nothing to show.
 scratchpad-not-put-aside = The compositor would not put the focused window back into the scratchpad.
+move-failed = The compositor would not move the picked window to the current workspace.
 hints-need-keyboard = --hints needs a layout that has no filter field: use --layout strip or --layout grid.
 grid-needs-card = --grid sizes the card, so it needs --layout card (the default). The exposé and the strip lay themselves out.
 daemon-already-running = A wlr-overlayd daemon is already running.

@@ -154,6 +154,10 @@ struct Cli {
     /// instead of the overlay opening. Sway-only (needs `$SWAYSOCK`).
     #[arg(long, value_enum, value_name = "MODE")]
     scratchpad: Option<ScratchpadArg>,
+    /// Bring the picked window onto the current workspace before focusing it, rather
+    /// than switching to the workspace it is on. Sway-only (needs `$SWAYSOCK`).
+    #[arg(long = "move")]
+    move_window: bool,
     /// Label each tile with the key that picks it, taken from a row of the physical
     /// keyboard: `home` (the resting row, default) or `top` (the row above the
     /// letters). The label is whatever the active layout prints on that key, so it
@@ -326,18 +330,33 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, Str
     let Some(sel) = picked else {
         return Ok(Ran::Cancelled);
     };
-    // Focus the picked window (outputs aren't focusable, so ignore them).
-    if sel.is_window
-        && let Err(e) = wl::activate_window(&sel.identifier, &sel.identity())
-    {
-        // A compositor with no activation protocol at all is a property of the
-        // setup, not a bug in this run: say what is missing, like the pre-flight
-        // does for window capture, rather than dumping a protocol name.
-        return Err(match e {
-            CaptureError::ActivationUnsupported => tr!("focus-unsupported"),
-            e => tr!("error", error = format!("{e:#}")),
-        });
+
+    // Outputs aren't focusable, so ignore them.
+    if sel.is_window {
+        // Bring it here first, if asked: focusing it where it is would switch workspace.
+        // A failed move still focuses the window, and says so afterwards.
+        let moved = if cli.move_window {
+            focus::detect()
+                .and_then(|backend| backend.show_window(&sel.identifier))
+                .ok_or_else(|| tr!("move-failed"))
+        } else {
+            Ok(())
+        };
+
+        // Focus the picked window.
+        wl::activate_window(&sel.identifier, &sel.identity())
+            .map_err(|err| {
+                // A compositor with no activation protocol at all is a property of the
+                // setup, not a bug in this run: say what is missing, like the pre-flight
+                // does for window capture, rather than dumping a protocol name.
+                match err {
+                    CaptureError::ActivationUnsupported => tr!("focus-unsupported"),
+                    _ => tr!("error", error = format!("{err:#}")),
+                }
+            })
+            .and(moved)?;
     }
+
     Ok(Ran::Switched)
 }
 
