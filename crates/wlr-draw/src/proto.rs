@@ -143,6 +143,8 @@ mod tests {
         assert!(Cmd::parse("").is_err());
         assert!(Cmd::parse("tool").is_err());
         assert!(Cmd::parse("tool wobble").is_err());
+        // The daemon's socket thread parses this: it must answer, not panic.
+        assert!(Cmd::parse("color #aébcd").is_err());
         assert!(Cmd::parse("width xyz").is_err());
         assert!(Cmd::parse("frobnicate").is_err());
     }

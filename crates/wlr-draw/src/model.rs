@@ -540,6 +540,11 @@ pub fn parse_color(s: &str) -> Option<Color> {
 }
 
 fn parse_hex(h: &str) -> Option<Color> {
+    // Hex digits only: the length and slices below count bytes, so a slice could end
+    // inside a multi-byte character (a panic), and `from_str_radix` would take a `+`.
+    if !h.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
     let byte = |s: &str| u8::from_str_radix(s, 16).ok();
     match h.len() {
         6 => Some([byte(&h[0..2])?, byte(&h[2..4])?, byte(&h[4..6])?, 0xff]),
@@ -637,6 +642,17 @@ mod tests {
         assert_eq!(parse_color("#f00"), Some([255, 0, 0, 255]));
         assert_eq!(parse_color("notacolour"), None);
         assert_eq!(parse_color("#xyz"), None);
+        // `from_str_radix` alone would take the sign.
+        assert_eq!(parse_color("#+f+f+f"), None);
+    }
+
+    #[test]
+    fn non_ascii_hex_is_rejected() {
+        // 3, 6 and 8 bytes long, the lengths `parse_hex` matches on. The last two used
+        // to panic, slicing inside the `é`.
+        for s in ["#éa", "#aébcd", "#aébcdef"] {
+            assert_eq!(parse_color(s), None, "{s:?}");
+        }
     }
 
     #[test]
