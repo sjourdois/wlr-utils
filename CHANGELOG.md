@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- **A non-ASCII colour in `theme.toml` no longer crashes the overlays** — a value such
+  as `"#éa"` made the theme loader panic, taking down `wlr-chooser`, `wlr-switcher`,
+  `wlr-draw`, the `wlr-peek` mirror and the `wlr-overlayd` daemon. It is now ignored
+  like any other colour that does not parse.
+
 ## 1.10.0 — 2026-09-24
 
 ### Added

@@ -319,9 +319,14 @@ fn config_path() -> Option<std::path::PathBuf> {
     Some(base.join("wlr-chooser").join("theme.toml"))
 }
 
-/// Parse `#rgb`, `#rrggbb` or `#rrggbbaa`.
+/// Parse `#rgb`, `#rrggbb` or `#rrggbbaa`; anything else is `None`.
 fn parse_hex(s: &str) -> Option<Color32> {
     let h = s.trim().strip_prefix('#')?;
+    // Hex digits only: the length and slices below count bytes, so a slice could end
+    // inside a multi-byte character (a panic), and `from_str_radix` would take a `+`.
+    if !h.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
     let n = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok();
     match h.len() {
         6 => Some(Color32::from_rgb(n(0)?, n(2)?, n(4)?)),
@@ -334,5 +339,61 @@ fn parse_hex(s: &str) -> Option<Color32> {
             Some(Color32::from_rgb(d(0)?, d(1)?, d(2)?))
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_the_three_hex_forms() {
+        assert_eq!(parse_hex("#fff"), Some(Color32::WHITE));
+        // Each digit of the short form is doubled.
+        assert_eq!(parse_hex("#1a3"), Some(Color32::from_rgb(0x11, 0xaa, 0x33)));
+        assert_eq!(parse_hex("#ffffff"), Some(Color32::WHITE));
+        // Either case.
+        assert_eq!(
+            parse_hex("#89B4fa"),
+            Some(Color32::from_rgb(0x89, 0xb4, 0xfa))
+        );
+        let c = parse_hex("#ffffff80").unwrap();
+        assert_eq!(c, Color32::from_rgba_unmultiplied(0xff, 0xff, 0xff, 0x80));
+        assert_eq!(c.a(), 0x80);
+    }
+
+    #[test]
+    fn ignores_surrounding_whitespace() {
+        assert_eq!(
+            parse_hex("  #89b4fa\n"),
+            Some(Color32::from_rgb(0x89, 0xb4, 0xfa))
+        );
+    }
+
+    #[test]
+    fn rejects_what_is_not_a_hex_colour() {
+        for s in [
+            "ffffff", // no `#`
+            "#",      // wrong length
+            "#ff",
+            "#ffff",
+            "#fffffff",
+            "#fffffffff",
+            "#ggg", // not hex digits
+            "#12345z",
+            "# fff",
+            "#+f+f+f", // `from_str_radix` alone would take the sign
+        ] {
+            assert_eq!(parse_hex(s), None, "{s:?}");
+        }
+    }
+
+    #[test]
+    fn rejects_non_ascii_without_panicking() {
+        // Each is 3, 6 or 8 bytes long, the lengths that get sliced, with a slice
+        // boundary inside its multi-byte character: all of these used to panic.
+        for s in ["#éa", "#€", "#aébcd", "#aébcdef"] {
+            assert_eq!(parse_hex(s), None, "{s:?}");
+        }
     }
 }
