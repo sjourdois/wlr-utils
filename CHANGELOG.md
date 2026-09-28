@@ -12,6 +12,10 @@ All notable changes to this project are documented here. The format is based on
   as `"#éa"` made the theme loader panic, taking down `wlr-chooser`, `wlr-switcher`,
   `wlr-draw`, the `wlr-peek` mirror and the `wlr-overlayd` daemon. It is now ignored
   like any other colour that does not parse.
+- **A non-ASCII colour no longer crashes `wlr-draw`** — `wlr-draw color '#aébcd'`
+  panicked instead of reporting an unknown colour, and the same `color` line sent by
+  hand to the daemon's socket killed the thread that reads it: the overlay stayed up
+  but took no more commands. Both now report it as an unknown colour.
 
 ## 1.10.0 — 2026-09-24
 
