@@ -319,7 +319,10 @@ Sway keeps windows aside in a **scratchpad**, off every workspace until one is a
 back. `--scratchpad` points the switcher at that set:
 
 ```
-bindsym $mod+minus exec wlr-switcher --scratchpad toggle --cycle-key Minus:Equal
+# Focus window in scratchpad
+bindsym $mod+minus exec wlr-switcher --cycle-key Minus:Equal --scratchpad only
+# or, like `scratchpad show` but with a picker:
+# bindsym $mod+minus exec wlr-switcher --cycle-key Minus:Equal --scratchpad toggle --move
 ```
 
 - **`only`** offers just the windows in the scratchpad.
@@ -339,6 +342,19 @@ What sway keeps aside is a *container*, which can hold several windows: each is 
 on its own, and putting one back takes the rest of its container with it.
 
 Sway-only, over its IPC (`$SWAYSOCK`); anywhere else the flag says so and exits.
+
+### Bringing the window here — `--move`
+
+By default, picking a window on another workspace switches to that workspace. With
+`--move`, the picked window is moved to the current workspace first and focused there
+— together with its scratchpad container, if it is in one.
+
+```
+bindsym Mod1+Control+Tab exec wlr-switcher --move  # pull a window into the current workspace
+```
+
+Currently Sway-only, over its IPC (`$SWAYSOCK`); anywhere else the window is focused where it
+is, and the switcher says it could not be moved.
 
 ## Instant overlays — `wlr-overlayd`
 
