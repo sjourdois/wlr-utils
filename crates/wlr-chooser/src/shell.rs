@@ -31,7 +31,7 @@ use smithay_client_toolkit::{
         },
     },
 };
-use std::os::fd::{AsFd, BorrowedFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::time::Instant;
 use wayland_client::{
     Connection, Dispatch, EventQueue, Proxy, QueueHandle,
@@ -171,6 +171,8 @@ pub struct Host {
     state: State,
     queue: EventQueue<State>,
     conn: Connection,
+    /// Whoever asked for the next overlay, set by [`Host::cancel_on_hangup`].
+    requester: Option<OwnedFd>,
 }
 
 impl Host {
@@ -224,7 +226,12 @@ impl Host {
             t0: Instant::now(),
             first_paint_logged: false,
         };
-        Ok(Host { state, queue, conn })
+        Ok(Host {
+            state,
+            queue,
+            conn,
+            requester: None,
+        })
     }
 
     /// Build up front everything the first overlay would otherwise build while the
@@ -264,34 +271,18 @@ impl Host {
     /// and it pings — and a connection left unread fills its buffer and wedges, so
     /// the two are waited on together rather than the socket alone.
     pub fn idle_until_readable(&mut self, other: BorrowedFd<'_>) -> anyhow::Result<()> {
-        loop {
-            self.queue.dispatch_pending(&mut self.state)?;
-            self.queue.flush()?;
-            // `None` means events arrived between the dispatch and here: go round and
-            // hand them over before sleeping on the fd.
-            let Some(guard) = self.queue.prepare_read() else {
-                continue;
-            };
-            let wayland = self.conn.as_fd();
-            let mut fds = [
-                PollFd::new(&wayland, PollFlags::IN),
-                PollFd::new(&other, PollFlags::IN),
-            ];
-            poll(&mut fds, None)?;
-            let (wayland_ready, other_ready) =
-                (!fds[0].revents().is_empty(), !fds[1].revents().is_empty());
-            if wayland_ready {
-                // Also how the daemon learns the compositor is gone: the read fails
-                // and the error takes it down, rather than leaving it on a dead
-                // connection answering keybindings with nothing.
-                guard.read()?;
-            } else {
-                drop(guard);
-            }
-            if other_ready {
-                return Ok(());
-            }
-        }
+        while !wait(&mut self.queue, &mut self.state, &self.conn, Some(other))? {}
+        Ok(())
+    }
+
+    /// Take the next overlay down if `requester` hangs up while it is on screen.
+    ///
+    /// For a daemon, whose overlay answers a client waiting on a socket: a client
+    /// killed — or a portal that gave up on it — has no one left to hand the pick to,
+    /// and an overlay nobody is waiting for must not keep the keyboard. `None` clears
+    /// a watch the overlay never came to use.
+    pub fn cancel_on_hangup(&mut self, requester: Option<OwnedFd>) {
+        self.requester = requester;
     }
 
     /// Show one overlay: build its surface, run until the user picks or cancels,
@@ -304,8 +295,16 @@ impl Host {
         if let Some(layer) = self.state.layer.as_ref() {
             layer.commit();
         }
+        let requester = self.requester.take();
         while !self.state.closing() {
-            self.queue.blocking_dispatch(&mut self.state)?;
+            let watched = requester.as_ref().map(|fd| fd.as_fd());
+            if wait(&mut self.queue, &mut self.state, &self.conn, watched)?
+                && let Some(fd) = watched
+                && hung_up(fd)
+                && let Some(app) = self.state.app.as_mut()
+            {
+                app.cancel();
+            }
         }
         self.state.end();
         // Let the teardown reach the compositor before the caller moves on — focusing
@@ -313,6 +312,50 @@ impl Host {
         self.queue.roundtrip(&mut self.state)?;
         Ok(())
     }
+}
+
+/// Wait until the Wayland connection or `other` has something to read, handing the
+/// compositor's events over on the way. Returns whether `other` is what woke us.
+///
+/// A connection left unread fills its buffer and wedges, so whatever else a host
+/// waits on is waited on together with it rather than instead of it.
+fn wait(
+    queue: &mut EventQueue<State>,
+    state: &mut State,
+    conn: &Connection,
+    other: Option<BorrowedFd<'_>>,
+) -> anyhow::Result<bool> {
+    queue.dispatch_pending(state)?;
+    queue.flush()?;
+    // `None` means events arrived between the dispatch and here: go round and hand
+    // them over before sleeping.
+    let Some(guard) = queue.prepare_read() else {
+        return Ok(false);
+    };
+    let wayland = conn.as_fd();
+    let mut fds = vec![PollFd::new(&wayland, PollFlags::IN)];
+    if let Some(other) = other.as_ref() {
+        fds.push(PollFd::new(other, PollFlags::IN));
+    }
+    poll(&mut fds, None)?;
+    let wayland_ready = !fds[0].revents().is_empty();
+    let other_ready = fds.get(1).is_some_and(|fd| !fd.revents().is_empty());
+    if wayland_ready {
+        // Also how a host learns the compositor is gone: the read fails and the
+        // error takes it down, rather than leaving it on a dead connection.
+        guard.read()?;
+    } else {
+        drop(guard);
+    }
+    Ok(other_ready)
+}
+
+/// Whether the peer of a readable socket has gone. A requester says everything it
+/// has to say before the overlay goes up, so what it sends afterwards is dropped;
+/// the end of the stream is what matters.
+fn hung_up(fd: BorrowedFd<'_>) -> bool {
+    let mut buf = [0u8; 64];
+    !matches!(rustix::io::read(fd, &mut buf), Ok(n) if n > 0)
 }
 
 impl State {

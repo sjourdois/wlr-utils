@@ -16,6 +16,10 @@ All notable changes to this project are documented here. The format is based on
   panicked instead of reporting an unknown colour, and the same `color` line sent by
   hand to the daemon's socket killed the thread that reads it: the overlay stayed up
   but took no more commands. Both now report it as an unknown colour.
+- **Killing `wlr-switcher` or `wlr-chooser` now closes the `wlr-overlayd` overlay** —
+  the daemon kept an overlay up, keyboard held, after the invocation that asked for
+  it was gone, and answered every new one `busy`. It now takes the overlay down as
+  soon as its client hangs up.
 
 ## 1.10.0 — 2026-09-24
 

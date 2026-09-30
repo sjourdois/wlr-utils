@@ -279,7 +279,11 @@ fn serve(
                 }
                 Request::Run(tool, args) => {
                     SHOWING.store(true, Ordering::Relaxed);
+                    // A client killed while its overlay is up leaves no one to answer:
+                    // the overlay goes with it instead of holding the keyboard.
+                    host.cancel_on_hangup(stream.try_clone().ok().map(OwnedFd::from));
                     let reply = show(host, tool, args);
+                    host.cancel_on_hangup(None);
                     // Whatever slipped into the queue in the moment before the flag
                     // went up was a keybinding pressed twice, not a second picker.
                     // Drained with the flag still up, so that once the queue is empty
