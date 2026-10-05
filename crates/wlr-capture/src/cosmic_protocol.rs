@@ -2,7 +2,7 @@
 //!
 //! COSMIC ships no IPC socket and no command-line client: the only way to ask
 //! cosmic-comp which window is active, and where it is, is `zcosmic_toplevel_info_v1`,
-//! and the only way to focus one is `zcosmic_toplevel_manager_v1`. Their XML lives in
+//! and the only way to focus or move one is `zcosmic_toplevel_manager_v1`. Their XML lives in
 //! [pop-os/cosmic-protocols], published on crates.io as `cosmic-protocols` — but that
 //! crate is GPL-3.0-only, and wlr-utils is MIT OR Apache-2.0, so the protocol files
 //! themselves (permissively licensed, see their `<copyright>` headers) are vendored

@@ -4,7 +4,7 @@
 //! position or which surface/output has the focus — so, like `grimshot`, we rely
 //! on the compositor's own IPC. This is a small trait with per-compositor backends
 //! selected from the environment: Sway (`$SWAYSOCK`), Hyprland (`hyprctl`) and niri
-//! (`niri msg`). cosmic-comp has no IPC socket, so its backend asks the compositor
+//! (`niri msg`, `$NIRI_SOCKET`). cosmic-comp has no IPC socket, so its backend asks the compositor
 //! over Wayland instead, through `zcosmic_toplevel_info_v1`.
 
 use std::collections::{HashMap, HashSet};
@@ -114,9 +114,14 @@ pub trait FocusBackend {
         None
     }
     /// Move the window `identifier` names onto the current workspace, together with
-    /// anything the compositor hides and shows as one unit with it. Does not
-    /// necessarily move focus. `None` if that could not be carried out.
-    fn show_window(&self, _identifier: &str) -> Option<()> {
+    /// anything the compositor hides and shows as one unit with it. A window already
+    /// there stays where it is. Does not necessarily move focus. `None` if that could
+    /// not be carried out.
+    ///
+    /// No Wayland protocol moves a window between workspaces — `ext-workspace-v1`
+    /// manages the workspaces and says nothing of the windows on them — so this is
+    /// compositor IPC, or a compositor's own protocol.
+    fn move_to_current_workspace(&self, _identifier: &str) -> Option<()> {
         None
     }
     /// Human-readable backend name, for error messages.
@@ -213,7 +218,7 @@ impl FocusBackend for Sway {
         outcomes.into_iter().all(|o| o.is_ok()).then_some(())
     }
 
-    fn show_window(&self, identifier: &str) -> Option<()> {
+    fn move_to_current_workspace(&self, identifier: &str) -> Option<()> {
         // `current` is the focused workspace. Sway shows a hidden scratchpad entry
         // there on its way, and leaves a container already on it where it is.
         let id = sway_move_target(&Self::tree()?, identifier)?;
@@ -442,6 +447,68 @@ impl FocusBackend for Hyprland {
     fn window_pids(&self) -> Option<WindowPids> {
         Some(hypr_window_pids(&Self::query("clients")?))
     }
+
+    fn move_to_current_workspace(&self, identifier: &str) -> Option<()> {
+        let arg = match hypr_move_here(
+            &Self::query("clients")?,
+            &Self::query("activeworkspace")?,
+            identifier,
+        )? {
+            MoveHere::AlreadyThere => return Some(()),
+            MoveHere::To(arg) => arg,
+        };
+        // `silent` leaves the focus alone, as the trait promises; the caller focuses
+        // the window itself. `hyprctl dispatch` exits 0 on a refused dispatch too, and
+        // only says `ok` for one it carried out.
+        let out = std::process::Command::new("hyprctl")
+            .args(["dispatch", "movetoworkspacesilent", &arg])
+            .output()
+            .ok()?;
+        (out.status.success() && out.stdout.trim_ascii() == b"ok").then_some(())
+    }
+}
+
+/// What moving a window onto the current workspace takes.
+#[derive(Debug, PartialEq)]
+enum MoveHere<T> {
+    /// Nothing: the window is on it already.
+    AlreadyThere,
+    /// The compositor command's argument naming the window and the workspace.
+    To(T),
+}
+
+/// The `movetoworkspacesilent` argument that brings the window `identifier` names onto
+/// the active workspace: `<workspace>,address:<address>`.
+///
+/// `identifier` is the `stableId` [`hypr_focus_order`] keys windows by; the dispatcher
+/// names a window by its `address` instead, read off the same client. A workspace is
+/// named by its id when that is positive, since a bare number is what the dispatcher
+/// takes as one — a negative one would read as "that many workspaces back" — and by
+/// its name otherwise.
+fn hypr_move_here(
+    clients: &serde_json::Value,
+    active_workspace: &serde_json::Value,
+    identifier: &str,
+) -> Option<MoveHere<String>> {
+    let client = clients
+        .as_array()?
+        .iter()
+        .find(|c| c.get("stableId").and_then(serde_json::Value::as_str) == Some(identifier))?;
+    let address = client.get("address")?.as_str()?;
+    let id = active_workspace.get("id")?.as_i64()?;
+    if client
+        .pointer("/workspace/id")
+        .and_then(serde_json::Value::as_i64)
+        == Some(id)
+    {
+        return Some(MoveHere::AlreadyThere);
+    }
+    let workspace = if id > 0 {
+        id.to_string()
+    } else {
+        format!("name:{}", active_workspace.get("name")?.as_str()?)
+    };
+    Some(MoveHere::To(format!("{workspace},address:{address}")))
 }
 
 /// Pick the focused monitor's name from `hyprctl -j monitors` (an array of monitors,
@@ -564,6 +631,73 @@ impl FocusBackend for Niri {
     fn window_pids(&self) -> Option<WindowPids> {
         Some(niri_window_pids(&Self::query("windows")?))
     }
+
+    fn move_to_current_workspace(&self, identifier: &str) -> Option<()> {
+        match niri_move_here(
+            &Self::query("windows")?,
+            &Self::query("workspaces")?,
+            identifier,
+        )? {
+            MoveHere::AlreadyThere => Some(()),
+            MoveHere::To(request) => Self::request(&request),
+        }
+    }
+}
+
+impl Niri {
+    /// Send one request over niri's socket, and say whether it was carried out.
+    ///
+    /// `niri msg action move-window-to-workspace` can only name a workspace by its
+    /// index on a monitor or by its name, and the focused one need have neither on the
+    /// window's monitor: the socket takes the workspace id itself.
+    fn request(request: &serde_json::Value) -> Option<()> {
+        use std::io::{BufRead, BufReader, Write};
+        let mut stream =
+            std::os::unix::net::UnixStream::connect(std::env::var_os("NIRI_SOCKET")?).ok()?;
+        writeln!(stream, "{request}").ok()?;
+        stream.shutdown(std::net::Shutdown::Write).ok()?;
+        let mut reply = String::new();
+        BufReader::new(stream).read_line(&mut reply).ok()?;
+        let reply: serde_json::Value = serde_json::from_str(&reply).ok()?;
+        reply.get("Ok").map(|_| ())
+    }
+}
+
+/// The niri request that brings the window `identifier` names onto the focused
+/// workspace, from `niri msg --json windows` and `niri msg --json workspaces`.
+///
+/// `identifier` is the window `id` in decimal, as [`niri_focus_order`] keys windows.
+/// `focus` is off, as the trait promises; the caller focuses the window itself.
+fn niri_move_here(
+    windows: &serde_json::Value,
+    workspaces: &serde_json::Value,
+    identifier: &str,
+) -> Option<MoveHere<serde_json::Value>> {
+    let window_id: u64 = identifier.parse().ok()?;
+    let window = windows
+        .as_array()?
+        .iter()
+        .find(|w| w.get("id").and_then(serde_json::Value::as_u64) == Some(window_id))?;
+    let workspace = workspaces
+        .as_array()?
+        .iter()
+        .find(|w| w.get("is_focused").and_then(serde_json::Value::as_bool) == Some(true))?
+        .get("id")?
+        .as_u64()?;
+    if window
+        .get("workspace_id")
+        .and_then(serde_json::Value::as_u64)
+        == Some(workspace)
+    {
+        return Some(MoveHere::AlreadyThere);
+    }
+    Some(MoveHere::To(serde_json::json!({
+        "Action": {"MoveWindowToWorkspace": {
+            "window_id": window_id,
+            "reference": {"Id": workspace},
+            "focus": false,
+        }}
+    })))
 }
 
 /// The process behind each window of `niri msg --json windows`.
@@ -651,6 +785,9 @@ fn niri_focus_order(windows: &serde_json::Value) -> Option<FocusOrder> {
 /// describes a window by app id, title, state, workspace and geometry, and carries no
 /// process: what the other backends read from an IPC has no COSMIC equivalent, so
 /// `--pid` is refused there rather than answered wrongly.
+///
+/// [`FocusBackend::move_to_current_workspace`] goes through
+/// `zcosmic_toplevel_manager_v1` instead: see [`crate::cosmic_move`].
 struct Cosmic;
 
 impl FocusBackend for Cosmic {
@@ -667,6 +804,10 @@ impl FocusBackend for Cosmic {
 
     fn active_window_rect(&self) -> Option<Region> {
         cosmic_active(&CosmicSnapshot::query()?.windows)?.rect
+    }
+
+    fn move_to_current_workspace(&self, identifier: &str) -> Option<()> {
+        crate::cosmic_move::move_to_current_workspace(identifier)
     }
 }
 
@@ -706,7 +847,7 @@ fn cosmic_active(windows: &[CosmicWindow]) -> Option<&CosmicWindow> {
 
 /// Whether a `zcosmic_toplevel_handle_v1.state` array contains `activated`. The array
 /// is a raw sequence of 32-bit enum values, in host byte order.
-fn cosmic_is_activated(states: &[u8]) -> bool {
+pub(crate) fn cosmic_is_activated(states: &[u8]) -> bool {
     states
         .as_chunks::<4>()
         .0
@@ -747,7 +888,7 @@ struct CosmicSnapshot {
 /// How long to wait for cosmic-comp's refresh tick to describe the toplevels. It took
 /// 26–67 ms on a software-rendered virtual machine; a second is far beyond that, and
 /// is only ever reached when the compositor never answers.
-const COSMIC_TIMEOUT: Duration = Duration::from_secs(1);
+pub(crate) const COSMIC_TIMEOUT: Duration = Duration::from_secs(1);
 
 impl CosmicSnapshot {
     /// Connect, enumerate the windows and wait for cosmic-comp to describe them.
@@ -814,9 +955,9 @@ impl CosmicSnapshot {
 
 /// Wait for more events until `deadline`, then dispatch them. `false` means to stop
 /// waiting: the deadline passed, or the connection went away.
-fn cosmic_wait(
-    queue: &mut wayland_client::EventQueue<CosmicSnapshot>,
-    snap: &mut CosmicSnapshot,
+pub(crate) fn cosmic_wait<S>(
+    queue: &mut wayland_client::EventQueue<S>,
+    snap: &mut S,
     deadline: Instant,
 ) -> bool {
     if queue.flush().is_err() {
@@ -1434,5 +1575,73 @@ mod tests {
         assert_eq!(niri_focused_output(&v).as_deref(), Some("eDP-1"));
         // `null` (no focused output) → None.
         assert!(niri_focused_output(&serde_json::Value::Null).is_none());
+    }
+
+    #[test]
+    fn hypr_move_here_names_the_window_by_address_and_the_workspace_by_id() {
+        // Shapes per `hyprctl -j clients` and `hyprctl -j activeworkspace`.
+        let clients = json!([
+            {"address":"0x557fa45bb650","stableId":"18000002",
+             "workspace":{"id":1,"name":"1"}},
+            {"address":"0x557fa6decc90","stableId":"18000003",
+             "workspace":{"id":-98,"name":"special:magic"}},
+        ]);
+        let on = |id: i64, name: &str| json!({"id": id, "name": name, "monitor": "DP-1"});
+
+        assert_eq!(
+            hypr_move_here(&clients, &on(3, "3"), "18000002"),
+            Some(MoveHere::To("3,address:0x557fa45bb650".into()))
+        );
+        // Out of a special workspace too: that is what bringing it here means.
+        assert_eq!(
+            hypr_move_here(&clients, &on(3, "3"), "18000003"),
+            Some(MoveHere::To("3,address:0x557fa6decc90".into()))
+        );
+        // A bare negative number would read as a relative move: named instead.
+        assert_eq!(
+            hypr_move_here(&clients, &on(-1337, "mail"), "18000002"),
+            Some(MoveHere::To("name:mail,address:0x557fa45bb650".into()))
+        );
+        assert_eq!(
+            hypr_move_here(&clients, &on(1, "1"), "18000002"),
+            Some(MoveHere::AlreadyThere)
+        );
+        assert_eq!(hypr_move_here(&clients, &on(3, "3"), "18000009"), None);
+        // `activeworkspace` with nothing in it says nothing of where "here" is.
+        assert_eq!(hypr_move_here(&clients, &json!({}), "18000002"), None);
+    }
+
+    #[test]
+    fn niri_move_here_names_the_focused_workspace_by_id() {
+        // Shapes per `niri msg --json windows` and `niri msg --json workspaces`: two
+        // monitors, so index 1 exists on each and only the id is unambiguous.
+        let windows = json!([
+            {"id":5,"workspace_id":2,"is_focused":false},
+            {"id":6,"workspace_id":4,"is_focused":true},
+            {"id":7,"workspace_id":null,"is_focused":false},
+        ]);
+        let workspaces = json!([
+            {"id":2,"idx":1,"output":"DP-1","is_active":true,"is_focused":false},
+            {"id":3,"idx":2,"output":"DP-1","is_active":false,"is_focused":false},
+            {"id":4,"idx":1,"output":"HDMI-A-1","is_active":true,"is_focused":true},
+        ]);
+        let request = |window: u64| {
+            Some(MoveHere::To(json!({"Action": {"MoveWindowToWorkspace": {
+                "window_id": window,
+                "reference": {"Id": 4},
+                "focus": false,
+            }}})))
+        };
+
+        assert_eq!(niri_move_here(&windows, &workspaces, "5"), request(5));
+        assert_eq!(niri_move_here(&windows, &workspaces, "7"), request(7));
+        assert_eq!(
+            niri_move_here(&windows, &workspaces, "6"),
+            Some(MoveHere::AlreadyThere)
+        );
+        assert_eq!(niri_move_here(&windows, &workspaces, "8"), None);
+        assert_eq!(niri_move_here(&windows, &workspaces, "ext-5"), None);
+        // No workspace focused: nowhere to bring it.
+        assert_eq!(niri_move_here(&windows, &json!([]), "5"), None);
     }
 }

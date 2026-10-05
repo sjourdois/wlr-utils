@@ -31,8 +31,9 @@
 //! Behind the `focus` feature (compositor IPC, pulls `serde_json`):
 //! - [`focus`]: "the active window" / "the current output" via the compositor's own
 //!   IPC (Sway, Hyprland, niri; cosmic-comp over `zcosmic_toplevel_info_v1`), and what
-//!   else only an IPC knows: focus history, the process behind a window, Sway's
-//!   scratchpad. Wayland gives no portable way to query any of it.
+//!   else only an IPC knows: focus history, the process behind a window, moving a
+//!   window to the current workspace, Sway's scratchpad. Wayland gives no portable way
+//!   to do any of it.
 //!
 //! This crate carries **no localised UI strings**: it exposes an API and typed
 //! [`CaptureError`]s, and any on-screen text (e.g. the overlay hints, the mirror labels)
@@ -78,6 +79,8 @@ macro_rules! version {
 
 pub mod clipboard;
 mod cosmic_activate;
+#[cfg(feature = "focus")]
+mod cosmic_move;
 mod cosmic_protocol;
 pub mod diff;
 pub mod doctor;

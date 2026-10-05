@@ -319,17 +319,16 @@ Sway keeps windows aside in a **scratchpad**, off every workspace until one is a
 back. `--scratchpad` points the switcher at that set:
 
 ```
-# Focus window in scratchpad
-bindsym $mod+minus exec wlr-switcher --cycle-key Minus:Equal --scratchpad only
-# or, like `scratchpad show` but with a picker:
-# bindsym $mod+minus exec wlr-switcher --cycle-key Minus:Equal --scratchpad toggle --move
+bindsym $mod+minus exec wlr-switcher --scratchpad toggle --move --cycle-key Minus:Equal
 ```
 
 - **`only`** offers just the windows in the scratchpad.
 - **`exclude`** offers just the windows that are not.
 - **`toggle`** has semantics similar to sway's own `scratchpad show`: a focused window
   already shown from the scratchpad goes back, and otherwise the overlay opens on
-  `only` — so one key both fetches a window and puts it away again.
+  `only` — so one key both fetches a window and puts it away again. With `--move`
+  (below), a window shown on another workspace is brought here as `scratchpad show`
+  does, instead of being focused there.
 
 With a single window in the scratchpad, `only` and `toggle` bring it back straight
 away (see `--auto-select` above); with none, the switcher says the scratchpad is empty
@@ -347,14 +346,18 @@ Sway-only, over its IPC (`$SWAYSOCK`); anywhere else the flag says so and exits.
 
 By default, picking a window on another workspace switches to that workspace. With
 `--move`, the picked window is moved to the current workspace first and focused there
-— together with its scratchpad container, if it is in one.
+— on sway, together with its scratchpad container, if it is in one.
 
 ```
-bindsym Mod1+Control+Tab exec wlr-switcher --move  # pull a window into the current workspace
+bindsym Mod1+Control+Tab exec wlr-switcher --move
 ```
 
-Currently Sway-only, over its IPC (`$SWAYSOCK`); anywhere else the window is focused where it
-is, and the switcher says it could not be moved.
+No Wayland protocol moves a window between workspaces, so this goes through the
+compositor: sway's and niri's IPC, `hyprctl`, or `cosmic-toplevel-management` on
+COSMIC. COSMIC names no focused workspace, so there the current one is the one holding
+the active window; with none active, it is only known on a single output. When the
+window cannot be moved, it is still focused where it is, and the switcher says so and
+exits `2`.
 
 ## Instant overlays — `wlr-overlayd`
 

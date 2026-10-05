@@ -32,7 +32,7 @@ single-tool install can produce it too.
 | `xdg-output` (`zxdg_output_manager_v1`) | accurate logical geometry (fractional scale, positions) | recommended; falls back to `wl_output` |
 | `cursor-shape-v1` (`wp_cursor_shape_manager_v1`) | an overlay setting its own cursor | recommended, every overlay; without it the overlay shows whatever cursor the last client left — none, if that one hid it |
 | `tablet-v2` (`zwp_tablet_manager_v2`) | graphics tablet (stylus) input | optional, `wlr-draw`; without it, mouse only |
-| compositor IPC, or `cosmic-toplevel-info` (`zcosmic_toplevel_info_v1`, v2+) on COSMIC | "the active window" / "the current output" (`-a`, `--current-output`); an IPC also names the process behind a window (`--pid`) and, on sway, the windows in its scratchpad (`--scratchpad`), which no Wayland protocol does | a per-compositor focus backend |
+| compositor IPC, or `cosmic-toplevel-info` (`zcosmic_toplevel_info_v1`, v2+) on COSMIC | "the active window" / "the current output" (`-a`, `--current-output`); an IPC also names the process behind a window (`--pid`), moves a window to the current workspace (`--move`; `cosmic-toplevel-management` v4 on COSMIC) and, on sway, names the windows in its scratchpad (`--scratchpad`), which no Wayland protocol does | a per-compositor focus backend |
 
 The engine drives `ext-image-copy-capture-v1` where it is available, and
 `wlr-screencopy` otherwise. `ext-image-capture-source-v1` landed in two steps: the base
@@ -83,20 +83,21 @@ backend (for `-a` / `--current-output`). Run `wlr-peek doctor` to check your own
 
 | Compositor | Screen capture | Window capture | Overlays (layer-shell) | Focus IPC |
 | --- | --- | --- | --- | --- |
-| **Sway** | ✅ ≥ 1.11 (wlroots 0.19) | ✅ ≥ 1.12 (wlroots 0.20) | ✅ | ✅ `$SWAYSOCK` (MRU, pid, scratchpad) |
-| **Hyprland** | ✅ ≥ v0.54 | ✅ ≥ v0.54 | ✅ | ✅ `hyprctl` (MRU, pid) |
+| **Sway** | ✅ ≥ 1.11 (wlroots 0.19) | ✅ ≥ 1.12 (wlroots 0.20) | ✅ | ✅ `$SWAYSOCK` (MRU, pid, move, scratchpad) |
+| **Hyprland** | ✅ ≥ v0.54 | ✅ ≥ v0.54 | ✅ | ✅ `hyprctl` (MRU, pid, move) |
 | **labwc** | ✅ ≥ 0.9 (wlroots 0.19) | 🟡 ≥ 0.20 (partial) | ✅ | ❌ |
-| **cosmic-comp** | ✅ | ✅ | ✅ | ✅ `zcosmic_toplevel_info_v1` |
+| **cosmic-comp** | ✅ | ✅ | ✅ | ✅ `zcosmic_toplevel_info_v1` (move) |
 | **Wayfire** | ✅ ≥ 0.10 (wlroots 0.19) | ❌ (0.11 is on wlroots 0.20 but ships no window source) | ✅ | ❌ |
 | **river** | ✅ ≥ 0.3 (wlroots 0.19) | ✅ ≥ 0.4 | ✅ | ❌ |
-| **niri** | ✅ (`wlr-screencopy`) | ❌ | ✅ | 🟡 `niri msg` (MRU, pid, `-a` n/a) |
+| **niri** | ✅ (`wlr-screencopy`) | ❌ | ✅ | 🟡 `niri msg` (MRU, pid, move, `-a` n/a) |
 | **dwl** | ✅ (`wlr-screencopy`; `ext` ≥ 0.9) | 🟡 ≥ 0.9 (no focusing) | ✅ | ❌ |
 | **Mutter** (GNOME) | ❌ | ❌ | ❌ | ❌ |
 | **KWin** (KDE) | ❌ | ❌ | ✅ | ❌ |
 
 ✅ full · 🟡 partial · ❌ none. "MRU" marks a backend that also reports the window focus
 history, for `--window-order mru`; "pid" one that names the process behind a window, for
-`--pid`; "scratchpad" one that reports the windows kept aside, for `--scratchpad`.
+`--pid`; "move" one that moves a window to the current workspace, for `--move`;
+"scratchpad" one that reports the windows kept aside, for `--scratchpad`.
 Versions are from each project's release notes / merge requests (the per-interface
 numbers on wayland.app are unreliable snapshots).
 
@@ -140,6 +141,12 @@ Two things vary by compositor:
   `--pid` says so and exits; `--app-id` and `--title` need nothing of the sort and work
   wherever windows can be listed.
 
+  **Moving the picked window here** (`--move`) needs one too, and all four provide it:
+  Sway and niri over their IPC socket, Hyprland through `hyprctl dispatch`, COSMIC
+  through `cosmic-toplevel-management` (v4). `ext-workspace-v1` manages workspaces but
+  not the windows on them. Elsewhere the window is focused where it is, and the
+  switcher says so.
+
   **The scratchpad** (`--scratchpad`) is Sway's: the switcher reads it from Sway's tree
   and puts windows back through its IPC. Elsewhere the flag says so and exits.
 
@@ -160,9 +167,10 @@ Two things vary by compositor:
 
 Focus backends live in [`crates/wlr-capture/src/focus.rs`](crates/wlr-capture/src/focus.rs):
 implement `FocusBackend` (a `focused_output()` and an `active_window_rect()`, plus an
-optional `focus_order()` for `--window-order mru` and `window_pids()` for `--pid`) over
-your compositor's IPC and add a detection branch in `detect()`. Both optional methods
-key their answer by the `ext-foreign-toplevel-list-v1` identifier, which is what the
-capture engine names a window by. The Sway, Hyprland and niri backends are short worked
+optional `focus_order()` for `--window-order mru`, `window_pids()` for `--pid` and
+`move_to_current_workspace()` for `--move`) over your compositor's IPC and add a
+detection branch in `detect()`. The optional methods key windows by the
+`ext-foreign-toplevel-list-v1` identifier, which is what the capture engine names a
+window by. The Sway, Hyprland and niri backends are short worked
 examples; the cosmic-comp one shows the same trait over a Wayland protocol instead of a
 socket.

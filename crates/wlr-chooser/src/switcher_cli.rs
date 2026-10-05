@@ -155,7 +155,9 @@ struct Cli {
     #[arg(long, value_enum, value_name = "MODE")]
     scratchpad: Option<ScratchpadArg>,
     /// Bring the picked window onto the current workspace before focusing it, rather
-    /// than switching to the workspace it is on. Sway-only (needs `$SWAYSOCK`).
+    /// than switching to the workspace it is on. Needs sway, Hyprland, niri or
+    /// cosmic-comp; when the window cannot be moved, it is focused where it is and the
+    /// run fails with a message.
     #[arg(long = "move")]
     move_window: bool,
     /// Label each tile with the key that picks it, taken from a row of the physical
@@ -336,9 +338,12 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, Str
         // Bring it here first, if asked: focusing it where it is would switch workspace.
         // A failed move still focuses the window, and says so afterwards.
         let moved = if cli.move_window {
-            focus::detect()
-                .and_then(|backend| backend.show_window(&sel.identifier))
-                .ok_or_else(|| tr!("move-failed"))
+            match focus::detect() {
+                None => Err(tr!("move-unsupported")),
+                Some(backend) => backend
+                    .move_to_current_workspace(&sel.identifier)
+                    .ok_or_else(|| tr!("move-failed")),
+            }
         } else {
             Ok(())
         };

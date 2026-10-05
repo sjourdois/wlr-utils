@@ -106,19 +106,24 @@ pub fn manager_advertised(globals: &[(String, u32)]) -> bool {
         && named(ZcosmicToplevelInfoV1::interface().name, 2)
 }
 
-/// Whether a `zcosmic_toplevel_manager_v1.capabilities` array contains `activate`. The
-/// array is a raw sequence of 32-bit enum values, in host byte order.
+/// Whether a `zcosmic_toplevel_manager_v1.capabilities` array contains `activate`.
 ///
 /// A manager that does not advertise the capability ignores `activate`, so the caller
 /// has to say the window cannot be focused instead of silently doing nothing.
 fn can_activate(capabilities: &[u8]) -> bool {
+    has_capability(capabilities, Capability::Activate)
+}
+
+/// Whether a `zcosmic_toplevel_manager_v1.capabilities` array contains `capability`.
+/// The array is a raw sequence of 32-bit enum values, in host byte order.
+pub(crate) fn has_capability(capabilities: &[u8], capability: Capability) -> bool {
     capabilities
         .as_chunks::<4>()
         .0
         .iter()
         .copied()
         .map(u32::from_ne_bytes)
-        .any(|c| c == Capability::Activate as u32)
+        .any(|c| c == capability as u32)
 }
 
 /// The windows cosmic-comp advertises, and what its manager will honour.

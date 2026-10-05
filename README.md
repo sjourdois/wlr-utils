@@ -218,7 +218,8 @@ Bug reports, translations and patches welcome — see
   cursor, so one hidden by another window shows again
   ([#16](https://github.com/sjourdois/wlr-utils/pull/16)); sway's scratchpad, custom
   cycle keys and one-window auto-select in wlr-switcher
-  ([#20](https://github.com/sjourdois/wlr-utils/pull/20))
+  ([#20](https://github.com/sjourdois/wlr-utils/pull/20)); `--move` in wlr-switcher
+  ([#21](https://github.com/sjourdois/wlr-utils/pull/21))
 
 ## License
 

@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Added
+
+- **`--move` on `wlr-switcher`**
+  ([#21](https://github.com/sjourdois/wlr-utils/pull/21), by
+  [@bR3iN](https://github.com/bR3iN)) — brings the picked window onto the current
+  workspace, on sway, Hyprland, niri and cosmic-comp.
+
 ### Fixed
 
 - **A non-ASCII colour in `theme.toml` no longer crashes the overlays** — a value such
