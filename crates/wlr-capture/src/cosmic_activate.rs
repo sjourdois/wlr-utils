@@ -231,18 +231,15 @@ mod tests {
     #[test]
     fn activate_is_found_among_the_capabilities() {
         // What cosmic-comp 1.8.0 answers: close, activate, maximize, minimize,
-        // fullscreen, move_to_workspace, sticky, move_to_ext_workspace.
-        let all = caps(&[
+        // move_to_workspace.
+        let cosmic_comp = caps(&[
             Capability::Close,
             Capability::Activate,
             Capability::Maximize,
             Capability::Minimize,
-            Capability::Fullscreen,
             Capability::MoveToWorkspace,
-            Capability::Sticky,
-            Capability::MoveToExtWorkspace,
         ]);
-        assert!(can_activate(&all));
+        assert!(can_activate(&cosmic_comp));
         assert!(can_activate(&caps(&[Capability::Activate])));
     }
 

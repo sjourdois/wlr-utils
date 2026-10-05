@@ -11,7 +11,7 @@ All notable changes to this project are documented here. The format is based on
 - **`--move` on `wlr-switcher`**
   ([#21](https://github.com/sjourdois/wlr-utils/pull/21), by
   [@bR3iN](https://github.com/bR3iN)) — brings the picked window onto the current
-  workspace, on sway, Hyprland, niri and cosmic-comp.
+  workspace, on sway, Hyprland and cosmic-comp.
 
 ### Fixed
 

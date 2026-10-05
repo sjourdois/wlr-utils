@@ -155,9 +155,9 @@ struct Cli {
     #[arg(long, value_enum, value_name = "MODE")]
     scratchpad: Option<ScratchpadArg>,
     /// Bring the picked window onto the current workspace before focusing it, rather
-    /// than switching to the workspace it is on. Needs sway, Hyprland, niri or
-    /// cosmic-comp; when the window cannot be moved, it is focused where it is and the
-    /// run fails with a message.
+    /// than switching to the workspace it is on. Needs sway, Hyprland or cosmic-comp;
+    /// when the window cannot be moved, it is focused where it is and the run fails
+    /// with a message.
     #[arg(long = "move")]
     move_window: bool,
     /// Label each tile with the key that picks it, taken from a row of the physical

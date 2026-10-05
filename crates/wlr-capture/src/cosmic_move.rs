@@ -70,7 +70,7 @@ pub(crate) fn move_to_current_workspace(identifier: &str) -> Option<()> {
     // capabilities; the second the `identifier` event naming each toplevel.
     queue.roundtrip(&mut state).ok()?;
     queue.roundtrip(&mut state).ok()?;
-    if !has_capability(&state.capabilities, Capability::MoveToExtWorkspace) {
+    if !can_move(&state.capabilities) {
         return None;
     }
     let target = state
@@ -103,6 +103,18 @@ pub(crate) fn move_to_current_workspace(identifier: &str) -> Option<()> {
     // on it rather than letting the process exit before it is even sent.
     queue.roundtrip(&mut state).ok()?;
     Some(())
+}
+
+/// Whether a `zcosmic_toplevel_manager_v1.capabilities` array says
+/// `move_to_ext_workspace` is honoured.
+///
+/// FIXME: cosmic-comp (still as of 3d55cba, 2026-10-01) advertises `move_to_workspace`,
+/// whose handler does nothing, and handles `move_to_ext_workspace` without advertising
+/// it. Either one is taken as the go-ahead until it advertises the right one; then
+/// check `MoveToExtWorkspace` alone.
+fn can_move(capabilities: &[u8]) -> bool {
+    has_capability(capabilities, Capability::MoveToExtWorkspace)
+        || has_capability(capabilities, Capability::MoveToWorkspace)
 }
 
 /// One window, by what places it.
@@ -484,5 +496,32 @@ mod tests {
             current_workspace(&[window(true, &[0])], &[true], &groups),
             None
         );
+    }
+
+    /// A `capabilities` array as the wire carries it: 32-bit values, host byte order.
+    fn caps(values: &[Capability]) -> Vec<u8> {
+        values
+            .iter()
+            .flat_map(|c| (*c as u32).to_ne_bytes())
+            .collect()
+    }
+
+    #[test]
+    fn cosmic_comps_capabilities_allow_the_move() {
+        // What cosmic-comp 1.8.0 answers: no `move_to_ext_workspace` among them.
+        assert!(can_move(&caps(&[
+            Capability::Close,
+            Capability::Activate,
+            Capability::Maximize,
+            Capability::Minimize,
+            Capability::MoveToWorkspace,
+        ])));
+        assert!(can_move(&caps(&[Capability::MoveToExtWorkspace])));
+    }
+
+    #[test]
+    fn a_manager_with_no_move_capability_cannot_move() {
+        assert!(!can_move(&caps(&[Capability::Close, Capability::Activate])));
+        assert!(!can_move(&[]));
     }
 }

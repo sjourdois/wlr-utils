@@ -4,7 +4,7 @@
 //! position or which surface/output has the focus — so, like `grimshot`, we rely
 //! on the compositor's own IPC. This is a small trait with per-compositor backends
 //! selected from the environment: Sway (`$SWAYSOCK`), Hyprland (`hyprctl`) and niri
-//! (`niri msg`, `$NIRI_SOCKET`). cosmic-comp has no IPC socket, so its backend asks the compositor
+//! (`niri msg`). cosmic-comp has no IPC socket, so its backend asks the compositor
 //! over Wayland instead, through `zcosmic_toplevel_info_v1`.
 
 use std::collections::{HashMap, HashSet};
@@ -470,11 +470,11 @@ impl FocusBackend for Hyprland {
 
 /// What moving a window onto the current workspace takes.
 #[derive(Debug, PartialEq)]
-enum MoveHere<T> {
+enum MoveHere {
     /// Nothing: the window is on it already.
     AlreadyThere,
     /// The compositor command's argument naming the window and the workspace.
-    To(T),
+    To(String),
 }
 
 /// The `movetoworkspacesilent` argument that brings the window `identifier` names onto
@@ -489,7 +489,7 @@ fn hypr_move_here(
     clients: &serde_json::Value,
     active_workspace: &serde_json::Value,
     identifier: &str,
-) -> Option<MoveHere<String>> {
+) -> Option<MoveHere> {
     let client = clients
         .as_array()?
         .iter()
@@ -631,73 +631,6 @@ impl FocusBackend for Niri {
     fn window_pids(&self) -> Option<WindowPids> {
         Some(niri_window_pids(&Self::query("windows")?))
     }
-
-    fn move_to_current_workspace(&self, identifier: &str) -> Option<()> {
-        match niri_move_here(
-            &Self::query("windows")?,
-            &Self::query("workspaces")?,
-            identifier,
-        )? {
-            MoveHere::AlreadyThere => Some(()),
-            MoveHere::To(request) => Self::request(&request),
-        }
-    }
-}
-
-impl Niri {
-    /// Send one request over niri's socket, and say whether it was carried out.
-    ///
-    /// `niri msg action move-window-to-workspace` can only name a workspace by its
-    /// index on a monitor or by its name, and the focused one need have neither on the
-    /// window's monitor: the socket takes the workspace id itself.
-    fn request(request: &serde_json::Value) -> Option<()> {
-        use std::io::{BufRead, BufReader, Write};
-        let mut stream =
-            std::os::unix::net::UnixStream::connect(std::env::var_os("NIRI_SOCKET")?).ok()?;
-        writeln!(stream, "{request}").ok()?;
-        stream.shutdown(std::net::Shutdown::Write).ok()?;
-        let mut reply = String::new();
-        BufReader::new(stream).read_line(&mut reply).ok()?;
-        let reply: serde_json::Value = serde_json::from_str(&reply).ok()?;
-        reply.get("Ok").map(|_| ())
-    }
-}
-
-/// The niri request that brings the window `identifier` names onto the focused
-/// workspace, from `niri msg --json windows` and `niri msg --json workspaces`.
-///
-/// `identifier` is the window `id` in decimal, as [`niri_focus_order`] keys windows.
-/// `focus` is off, as the trait promises; the caller focuses the window itself.
-fn niri_move_here(
-    windows: &serde_json::Value,
-    workspaces: &serde_json::Value,
-    identifier: &str,
-) -> Option<MoveHere<serde_json::Value>> {
-    let window_id: u64 = identifier.parse().ok()?;
-    let window = windows
-        .as_array()?
-        .iter()
-        .find(|w| w.get("id").and_then(serde_json::Value::as_u64) == Some(window_id))?;
-    let workspace = workspaces
-        .as_array()?
-        .iter()
-        .find(|w| w.get("is_focused").and_then(serde_json::Value::as_bool) == Some(true))?
-        .get("id")?
-        .as_u64()?;
-    if window
-        .get("workspace_id")
-        .and_then(serde_json::Value::as_u64)
-        == Some(workspace)
-    {
-        return Some(MoveHere::AlreadyThere);
-    }
-    Some(MoveHere::To(serde_json::json!({
-        "Action": {"MoveWindowToWorkspace": {
-            "window_id": window_id,
-            "reference": {"Id": workspace},
-            "focus": false,
-        }}
-    })))
 }
 
 /// The process behind each window of `niri msg --json windows`.
@@ -1609,39 +1542,5 @@ mod tests {
         assert_eq!(hypr_move_here(&clients, &on(3, "3"), "18000009"), None);
         // `activeworkspace` with nothing in it says nothing of where "here" is.
         assert_eq!(hypr_move_here(&clients, &json!({}), "18000002"), None);
-    }
-
-    #[test]
-    fn niri_move_here_names_the_focused_workspace_by_id() {
-        // Shapes per `niri msg --json windows` and `niri msg --json workspaces`: two
-        // monitors, so index 1 exists on each and only the id is unambiguous.
-        let windows = json!([
-            {"id":5,"workspace_id":2,"is_focused":false},
-            {"id":6,"workspace_id":4,"is_focused":true},
-            {"id":7,"workspace_id":null,"is_focused":false},
-        ]);
-        let workspaces = json!([
-            {"id":2,"idx":1,"output":"DP-1","is_active":true,"is_focused":false},
-            {"id":3,"idx":2,"output":"DP-1","is_active":false,"is_focused":false},
-            {"id":4,"idx":1,"output":"HDMI-A-1","is_active":true,"is_focused":true},
-        ]);
-        let request = |window: u64| {
-            Some(MoveHere::To(json!({"Action": {"MoveWindowToWorkspace": {
-                "window_id": window,
-                "reference": {"Id": 4},
-                "focus": false,
-            }}})))
-        };
-
-        assert_eq!(niri_move_here(&windows, &workspaces, "5"), request(5));
-        assert_eq!(niri_move_here(&windows, &workspaces, "7"), request(7));
-        assert_eq!(
-            niri_move_here(&windows, &workspaces, "6"),
-            Some(MoveHere::AlreadyThere)
-        );
-        assert_eq!(niri_move_here(&windows, &workspaces, "8"), None);
-        assert_eq!(niri_move_here(&windows, &workspaces, "ext-5"), None);
-        // No workspace focused: nowhere to bring it.
-        assert_eq!(niri_move_here(&windows, &json!([]), "5"), None);
     }
 }

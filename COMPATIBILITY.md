@@ -89,7 +89,7 @@ backend (for `-a` / `--current-output`). Run `wlr-peek doctor` to check your own
 | **cosmic-comp** | ✅ | ✅ | ✅ | ✅ `zcosmic_toplevel_info_v1` (move) |
 | **Wayfire** | ✅ ≥ 0.10 (wlroots 0.19) | ❌ (0.11 is on wlroots 0.20 but ships no window source) | ✅ | ❌ |
 | **river** | ✅ ≥ 0.3 (wlroots 0.19) | ✅ ≥ 0.4 | ✅ | ❌ |
-| **niri** | ✅ (`wlr-screencopy`) | ❌ | ✅ | 🟡 `niri msg` (MRU, pid, move, `-a` n/a) |
+| **niri** | ✅ (`wlr-screencopy`) | ❌ | ✅ | 🟡 `niri msg` (MRU, pid, `-a` n/a) |
 | **dwl** | ✅ (`wlr-screencopy`; `ext` ≥ 0.9) | 🟡 ≥ 0.9 (no focusing) | ✅ | ❌ |
 | **Mutter** (GNOME) | ❌ | ❌ | ❌ | ❌ |
 | **KWin** (KDE) | ❌ | ❌ | ✅ | ❌ |
@@ -141,11 +141,11 @@ Two things vary by compositor:
   `--pid` says so and exits; `--app-id` and `--title` need nothing of the sort and work
   wherever windows can be listed.
 
-  **Moving the picked window here** (`--move`) needs one too, and all four provide it:
-  Sway and niri over their IPC socket, Hyprland through `hyprctl dispatch`, COSMIC
-  through `cosmic-toplevel-management` (v4). `ext-workspace-v1` manages workspaces but
-  not the windows on them. Elsewhere the window is focused where it is, and the
-  switcher says so.
+  **Moving the picked window here** (`--move`) needs one too, and three of the four
+  provide it: Sway over its IPC socket, Hyprland through `hyprctl dispatch`, COSMIC
+  through `cosmic-toplevel-management` (v4). `wlr-switcher` does not run on niri, which
+  captures no windows. `ext-workspace-v1` manages workspaces but not the windows on
+  them. Elsewhere the window is focused where it is, and the switcher says so.
 
   **The scratchpad** (`--scratchpad`) is Sway's: the switcher reads it from Sway's tree
   and puts windows back through its IPC. Elsewhere the flag says so and exits.

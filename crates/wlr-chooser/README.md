@@ -353,11 +353,10 @@ bindsym Mod1+Control+Tab exec wlr-switcher --move
 ```
 
 No Wayland protocol moves a window between workspaces, so this goes through the
-compositor: sway's and niri's IPC, `hyprctl`, or `cosmic-toplevel-management` on
-COSMIC. COSMIC names no focused workspace, so there the current one is the one holding
-the active window; with none active, it is only known on a single output. When the
-window cannot be moved, it is still focused where it is, and the switcher says so and
-exits `2`.
+compositor: sway's IPC, `hyprctl`, or `cosmic-toplevel-management` on COSMIC. COSMIC
+names no focused workspace, so there the current one is the one holding the active
+window; with none active, it is only known on a single output. When the window cannot
+be moved, it is still focused where it is, and the switcher says so and exits `2`.
 
 ## Instant overlays — `wlr-overlayd`
 
