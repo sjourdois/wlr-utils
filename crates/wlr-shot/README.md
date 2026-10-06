@@ -23,7 +23,7 @@ or a window — as a screenshot (PNG/JPEG/PPM) or an H.264 recording / timelapse
 ```sh
 wlr-shot screenshot [-s | -o NAME | --all | -g GEOM | -w ID | --app-id ID | --title TEXT
                      | --pick-window | -a | --current-output]
-                    [--cursor] [-t png|jpeg|ppm] [-q QUALITY] [-c] [FILE|-]
+                    [--cursor] [-t png|jpeg|ppm|pam] [-q QUALITY] [-c] [FILE|-]
 wlr-shot screenshot --list-outputs | --list-windows
 wlr-shot record [-s | -o NAME | -g GEOM | -w ID | --app-id ID | --title TEXT
                  | --pick-window | -a | --current-output]
@@ -66,8 +66,9 @@ Contents:
 
 Encoding & destination:
 
-- `-t, --type` — `png`, `jpeg`, or `ppm`. Without it, the file's extension picks
-  (`.jpg`/`.jpeg`, `.ppm`, `.png`), and anything else — stdout included — is PNG.
+- `-t, --type` — `png`, `jpeg`, `ppm` (binary, `P6`) or `pam`. Without it, the file's
+  extension picks (`.jpg`/`.jpeg`, `.ppm`, `.pam`, `.png`), and anything else — stdout
+  included — is PNG.
 - `-q, --quality` — JPEG quality, 1–100 (default 90).
 - `-c, --clipboard` — copy to the Wayland clipboard instead of writing a file. A
   small daemon detaches to serve the selection (wlroots `data-control`, the

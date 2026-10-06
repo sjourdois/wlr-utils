@@ -95,7 +95,7 @@ struct ShotArgs {
     #[arg(long)]
     cursor: bool,
     /// Output image format. Without it, FILE's extension picks it (`.jpg`/`.jpeg`,
-    /// `.ppm`, `.png`), and anything else is PNG.
+    /// `.ppm`, `.pam`, `.png`), and anything else is PNG.
     #[arg(short = 't', long, value_enum)]
     r#type: Option<Fmt>,
     /// JPEG quality (1–100), only for JPEG.
@@ -125,7 +125,10 @@ struct ShotArgs {
 enum Fmt {
     Png,
     Jpeg,
+    /// Binary PPM (`P6`).
     Ppm,
+    /// Netpbm PAM (`P7`), RGB.
+    Pam,
 }
 
 pub fn main() {
@@ -235,6 +238,7 @@ fn image_format(explicit: Option<Fmt>, file: &str) -> Fmt {
         match ext.as_deref() {
             Some("jpg" | "jpeg") => Fmt::Jpeg,
             Some("ppm") => Fmt::Ppm,
+            Some("pam") => Fmt::Pam,
             _ => Fmt::Png,
         }
     })
@@ -246,6 +250,7 @@ fn mime_for(fmt: Fmt) -> &'static str {
         Fmt::Png => "image/png",
         Fmt::Jpeg => "image/jpeg",
         Fmt::Ppm => "image/x-portable-pixmap",
+        Fmt::Pam => "image/x-portable-arbitrarymap",
     }
 }
 
@@ -312,8 +317,9 @@ fn pick_window() -> Result<String> {
 }
 
 /// Encode an RGBA capture to the requested format. Captures are opaque (alpha is
-/// forced to 255 for X formats), so dropping alpha for JPEG/PPM is lossless.
+/// forced to 255 for X formats), so dropping alpha for JPEG/PPM/PAM is lossless.
 fn encode(img: &wl::CapturedImage, fmt: Fmt, quality: u8) -> Result<Vec<u8>> {
+    use image::codecs::pnm::{PnmEncoder, PnmSubtype, SampleEncoding};
     use image::{DynamicImage, ImageFormat, RgbaImage, codecs::jpeg::JpegEncoder};
     if img.width == 0 || img.height == 0 {
         bail!("empty image (region off-screen?)");
@@ -326,7 +332,11 @@ fn encode(img: &wl::CapturedImage, fmt: Fmt, quality: u8) -> Result<Vec<u8>> {
     let mut cur = Cursor::new(&mut out);
     match fmt {
         Fmt::Png => dynimg.write_to(&mut cur, ImageFormat::Png)?,
-        Fmt::Ppm => {
+        // A PNM encoder left to choose writes PAM, whatever the extension says.
+        Fmt::Ppm => DynamicImage::ImageRgb8(dynimg.to_rgb8()).write_with_encoder(
+            PnmEncoder::new(&mut cur).with_subtype(PnmSubtype::Pixmap(SampleEncoding::Binary)),
+        )?,
+        Fmt::Pam => {
             DynamicImage::ImageRgb8(dynimg.to_rgb8()).write_to(&mut cur, ImageFormat::Pnm)?
         }
         Fmt::Jpeg => {
@@ -961,13 +971,14 @@ use record_impl::{RecordArgs, record};
 
 #[cfg(test)]
 mod tests {
-    use super::{Fmt, image_format};
+    use super::{Fmt, encode, image_format};
 
     #[test]
     fn image_format_follows_the_extension_unless_told() {
         assert_eq!(image_format(None, "shot.jpg"), Fmt::Jpeg);
         assert_eq!(image_format(None, "Shot.JPEG"), Fmt::Jpeg);
         assert_eq!(image_format(None, "shot.ppm"), Fmt::Ppm);
+        assert_eq!(image_format(None, "shot.pam"), Fmt::Pam);
         assert_eq!(image_format(None, "shot.png"), Fmt::Png);
         // Nothing to go by: PNG, as before.
         assert_eq!(image_format(None, "-"), Fmt::Png);
@@ -975,5 +986,20 @@ mod tests {
         assert_eq!(image_format(None, "shot.webp"), Fmt::Png);
         // `-t` wins over the extension.
         assert_eq!(image_format(Some(Fmt::Png), "shot.jpg"), Fmt::Png);
+    }
+
+    /// Each Netpbm format has its own magic number: `-t ppm` once wrote PAM.
+    #[test]
+    fn netpbm_formats_write_their_own_header() {
+        let img = wlr_capture::wl::CapturedImage {
+            width: 2,
+            height: 1,
+            rgba: vec![255, 0, 0, 255, 0, 0, 255, 255],
+        };
+        let ppm = encode(&img, Fmt::Ppm, 90).unwrap();
+        assert!(ppm.starts_with(b"P6"), "{:?}", &ppm[..2]);
+        assert!(ppm.ends_with(&[255, 0, 0, 0, 0, 255]));
+        let pam = encode(&img, Fmt::Pam, 90).unwrap();
+        assert!(pam.starts_with(b"P7"), "{:?}", &pam[..2]);
     }
 }
