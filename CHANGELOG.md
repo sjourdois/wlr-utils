@@ -32,6 +32,9 @@ All notable changes to this project are documented here. The format is based on
   30 fps. They now stay at about 6 fps.
 - **Screens carry the screen icon in `wlr-chooser --layout grid`** — they had the
   window one.
+- **`wlr-chooser --grid` fits its rows whatever the font** — with a larger `font-size`
+  in the theme, the last row was cut off, and with the default font the card ended in
+  empty space.
 - **A non-ASCII colour in `theme.toml` no longer crashes the overlays** — a value such
   as `"#éa"` made the theme loader panic, taking down `wlr-chooser`, `wlr-switcher`,
   `wlr-draw`, the `wlr-peek` mirror and the `wlr-overlayd` daemon. It is now ignored

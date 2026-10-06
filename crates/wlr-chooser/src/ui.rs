@@ -55,6 +55,9 @@ const TILE_W: f32 = 300.0; // reference tile size (aspect ratio for the thumbnai
 const TILE_H: f32 = 180.0;
 const MIN_TILE: f32 = 280.0; // tiles grow from here to fill the row width
 const GRID_GAP: f32 = 10.0; // gap between tiles
+/// The card header's height (tabs and filter field) with the default font: the guess a
+/// `--grid` card is first sized with, before the header is measured.
+const CARD_HEADER: f32 = 57.0;
 const THUMB_MAX: u32 = 480;
 
 /// Which kinds of source to show. Set by `--windows`/`--outputs`/`--both` and
@@ -1003,6 +1006,8 @@ pub struct App {
     show_system: bool,
     /// Fixed grid size (columns, rows), or `None` for an auto-fitting grid.
     grid: Option<(u32, u32)>,
+    /// The card header's height as last measured; it sizes a `--grid` card.
+    card_header: f32,
     /// How sources are presented (card / strip / grid).
     view: View,
     /// Time (egui seconds) of the first exposé frame, to anchor the intro animation.
@@ -1071,6 +1076,7 @@ impl App {
             mode: opts.mode,
             show_system: opts.show_system,
             grid: opts.grid,
+            card_header: CARD_HEADER,
             view: opts.view,
             expose_t0: None,
             selected: 0,
@@ -1503,7 +1509,7 @@ impl App {
                 let bar = 14.0; // scrollbar gutter
                 let tile_h = MIN_TILE * (TILE_H / TILE_W) + 26.0;
                 let inner_w = cols * MIN_TILE + (cols - 1.0) * GRID_GAP + bar;
-                let inner_h = 78.0 + rows * tile_h + (rows - 1.0) * GRID_GAP; // 78 = header
+                let inner_h = self.card_header + rows * tile_h + (rows - 1.0) * GRID_GAP;
                 (inner_w + 24.0, inner_h + 24.0) // + card inner margin (12 each side)
             }
             None => (1000.0, 760.0),
@@ -1557,6 +1563,13 @@ impl App {
                     self.focus_filter = false;
                 }
                 ui.add_space(8.0);
+                // The header follows the theme's font. A `--grid` card sized for
+                // another height runs the pass again, before anything is painted.
+                let header = ui.cursor().top() - ui.max_rect().top();
+                if self.grid.is_some() && (header - self.card_header).abs() > 0.5 {
+                    self.card_header = header;
+                    ctx.request_discard("--grid card header measured");
+                }
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
@@ -2917,5 +2930,29 @@ mod tests {
         // It narrows; it cannot bring back a window the flags never captured.
         h.app.filter = "firefox".into();
         assert!(h.app.visible().is_empty());
+    }
+
+    #[test]
+    fn a_grid_card_is_sized_from_its_measured_header() {
+        let header = |font_size: Option<f32>| {
+            let mut h = Harness::new(Options {
+                view: View::Card,
+                grid: Some((3, 2)),
+                ..options()
+            });
+            if let Some(sz) = font_size {
+                h.ctx.all_styles_mut(|s| {
+                    for style in [egui::TextStyle::Body, egui::TextStyle::Button] {
+                        s.text_styles.insert(style, egui::FontId::proportional(sz));
+                    }
+                });
+            }
+            h.send(vec![window("a", "foot")]);
+            h.frame();
+            h.app.card_header
+        };
+        let (default, large) = (header(None), header(Some(24.0)));
+        // A larger font makes a taller header, and the card takes it into account.
+        assert!(large > default + 10.0, "{default} → {large}");
     }
 }
