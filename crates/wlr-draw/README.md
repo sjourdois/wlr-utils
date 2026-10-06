@@ -17,7 +17,7 @@ the annotations stay visible until you clear them.
 </p>
 
 Presenter **spotlight** — hold Shift to dim the screen except a flashlight that
-follows the cursor, or pose a fixed spotlight on a window:
+follows the cursor, or drag a fixed one into place:
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-draw/spotlight.gif"
@@ -26,8 +26,8 @@ follows the cursor, or pose a fixed spotlight on a window:
 
 Part of [wlr-utils](../../README.md); built on the shared `wlr-capture` engine (the
 egui/EGL overlay toolkit). Each surface is a transparent vector layer the compositor
-alpha-blends over the live screen — nothing is captured until you press `Space` to
-freeze-frame, which grabs a still backdrop to annotate.
+alpha-blends over the live screen — nothing is captured until you freeze the frame
+(`Space`) or save (`w`).
 
 <p align="center"><sub>📖 See every tool in action on the <a href="https://sjourdois.github.io/wlr-utils/">showcase</a>.</sub></p>
 
@@ -46,11 +46,12 @@ wlr-draw undo | redo
 wlr-draw visibility      # hide/show the annotations without discarding them
 wlr-draw snap            # turn the pen's dwell-to-snap on/off
 wlr-draw tool  <pen|rect|mask|arrow|text|eraser|move>   # mask = solid box to redact areas
-wlr-draw color <name|#rrggbb[aa]>     # red green blue yellow orange cyan magenta white black
+wlr-draw color <name|#rgb|#rrggbb[aa]>   # red green blue yellow orange cyan magenta white black
 wlr-draw width <px>
 wlr-draw save [path]     # write the annotated screen to a PNG (Pictures dir by default)
 wlr-draw reload          # re-read keys.toml and the theme, keeping the drawing
 wlr-draw quit            # stop the daemon
+wlr-draw doctor          # what the compositor supports (needs no daemon)
 ```
 
 In **draw mode** the overlay grabs the pointer and keyboard; in **click-through** mode
@@ -58,7 +59,7 @@ it sets an empty input region so clicks and keys go straight to the apps underne
 **Caps Lock** toggles a pointer pass-through *while staying in draw mode* — the pointer
 reaches the apps below; tap it again to draw. **Hold `Ctrl`** while dragging a shape to
 **constrain** it: rectangle → square, ellipse → circle, line/arrow → nearest 45°.
-**Hold `Shift`** for a **spotlight**: the screen dims everywhere except a bright zone —
+**Hold `Shift`** with the pen, rectangle, mask or arrow for a **spotlight**: the screen dims everywhere except a bright zone —
 a circle that follows the cursor while idle, or a rectangle/ellipse you drag to place
 (see below). The **wheel** (or `i`/`k`) resizes the light; the **tilt/second wheel** (or
 `j`/`l`) darkens or lightens it.
@@ -92,11 +93,11 @@ the colour — and it **pulses** a few times when you enter draw mode on an empt
 
 ### Customising shortcuts
 
-Every shortcut above is rebindable from **`~/.config/wlr-draw/keys.toml`** (honours
-`$XDG_CONFIG_HOME`). Key names are the same **XKB keysym names** sway/Hyprland use in
-`bindsym` (`a`, `space`, `Caps_Lock`, `plus`, `F5`…), matched case-insensitively. Each
-binding is a single name or a list; missing entries keep their default, so a partial file
-is fine and no config at all means the defaults below.
+The shortcuts above are rebindable from **`~/.config/wlr-draw/keys.toml`** (honours
+`$XDG_CONFIG_HOME`), except the fixed ones listed below. Key names are the same **XKB
+keysym names** sway/Hyprland use in `bindsym` (`a`, `space`, `plus`, `F5`…), matched
+case-insensitively. Each binding is a single name or a list; missing entries keep their
+default, so a partial file is fine and no config at all means the defaults above.
 
 The four held controls — `passthrough` (click-through), `constrain`, `spotlight`,
 `snap-invert` — take **a modifier** (`caps`, `ctrl`, `shift`, `alt`, `super`), **a
@@ -165,16 +166,13 @@ legend and the tray's Shortcuts menu reflect your bindings.
   moving the mouse. Release to commit.
   - The delay is `dwell-ms` in `keys.toml` (650 ms by default), and `dwell = false`
     starts with snapping off.
-  - **`d`** (or `wlr-draw snap`) turns it on and off while drawing. The status chip
-    says `snap off` whenever a pen stroke would not snap.
+  - **`d`** (or `wlr-draw snap`) turns it on and off while drawing. Outside the
+    spotlight, the status chip says `snap off` when a pen stroke would not snap.
   - **Hold `Alt`** to invert it for the stroke you are drawing: it suppresses the snap
     where it is on and arms it where it is off. Releasing `Alt` changes nothing
     lasting. Since a snapped ellipse is what a held `Shift` turns into an elliptical
     spotlight, `Alt`+`Shift` drops the ellipse where snapping is on — and is the way to
     get it back where snapping is off.
-
-The tray icon shows the **current tool** as a glyph (in the stroke colour while drawing,
-grey when idle).
 
 ### Graphics tablet (stylus)
 
@@ -190,7 +188,7 @@ setup needed; a compositor without tablet support just runs with the mouse.
 ### Starting it
 
 **With the tray (the default build), there is nothing to install.** On its very first run
-the daemon registers itself to start with your session, and comes up on its own from then
+in a desktop session (one with a D-Bus session bus), the daemon registers itself to start with your session, and comes up on its own from then
 on — picked up by any XDG-compliant session, including the systemd xdg-autostart generator
 under uwsm.
 
@@ -230,41 +228,40 @@ It is bound to `graphical-session.target`, so it comes up with the Wayland sessi
 goes down with it — this needs a session that populates that target, which uwsm does. The
 unit finds `wlr-draw` through the user manager's `PATH` (`systemctl --user
 show-environment`), which uwsm fills from your login environment. Elsewhere, import yours
-(`systemctl --user import-environment PATH`) or write the full path in `ExecStart`. **Use one mechanism, not several** — and if you
-pick one of these, untick **Start on login** in the tray so the autostart entry does not
-race yours.
+(`systemctl --user import-environment PATH`) or write the full path in `ExecStart`.
+**Use one mechanism, not several** — and if you pick one of these, untick **Start on
+login** in the tray so the autostart entry does not race yours.
 
-You will know soon enough either way: with no daemon listening, every command exits
-non-zero with `no wlr-draw daemon listening on … ; start one with wlr-draw`.
+You will know soon enough either way: with no daemon listening, every command but
+`doctor` exits non-zero with `no wlr-draw daemon listening on … ; start one with wlr-draw`.
 
 ### Stopping, restarting, logs
 
 ```sh
 wlr-draw quit                                     # stop the daemon
 wlr-draw reload                                   # re-read the configuration
-journalctl --user -t wlr-draw -f                  # its output, however it was started
+journalctl --user -t wlr-draw -f                  # its output
 systemctl --user restart 'app-wlr\x2ddraw@autostart.service'   # after a new build
 ```
 
-Filtering the journal by the **binary name** rather than the unit works whichever way you
-started it, which is why it is the one to remember. The restart line is only for the
+`-t wlr-draw` finds the daemon's output whether systemd started it from the autostart
+entry or from the unit; started from the compositor, its output goes wherever the
+compositor's does. The restart line is only for the
 default XDG-autostart launch: systemd names that unit after the desktop file and escapes
 the dash as `\x2d`, so the quotes matter. Started from the systemd unit above instead,
 it is plain `systemctl --user restart wlr-draw`.
 
 A reload re-reads `keys.toml` and the theme (`~/.config/wlr-chooser/theme.toml`) and
 keeps the drawing, the tool, the colour, the width, and snapping as `d` left it unless you
-changed `dwell`. `kill -HUP` on the daemon does the
-same, and so does `systemctl --user reload wlr-draw` with the systemd unit above.
+changed `dwell`. `kill -HUP` on the daemon does the same, and so does
+`systemctl --user reload wlr-draw` with the systemd unit above.
 
 ### Tray icon
 
 With the `tray` feature (on by default) the daemon shows a StatusNotifierItem tray icon
-(e.g. in waybar's `tray` module): a hollow ring when idle, a filled disc in the current
-stroke colour while drawing. Left-click toggles draw mode; the menu offers toggle / clear
-/ undo / quit, a **Shortcuts** submenu with the full key legend, and the **Start on login**
-checkbox described above. `--no-default-features` drops the icon and the D-Bus dependency
-with it.
+(e.g. in waybar's `tray` module). Left-click toggles draw mode; the menu offers toggle /
+clear / undo / quit, a **Shortcuts** submenu with the full key legend, and the **Start on
+login** checkbox described above. `--no-default-features` drops it.
 
 ## Example sway bindings
 
@@ -281,15 +278,15 @@ bindsym $mod+Shift+d exec wlr-draw clear
 bindsym $mod+z       exec wlr-draw undo
 ```
 
-The protocol is plain text, one command per line on the socket
+The protocol is plain text, one command per connection on the socket
 (`$XDG_RUNTIME_DIR/wlr-draw.sock`), so you can also drive it from scripts:
 `echo 'tool arrow' | socat - UNIX-CONNECT:$XDG_RUNTIME_DIR/wlr-draw.sock`.
 
 ## Install
 
 > **Want the whole suite?** Install the bundle instead — `cargo install wlr-utils` gets
-> every tool (`wlr-chooser`, `wlr-switcher`, `wlr-peek`, `wlr-shot`, `wlr-draw`) in one
-> go. The single-tool install below is the lighter, à-la-carte option.
+> every tool (`wlr-chooser`, `wlr-switcher`, `wlr-overlayd`, `wlr-peek`, `wlr-shot`,
+> `wlr-draw`) in one go. The single-tool install below is the lighter, à-la-carte option.
 
 ```sh
 cargo install wlr-draw
@@ -309,7 +306,9 @@ cargo build --release -p wlr-draw
   freeze-frame capture goes through shared memory, so `--no-gpu` (or `WLR_NO_GPU=1`)
   changes nothing here — it is accepted for consistency with the other tools.
 - **Compositor** — a wlroots one advertising `wlr-layer-shell` (sway, Hyprland, niri, …)
-  for the always-on-top overlay. Plain annotation needs only that, at any version.
+  for the always-on-top overlay, whose layer is named `wlr-draw` for
+  [compositor rules](../../README.md#compositor-rules). Plain annotation needs only that,
+  at any version.
 - **Screen capture** (freeze-frame `Space`, save `w`) — additionally needs
   `ext-image-copy-capture-v1` with the **output** source, i.e. **Sway ≥ 1.11 /
   wlroots ≥ 0.19**, or `wlr-screencopy`. Where neither is exposed, freeze and save are
@@ -317,8 +316,8 @@ cargo build --release -p wlr-draw
   check your own; see [COMPATIBILITY.md](../../COMPATIBILITY.md).
 - **Stylus** (optional) — `tablet-v2` (`zwp_tablet_manager_v2`); without it the stylus
   isn't seen and everything else works.
-- **Tray** (`tray` feature, on by default) — a StatusNotifierItem host and `libdbus`.
-  `--no-default-features` drops the tray and its D-Bus dependency.
+- **Tray** (`tray` feature, on by default) — a StatusNotifierItem host on the session
+  bus. `--no-default-features` drops the tray.
 
 ## Uninstall
 

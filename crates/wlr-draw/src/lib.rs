@@ -31,9 +31,8 @@ control socket — bind them to compositor keys (e.g. sway `bindsym $mod+a exec 
 toggle`)."
 )]
 struct Cli {
-    /// Capture through shared memory instead of the zero-copy dma-buf path.
-    /// Use it if the frozen backdrop comes out broken on your driver; also
-    /// settable with WLR_NO_GPU=1.
+    /// Accepted for consistency with the other tools: wlr-draw's freeze-frame and save
+    /// always capture through shared memory, so it changes nothing here.
     #[arg(long, global = true)]
     no_gpu: bool,
     #[command(subcommand)]

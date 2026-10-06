@@ -20,8 +20,8 @@ default = ["i18n", "tray"]
 # Localised UI (the on-screen HUD hints) via Fluent. On by default; `--no-default-features`
 # builds English-only with no Fluent dependency.
 i18n = ["wlr-i18n/i18n", "dep:rust-embed"]
-# StatusNotifierItem tray icon (status + a click-to-toggle menu) via `ksni`. On by
-# default; links system `libdbus`. `--no-default-features` drops it (no D-Bus).
+# StatusNotifierItem tray icon (status + a click-to-toggle menu) via `ksni`, which talks
+# D-Bus through the pure-Rust zbus. On by default; `--no-default-features` drops it.
 tray = ["dep:ksni"]
 
 [dependencies]
@@ -54,7 +54,6 @@ wayland-client.workspace = true
 # this crate hand-dispatches the protocol directly, the same way wlr-capture's wl.rs
 # hand-dispatches zwlr-foreign-toplevel / image-copy-capture.
 wayland-protocols.workspace = true
-# StatusNotifierItem tray icon (the `tray` feature). Links system libdbus.
 # StatusNotifierItem tray (the `tray` feature). 0.3+ is async (zbus 5); use its
 # `blocking` API over the `async-io` backend so the calloop daemon stays synchronous.
 ksni = { version = "0.3", optional = true, default-features = false, features = [
