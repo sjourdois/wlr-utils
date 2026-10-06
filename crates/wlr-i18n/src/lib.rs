@@ -29,11 +29,10 @@ mod runtime {
         let en: unic_langid::LanguageIdentifier =
             "en".parse().expect("`en` is a valid language id");
         let loader = FluentLanguageLoader::new(domain, en);
-        // Plain LTR text — no bidirectional isolation marks around placeables.
-        loader.set_use_isolating(false);
         loader
             .load_fallback_language(assets)
             .expect("the `en` fallback catalog must be present");
+        plain_text(&loader);
         loader
     }
 
@@ -42,6 +41,13 @@ mod runtime {
     pub fn select(loader: &FluentLanguageLoader, assets: &dyn I18nAssets) {
         let requested = DesktopLanguageRequester::requested_languages();
         let _ = i18n_embed::select(loader, assets, &requested);
+        plain_text(loader);
+    }
+
+    /// Plain LTR text: no bidirectional isolation marks around placeables. The setting
+    /// only reaches the languages already loaded, so it follows every load.
+    fn plain_text(loader: &FluentLanguageLoader) {
+        loader.set_use_isolating(false);
     }
 }
 
