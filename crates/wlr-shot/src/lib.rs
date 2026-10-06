@@ -504,8 +504,9 @@ mod record_impl {
                 crf: args.crf,
             },
         )?;
-        let label = format!("{:?}", enc.resolved_backend()?);
-        Ok((Box::new(enc), label))
+        // Which encoder writes it is only known once the first frame opens one; the
+        // engine logs it then.
+        Ok((Box::new(enc), "H.264".into()))
     }
 
     /// Whether audio recording is wanted: not `--no-audio`, and a video (not image) file.

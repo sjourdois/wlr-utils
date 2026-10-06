@@ -35,11 +35,12 @@ fn ensure_ffmpeg() {
     });
 }
 
-/// Which encoder to use. [`Backend::Auto`] picks the first available, preferring
-/// hardware (NVENC, then VAAPI) over the software fallback.
+/// Which encoder to use. [`Backend::Auto`] prefers hardware (NVENC, then VAAPI) over
+/// the software fallback, and keeps the first that opens on this machine.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Backend {
-    /// Choose the best available backend at runtime.
+    /// The first of NVENC, VAAPI and libx264 that opens, tried when the first frame
+    /// arrives.
     Auto,
     /// NVIDIA NVENC (`h264_nvenc`). Takes CPU frames; uploads internally.
     Nvenc,
@@ -58,6 +59,11 @@ impl Backend {
             Backend::Software => "libx264",
             Backend::Auto => unreachable!("resolved before use"),
         }
+    }
+
+    /// Whether this FFmpeg build has the encoder at all — not whether it runs here.
+    fn compiled_in(self) -> bool {
+        ffmpeg::encoder::find_by_name(self.codec_name()).is_some()
     }
 
     /// Translate a constant-quality level into this backend's private options.
@@ -276,28 +282,128 @@ impl VideoEncoder {
             audio_buf: Vec::new(),
         })
     }
-
-    /// The backend that will actually be used (resolves `Auto`); handy for logging.
-    pub fn resolved_backend(&self) -> Result<Backend> {
-        resolve_backend(self.opts.backend)
-    }
 }
 
-/// Resolve `Auto` to the first available backend; verify a concrete one exists.
-fn resolve_backend(backend: Backend) -> Result<Backend> {
-    ensure_ffmpeg();
-    let available = |b: Backend| ffmpeg::encoder::find_by_name(b.codec_name()).is_some();
-    match backend {
-        Backend::Auto => [Backend::Nvenc, Backend::Vaapi, Backend::Software]
-            .into_iter()
-            .find(|&b| available(b))
-            .ok_or(CaptureError::NoVideoEncoder),
-        b if available(b) => Ok(b),
-        b => Err(CaptureError::msg(format!(
-            "encoder '{}' is not available in this FFmpeg build",
-            b.codec_name()
-        ))),
+/// A video encoder opened for one backend, with what feeding it takes.
+struct OpenedEncoder {
+    backend: Backend,
+    codec: ffmpeg::Codec,
+    encoder: ffmpeg::encoder::Video,
+    /// The scaler's output: the encoder's own input format, or the CPU format uploaded
+    /// to its hardware frames.
+    target_format: Pixel,
+    vaapi: Option<VaapiCtx>,
+}
+
+/// Open the video encoder `opts.backend` names. `Auto` tries NVENC, VAAPI, then libx264,
+/// and keeps the first that opens: a distribution's FFmpeg has NVENC and VAAPI compiled
+/// in whether or not this machine can run them, so being compiled in proves nothing.
+fn open_video_encoder(
+    opts: &Options,
+    dst: (u32, u32),
+    time_base: ffmpeg::Rational,
+    global_header: bool,
+) -> Result<OpenedEncoder> {
+    if opts.backend != Backend::Auto {
+        return open_backend(opts.backend, opts, dst, time_base, global_header);
     }
+    let mut candidates = [Backend::Nvenc, Backend::Vaapi, Backend::Software]
+        .into_iter()
+        .filter(|b| b.compiled_in())
+        .peekable();
+    while let Some(backend) = candidates.next() {
+        match open_backend(backend, opts, dst, time_base, global_header) {
+            Ok(opened) => return Ok(opened),
+            Err(e) => match candidates.peek() {
+                Some(next) => {
+                    eprintln!("wlr-capture: {}; trying {}", causes(&e), next.codec_name());
+                }
+                None => return Err(e),
+            },
+        }
+    }
+    Err(CaptureError::NoVideoEncoder)
+}
+
+/// `e` and every cause under it, `: `-separated: the context alone ("opening encoder
+/// 'h264_nvenc'") does not say why.
+fn causes(e: &CaptureError) -> String {
+    let mut out = e.to_string();
+    let mut cause = std::error::Error::source(e);
+    while let Some(c) = cause {
+        out.push_str(": ");
+        out.push_str(&c.to_string());
+        cause = c.source();
+    }
+    out
+}
+
+/// Open `backend`'s encoder for `dst`-sized frames.
+fn open_backend(
+    backend: Backend,
+    opts: &Options,
+    dst: (u32, u32),
+    time_base: ffmpeg::Rational,
+    global_header: bool,
+) -> Result<OpenedEncoder> {
+    let codec = ffmpeg::encoder::find_by_name(backend.codec_name()).ok_or_else(|| {
+        CaptureError::msg(format!(
+            "encoder '{}' is not available in this FFmpeg build",
+            backend.codec_name()
+        ))
+    })?;
+    // The encoder's input format, and the scaler's output. NVENC takes NV12 and
+    // libx264 takes planar YUV420P, both CPU frames sent directly. VAAPI consumes
+    // hardware (VAAPI) frames, so we scale to a CPU NV12 frame and upload it.
+    let (enc_format, target_format) = match backend {
+        Backend::Software => (Pixel::YUV420P, Pixel::YUV420P),
+        Backend::Nvenc => (Pixel::NV12, Pixel::NV12),
+        Backend::Vaapi => (Pixel::VAAPI, Pixel::NV12),
+        Backend::Auto => unreachable!("resolved by the caller"),
+    };
+
+    let mut enc = ffmpeg::codec::context::Context::new_with_codec(codec)
+        .encoder()
+        .video()
+        .context("opening the video encoder")?;
+    enc.set_width(dst.0);
+    enc.set_height(dst.1);
+    enc.set_format(enc_format);
+    enc.set_frame_rate(Some(ffmpeg::Rational(opts.fps as i32, 1)));
+    enc.set_time_base(time_base);
+    if global_header {
+        enc.set_flags(ffmpeg::codec::Flags::GLOBAL_HEADER);
+    }
+
+    // VAAPI needs a hardware frame pool wired into the codec context before open.
+    let vaapi = if backend == Backend::Vaapi {
+        let ctx =
+            VaapiCtx::new(opts.device.as_deref(), dst.0, dst.1).context("setting up VAAPI")?;
+        unsafe {
+            (*enc.as_mut_ptr()).hw_frames_ctx = ffmpeg::ffi::av_buffer_ref(ctx.frames);
+        }
+        Some(ctx)
+    } else {
+        None
+    };
+
+    // Private encoder options must be handed over at open time.
+    let mut enc_opts = ffmpeg::Dictionary::new();
+    if let Some(crf) = opts.crf {
+        for (k, v) in backend.quality_options(crf)? {
+            enc_opts.set(k, &v);
+        }
+    }
+    let encoder = enc
+        .open_as_with(codec, enc_opts)
+        .with_context(|| format!("opening encoder '{}'", backend.codec_name()))?;
+    Ok(OpenedEncoder {
+        backend,
+        codec,
+        encoder,
+        target_format,
+        vaapi,
+    })
 }
 
 /// Add an AAC stream to `octx` and open its encoder (48 kHz stereo, planar float).
@@ -353,70 +459,30 @@ fn even_dst(sw: u32, sh: u32) -> Result<(u32, u32)> {
 impl Pipeline {
     /// Build the output context + encoder for a source of size `(sw, sh)`.
     fn new(path: &Path, opts: &Options, sw: u32, sh: u32) -> Result<Self> {
-        let backend = resolve_backend(opts.backend)?;
-        let codec = ffmpeg::encoder::find_by_name(backend.codec_name()).ok_or_else(|| {
-            CaptureError::msg(format!("encoder '{}' unavailable", backend.codec_name()))
-        })?;
-
         let dst = even_dst(sw, sh)?;
-        // The encoder's input format, and the scaler's output. NVENC takes NV12 and
-        // libx264 takes planar YUV420P, both CPU frames sent directly. VAAPI consumes
-        // hardware (VAAPI) frames, so we scale to a CPU NV12 frame and upload it.
-        let (enc_format, target_format) = match backend {
-            Backend::Software => (Pixel::YUV420P, Pixel::YUV420P),
-            Backend::Nvenc => (Pixel::NV12, Pixel::NV12),
-            Backend::Vaapi => (Pixel::VAAPI, Pixel::NV12),
-            Backend::Auto => unreachable!("resolved above"),
-        };
-
         let mut octx = ffmpeg::format::output(&path)
             .with_context(|| format!("opening output '{}'", path.display()))?;
         let global_header = octx
             .format()
             .flags()
             .contains(ffmpeg::format::Flags::GLOBAL_HEADER);
-
-        let mut ost = octx.add_stream(codec).context("adding video stream")?;
-        let mut enc = ffmpeg::codec::context::Context::new_with_codec(codec)
-            .encoder()
-            .video()
-            .context("opening the video encoder")?;
-        enc.set_width(dst.0);
-        enc.set_height(dst.1);
-        enc.set_format(enc_format);
-        enc.set_frame_rate(Some(ffmpeg::Rational(opts.fps as i32, 1)));
         // Real-time recordings are VFR (millisecond PTS); timelapses renumber at fps.
         let enc_time_base = match opts.mode {
             Mode::Record => MS_TIMEBASE,
             Mode::Timelapse => ffmpeg::Rational(1, opts.fps as i32),
         };
-        enc.set_time_base(enc_time_base);
-        if global_header {
-            enc.set_flags(ffmpeg::codec::Flags::GLOBAL_HEADER);
-        }
 
-        // VAAPI needs a hardware frame pool wired into the codec context before open.
-        let vaapi = if backend == Backend::Vaapi {
-            let ctx =
-                VaapiCtx::new(opts.device.as_deref(), dst.0, dst.1).context("setting up VAAPI")?;
-            unsafe {
-                (*enc.as_mut_ptr()).hw_frames_ctx = ffmpeg::ffi::av_buffer_ref(ctx.frames);
-            }
-            Some(ctx)
-        } else {
-            None
-        };
-
-        // Private encoder options must be handed over at open time.
-        let mut enc_opts = ffmpeg::Dictionary::new();
-        if let Some(crf) = opts.crf {
-            for (k, v) in backend.quality_options(crf)? {
-                enc_opts.set(k, &v);
-            }
-        }
-        let encoder = enc
-            .open_as_with(codec, enc_opts)
-            .with_context(|| format!("opening encoder '{}'", backend.codec_name()))?;
+        // The encoder opens before its stream is added, so a backend that fails to
+        // open leaves nothing behind in the container for the next one to trip on.
+        let OpenedEncoder {
+            backend,
+            codec,
+            encoder,
+            target_format,
+            vaapi,
+        } = open_video_encoder(opts, dst, enc_time_base, global_header)?;
+        eprintln!("wlr-capture: encoding with {}", backend.codec_name());
+        let mut ost = octx.add_stream(codec).context("adding video stream")?;
         ost.set_parameters(&encoder);
 
         // Optional AAC audio stream (real-time recordings only — a timelapse has no
@@ -704,16 +770,14 @@ mod tests {
     }
 
     /// End-to-end encode of synthetic frames to a real file, with no Wayland session.
-    /// Skips cleanly if `requested` resolves to no usable encoder (e.g. CI without GPU
-    /// or libx264). When `ffprobe` is on PATH, asserts the stream's codec and size.
-    fn run_encode(requested: Backend) {
-        let backend = match resolve_backend(requested) {
-            Ok(b) => b,
-            Err(_) => {
-                eprintln!("backend {requested:?} unavailable; skipping");
-                return;
-            }
-        };
+    /// Skips cleanly if this FFmpeg build lacks the `backend` asked for. When `ffprobe`
+    /// is on PATH, asserts the stream's codec and size.
+    fn run_encode(backend: Backend) {
+        ensure_ffmpeg();
+        if backend != Backend::Auto && !backend.compiled_in() {
+            eprintln!("backend {backend:?} not in this FFmpeg build; skipping");
+            return;
+        }
 
         let (w, h, fps, n) = (320u32, 240u32, 30u32, 30u32);
         // A private (0600), randomly-named temp file, removed when `tmp` drops at the end
@@ -815,6 +879,13 @@ mod tests {
     #[test]
     fn encodes_software() {
         run_encode(Backend::Software);
+    }
+
+    /// The default. A CI runner has NVENC compiled in but no NVIDIA hardware, and no
+    /// VAAPI device either: `Auto` has to get past both to libx264.
+    #[test]
+    fn encodes_auto() {
+        run_encode(Backend::Auto);
     }
 
     /// Hardware NVENC path — the default on an NVIDIA box. Feeds NV12 CPU frames the

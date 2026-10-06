@@ -24,6 +24,9 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **`wlr-shot record` falls back when hardware encoding is unavailable** — `--encoder
+  auto` picked NVENC whenever FFmpeg was built with it, as Debian's and Arch's are, and
+  failed on machines without NVIDIA. It now tries VAAPI, then `libx264`.
 - **`systemctl --user reload wlr-draw` reloads instead of stopping the daemon** — it
   now re-reads `keys.toml` and the theme and keeps the drawing.
 - **`wlr-draw`'s on-screen hints name your keys** — after rebinding help, click-through
@@ -53,8 +56,10 @@ All notable changes to this project are documented here. The format is based on
 ### Breaking
 
 - `wlr-capture`: the `overlay` functions (`select_region`, `pick_point`, `magnify` and
-  their `_on` forms) take the layer-shell namespace to use. Shipped as a minor version:
-  the crate is published to let the binaries be.
+  their `_on` forms) take the layer-shell namespace to use, and
+  `VideoEncoder::resolved_backend` is gone: with `Backend::Auto`, the encoder is only
+  known once the first frame opens it, and the engine logs it then. Shipped as a minor
+  version: the crate is published to let the binaries be.
 
 ## 1.10.0 — 2026-09-24
 

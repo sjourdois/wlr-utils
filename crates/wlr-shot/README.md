@@ -122,8 +122,9 @@ wlr-shot record -o DP-4 --no-audio clip.mp4     # video only (audio is on by def
 
 - `--cursor` — composite the mouse cursor into the recording (left out by default).
   A demo of a pointer-driven interaction needs it.
-- `--encoder` — `auto` (default) prefers hardware (NVENC, then VAAPI) and falls back
-  to software `libx264`. Force one with `nvenc`/`vaapi`/`software`.
+- `--encoder` — `auto` (default) tries hardware (NVENC, then VAAPI), then software
+  `libx264`, keeps the first that works on this machine and says which. Force one with
+  `nvenc`/`vaapi`/`software`.
 - `--device PATH` — DRM render node for VAAPI (default `/dev/dri/renderD128`).
 - `--crf N` — constant quality, `0`–`51`: **lower is better and bigger**, `0` is
   lossless. Left out, each encoder keeps its own default, which is what you get
