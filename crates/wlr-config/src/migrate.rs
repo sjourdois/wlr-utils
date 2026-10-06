@@ -97,15 +97,26 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-/// The command itself: migrate the configuration `dirs` points at, and say what was done
-/// on stdout, or print the document there.
+/// The command itself: migrate the configuration the environment points at, and say what
+/// was done on stdout, or print the document there. With no old file left, it says so
+/// and succeeds: the configuration is already where it belongs, and running it again in
+/// a provisioning script must not fail.
 pub fn run(output: Output) -> Result<(), Error> {
     let dirs = Dirs::from_env();
-    if output == Output::Stdout {
-        print!("{}", document(&dirs)?);
-        return Ok(());
+    let result = match output {
+        Output::Stdout => document(&dirs).map(|text| print!("{text}")),
+        Output::File => migrate(&dirs).map(|report| print_report(&report)),
+    };
+    match result {
+        Err(Error::Nothing) => {
+            eprintln!("{}", tr!("migrate-nothing"));
+            Ok(())
+        }
+        result => result,
     }
-    let report = migrate(&dirs)?;
+}
+
+fn print_report(report: &Report) {
     println!("{}", tr!("migrate-wrote", file = report.written.display()));
     for path in &report.removed {
         println!("{}", tr!("migrate-removed", file = path.display()));
@@ -123,7 +134,6 @@ pub fn run(output: Output) -> Result<(), Error> {
             )
         );
     }
-    Ok(())
 }
 
 /// The `config.toml` the old files make.
