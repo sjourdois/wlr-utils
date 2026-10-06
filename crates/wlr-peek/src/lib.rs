@@ -39,7 +39,7 @@ enum Cmd {
     Color(ColorArgs),
     /// Magnify the screen around the cursor; scroll to zoom, Esc to quit.
     Loupe,
-    /// Mirror a window live in a floating, always-on-top window (picture-in-picture).
+    /// Mirror a window live in a window of its own (picture-in-picture).
     Mirror(MirrorArgs),
     /// Select a region (or point) with the mouse and print its geometry — a native
     /// slurp replacement (`X,Y WxH`). Exit 1 if cancelled.
@@ -299,9 +299,9 @@ enum Follow {
     Window,
 }
 
-/// Mirror a window (or, with `-g`, a region) live in a floating, always-on-top
-/// window. One mirror per window (an advisory lock makes a second launch for the
-/// same window a no-op).
+/// Mirror a window (or, with `-g`, a region) live in a window of its own, which the
+/// compositor stacks like any other. One mirror per window (an advisory lock makes a
+/// second launch for the same window a no-op).
 fn mirror(args: MirrorArgs) -> Result<()> {
     // Interactive region select runs its own EGL overlay, then the mirror opens another.
     // EGL caches its display by the `wl_display` pointer, so a *second* connection there

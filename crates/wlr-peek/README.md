@@ -23,6 +23,73 @@ built on the shared [`wlr-capture`](../wlr-capture) engine.
 
 <p align="center"><sub>📖 See every tool in action on the <a href="https://sjourdois.github.io/wlr-utils/">showcase</a>.</sub></p>
 
+## Install
+
+> **Want the whole suite?** Install the bundle instead — `cargo install wlr-utils` gets
+> every tool (`wlr-chooser`, `wlr-switcher`, `wlr-overlayd`, `wlr-peek`, `wlr-shot`,
+> `wlr-draw`) in one go. The single-tool install below is the lighter, à-la-carte option.
+
+Building needs the Rust the [main README](../../README.md#from-source) names, and on
+Debian/Ubuntu `build-essential pkg-config clang libwayland-dev libxkbcommon-dev
+libgbm-dev libtesseract-dev libleptonica-dev` (Arch: `base-devel clang wayland
+libxkbcommon mesa tesseract leptonica`).
+
+```sh
+cargo install wlr-peek
+```
+
+Or build just this binary from the [wlr-utils](../../README.md) workspace:
+
+```sh
+cargo build --release -p wlr-peek
+```
+
+The default features are `ocr`, `watch`, `gpu` and `i18n`. `ocr` links the system
+Tesseract and Leptonica for `ocr` and `grep`, which is what `clang` and their `-dev`
+packages are for. `--no-default-features` drops all four, so the binary loses OCR, the
+`watch` subcommand, the focus-based sources (`mirror -a`/`--current-output`,
+`--follow window`), the dma-buf capture path and the Fluent catalog; pick the ones you
+want back with `--features`.
+
+## Requirements
+
+**Works on** — screens and regions on every compositor that captures screens (sway,
+Hyprland, niri, labwc, Wayfire, river, dwl, cosmic-comp); windows (`-w`, `--app-id`,
+`--title`, `--pick-window`) where windows can be captured (Sway ≥ 1.12, Hyprland ≥ 0.54,
+river ≥ 0.4, cosmic-comp, and partly labwc ≥ 0.20 and dwl ≥ 0.9). `-a` and
+`--current-output` need sway, Hyprland, cosmic-comp or niri (`--current-output` only).
+Not on GNOME or KDE. Details in [COMPATIBILITY.md](../../COMPATIBILITY.md).
+
+- **Screens and regions** (`color`, `loupe`, `region`, screen `mirror`/`watch`) —
+  `ext-image-copy-capture-v1` with the output source (**Sway ≥ 1.11 / wlroots ≥ 0.19**),
+  or `wlr-screencopy`.
+- **Windows** (`-w`, window `mirror`) — the foreign-toplevel source and
+  `ext-foreign-toplevel-list-v1` (**Sway ≥ 1.12 / wlroots ≥ 0.20**), which
+  `wlr-screencopy` does not stand in for.
+- **The clipboard** (`color --clipboard`, `ocr -c`) — `zwlr_data_control_manager_v1`.
+- **At run time** — `libegl1`: the frozen overlays (`color`, `loupe`, `region`) render
+  through EGL/GLES, on a layer named `wlr-peek` for
+  [compositor rules](../../README.md#compositor-rules). `libfontconfig1` looks up the UI
+  font when it is there (the embedded fonts otherwise), and `libgbm` serves the zero-copy
+  dma-buf path `mirror` and `watch` stream through; one-shot reads (`color`, `ocr`) go
+  through shared memory. `--no-gpu` (or `WLR_NO_GPU=1`) forces shared memory everywhere.
+- **OCR languages** — the data pack of each language you read: `tesseract-ocr-<lang>` on
+  Debian and Ubuntu, `tesseract-data-<lang>` on Arch (`eng` by default; the suite's `.deb`
+  recommends it).
+
+`wlr-peek doctor` says what your compositor advertises, and whether the dma-buf path
+works here.
+
+## Quick start
+
+```sh
+wlr-peek color                                  # pick a colour anywhere → #4D9AFF
+wlr-peek ocr                                    # select a region, print its text
+wlr-peek loupe                                  # magnify the screen; Esc quits
+wlr-peek mirror -s                              # a live picture-in-picture of a region
+wlr-peek watch -s && notify-send "it changed"   # wait for a region to change
+```
+
 ## Subcommands
 
 ### `color` — colour picker (pipette)
@@ -61,14 +128,9 @@ mirror `wlr-shot`: `-g "X,Y WxH"`, `-o NAME`, `-w ID`, `--app-id`/`--title`,
 `-a/--active-window`, `--current-output`. `-w`, `--app-id`/`--title` capture the
 **window itself**, so they read a window that is occluded or on another workspace —
 unlike `-a`, which captures the screen area the focused window occupies.
-`-l/--lang` picks the Tesseract language(s) (default `eng`; the matching data pack must
-be installed: `tesseract-ocr-<lang>` on Debian and Ubuntu, `tesseract-data-<lang>` on
-Arch, and the suite's `.deb` recommends the English one). `-c` copies the text instead,
-like `color --clipboard`; `--clipboard-foreground` keeps that server in the foreground.
-
-OCR is behind the `ocr` Cargo feature (**on by default**); it links system
-`libtesseract`/`libleptonica`. Build without it for a binary with no native OCR
-dependencies.
+`-l/--lang` picks the Tesseract language(s) (default `eng`; each needs its data pack,
+see [Requirements](#requirements)). `-c` copies the text instead, like
+`color --clipboard`; `--clipboard-foreground` keeps that server in the foreground.
 
 ### `loupe` — full-screen magnifier
 
@@ -84,9 +146,9 @@ output (a feedback loop), and Wayland does not give a regular client the global
 cursor position to follow it from a floating window. For a *live* zoom of a fixed
 region, use `mirror -g` (below).
 
-### `mirror` — floating live mirror (picture-in-picture)
+### `mirror` — live mirror (picture-in-picture)
 
-A floating, always-on-top window that mirrors live content.
+A window of its own that mirrors live content.
 
 ```console
 $ wlr-peek mirror                  # no source: launch wlr-chooser to pick a window
@@ -103,11 +165,18 @@ $ wlr-peek mirror -g "100,200 640x480" --zoom 4   # a fixed region, magnified
 Picking a window, with no source or `--pick-window`, runs `wlr-chooser`: it must be on
 `PATH`, which a `cargo install wlr-peek` on its own does not provide.
 
-It mirrors a window (`ID` or `-w ID`, `--app-id`/`--title`, or `--pick-window`), or a region/output as a live loupe (`-s`, `-g "X,Y WxH"`,
-`-o NAME`, `--current-output`, and `-a`, the area the focused window covers), magnified
-by `--zoom` (default ×2). Region/output mode is mono-output for now (clipped to the output
-its top-left corner sits on). Keep the window outside the mirrored region to avoid
-feedback.
+It mirrors a window (`ID` or `-w ID`, `--app-id`/`--title`, or `--pick-window`), or a
+region/output as a live loupe (`-s`, `-g "X,Y WxH"`, `-o NAME`, `--current-output`, and
+`-a`, the area the focused window covers), magnified by `--zoom` (default ×2).
+Region/output mode is mono-output for now (clipped to the output its top-left corner
+sits on). Keep the window outside the mirrored region to avoid feedback.
+
+The compositor stacks it like any other window, with the app id `wlr-peek-mirror`. To
+keep it floating, on top and on every workspace, in sway:
+
+```
+for_window [app_id="wlr-peek-mirror"] floating enable, sticky enable
+```
 
 For a region, **`--follow`** chooses what it tracks: `output` (default — shows whatever
 workspace is on that screen) or `window` — captures the **window under the region** and
@@ -122,8 +191,7 @@ $ wlr-peek mirror -s --follow window   # loupe that sticks to the window you pic
 Drag to move, the bottom-right grip to resize, the toolbar to collapse to a badge or
 close; **Space** freezes, **c** collapses, **+/-** or the wheel set opacity, **r**
 re-picks (window mode), **Esc** or **q** closes. One mirror per window: a second one
-of the same window exits quietly. Pair with sway rules `floating enable, sticky enable`
-for always-on-top across workspaces.
+of the same window exits quietly.
 
 ### `region` — select a region/point, print its geometry (slurp replacement)
 
@@ -146,7 +214,7 @@ Streams a source and fires when its content **changes**, or once it goes **idle*
 single-output, like `mirror`/`record`).
 
 ```console
-$ wlr-peek watch -g "$(slurp)" && notify-send "it changed"   # fire once, then notify
+$ wlr-peek watch -s && notify-send "it changed"              # fire once, then notify
 $ wlr-peek watch --app-id thunderbird --on idle --for 5s     # wake when the window settles
 $ wlr-peek watch -o DP-4 --on change --threshold 2 --repeat --exec 'mpc next'
 ```
@@ -167,13 +235,12 @@ Capture is damage-driven, so `watch` is cheap: a static source delivers no frame
 ### `grep` — find text on screen (visual grep)
 
 OCRs a source and prints where matching text is, in global logical coordinates
-(slurp-compatible `X,Y WxH`, so it feeds `mirror`/`shot`/other tools). Needs the
-`ocr` feature (Tesseract).
+(slurp-compatible `X,Y WxH`, so it feeds `mirror`/`shot`/other tools).
 
 ```console
 $ wlr-peek grep --current-output "TODO"
 2741,318 58x19	TODO
-$ wlr-peek grep -g "$(slurp)" -i error      # case-insensitive, in a region
+$ wlr-peek grep -i error                    # case-insensitive, in a region you select
 ```
 
 Sources: `-g`, `-o`, `-a`, `--current-output`, or (default) an interactive region.
@@ -181,11 +248,8 @@ Matching is a substring of each recognised word, so a pattern with a space match
 nothing (`-i` for case-insensitive, `-l` for the Tesseract language as in `ocr`). Exits 1
 when nothing matches — and on a cancelled selection or an error.
 
-Unlike the other subcommands, `grep` has **no `--app-id`/`--title` window source** — by
-design. Its output is a position in the global logical space, and a foreign-toplevel
-capture carries no such position (that is exactly why it can read an occluded or
-off-workspace window). Coordinates for a window source would be window-local and
-silently incompatible with the rest of the output. Use `ocr --app-id` for the text.
+`grep` takes no window source: its answer is a position on screen, which a window
+capture does not have. Use `ocr --app-id` for a window's text.
 
 ### `doctor` and `migrate-config`
 
@@ -194,64 +258,17 @@ silently incompatible with the rest of the output. Use `ocr --app-id` for the te
 `~/.config/wlr-utils/config.toml`, then deletes them; `migrate-config -` prints the new
 file instead.
 
-## Requirements
+## Troubleshooting
 
-**Works on** — screens and regions on every compositor that captures screens (sway,
-Hyprland, niri, labwc, Wayfire, river, dwl, cosmic-comp); windows (`-w`, `--app-id`,
-`--title`, `--pick-window`) where windows can be captured (Sway ≥ 1.12, Hyprland ≥ 0.54,
-river ≥ 0.4, cosmic-comp, and partly labwc ≥ 0.20 and dwl ≥ 0.9). `-a` and
-`--current-output` need sway, Hyprland, cosmic-comp or niri (`--current-output` only).
-Not on GNOME or KDE. Details in [COMPATIBILITY.md](../../COMPATIBILITY.md).
-
-A wlroots compositor exposing a capture protocol. Screen inspection (`color`, `loupe`,
-`region`, screen `mirror`/`watch`) needs `ext-image-copy-capture-v1` with the **output**
-source — **Sway ≥ 1.11 / wlroots ≥ 0.19** — or `wlr-screencopy`; targeting a **window**
-(`-w`, window mirror) needs the **foreign-toplevel** source +
-`ext-foreign-toplevel-list-v1` — **Sway ≥ 1.12 / wlroots ≥ 0.20** — which
-`wlr-screencopy` does not stand in for. The frozen overlays (`color`, `loupe`, `region`)
-use `zwlr-layer-shell`, with their layer named `wlr-peek` for
-[compositor rules](../../README.md#compositor-rules); `mirror` uses `xdg-shell`, with the
-app id `wlr-peek-mirror`; `color --clipboard` and `ocr -c` need
-`zwlr_data_control_manager_v1`. `wlr-peek doctor` prints exactly what your compositor
-advertises; see [COMPATIBILITY.md](../../COMPATIBILITY.md) for the full matrix.
-
-- **GL stack** — `libegl1` at runtime (the overlays render through EGL/GLES), and
-  `libfontconfig1` to look up the UI font when it is there (the embedded fonts
-  otherwise), plus `libgbm` for the zero-copy dma-buf path `mirror` and `watch`
-  stream through (the `gpu` feature, on by default). One-shot reads (`color`, `ocr`) capture through shared memory regardless.
-  `--no-gpu` (or `WLR_NO_GPU=1`) forces the shm path; `wlr-peek doctor` reports whether the
-  dma-buf path works here.
-- **OCR** (`ocr`, `grep`; on by default) — links the system `libtesseract`/`libleptonica`
-  (their `-dev` packages and `clang` to build, see
-  [the full list](../../README.md#from-source)); the matching `tesseract-ocr-<lang>` data
-  pack must be installed at runtime (default `eng`). Without the feature the binary needs
-  none of these.
-- **Focus backend** — `--active-window` / `--current-output` ask the compositor: Sway,
-  Hyprland and niri over their IPC (niri: `--current-output` only), cosmic-comp over
-  `zcosmic_toplevel_info_v1`.
-  Elsewhere, use an explicit source instead.
-
-## Install
-
-> **Want the whole suite?** Install the bundle instead — `cargo install wlr-utils` gets
-> every tool (`wlr-chooser`, `wlr-switcher`, `wlr-overlayd`, `wlr-peek`, `wlr-shot`,
-> `wlr-draw`) in one go. The single-tool install below is the lighter, à-la-carte option.
-
-```sh
-cargo install wlr-peek
-```
-
-Or build just this binary from the [wlr-utils](../../README.md) workspace:
-
-```sh
-cargo build --release -p wlr-peek
-```
-
-The default features are `ocr`, `watch`, `gpu` and `i18n`; `--no-default-features` drops
-all four, so the binary loses OCR (`ocr`, `grep`), the `watch` subcommand, the
-focus-based sources (`mirror -a`/`--current-output`, `--follow window`), the dma-buf
-capture path and the Fluent catalog. Pick the ones you want with `--features` — see
-**Requirements** above for what each pulls in.
+- **`Tesseract has no language data for …`** — install that language's data pack (see
+  [Requirements](#requirements)).
+- **`Picking a window needs wlr-chooser…`** — install the `wlr-chooser` crate or the
+  suite, or name the window with `-w`, `--app-id` or `--title`.
+- **The mirror is tiled with the other windows** — add the `for_window` rule above.
+- **`-a` or `--current-output` is unavailable** — they need a focus backend (sway,
+  Hyprland, niri for `--current-output`, cosmic-comp); use `-s`, `-g` or `-o` elsewhere.
+- **What does my compositor support?** `wlr-peek doctor` says, and its output is what a
+  bug report needs.
 
 ## Uninstall
 
