@@ -7,7 +7,6 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 readme = "README.md"
 keywords = ["wayland", "wlroots", "screenshot", "screencast", "sway"]
 categories = ["command-line-utilities", "multimedia"]

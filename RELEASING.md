@@ -42,8 +42,8 @@ skip and expensive to miss:
       bundle (with the shim under `src/bin/`), the `.deb`'s `assets` list and both its
       `extended-description`s, `BINS` in `packaging/install.sh`, the loop of
       `packaging/check-version.sh`, the root README's binary count and its Install /
-      Uninstall sections, the crate table in `CONTRIBUTING.md`, and `docs/index.md`. Grep the tree
-      for the binary it sits next to and answer every hit.
+      Uninstall sections, the crate table in `CONTRIBUTING.md`, and `docs/index.md`. Grep
+      the tree for the binary it sits next to and answer every hit.
 - [ ] **[`CONTRIBUTING.md`](CONTRIBUTING.md)** — the workspace crate table, the
       feature-combo list, the Translations and Themes sections.
 - [ ] **[`COMPATIBILITY.md`](COMPATIBILITY.md)** — compositor floors / capability matrix.
