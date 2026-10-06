@@ -35,6 +35,7 @@ cargo build -p wlr-utils          # the bundle (re-exports the same binaries)
 Before opening a pull request, make these clean (CI runs the same):
 
 ```sh
+cargo check --locked              # Cargo.lock is up to date
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
 cargo test
@@ -43,7 +44,8 @@ cargo build -p wlr-utils          # the bundle isn't in the default set
 
 The engine has feature combinations worth checking when you touch it, e.g.
 `cargo clippy -p wlr-capture --no-default-features --features overlay` (and
-`mirror`, `compose`, `focus`, `pointer`, `keys`, `video`, `gpu`).
+`mirror`, `compose`, `focus`, `pointer`, `keys`, `video`, `audio`, `audio-fallback`,
+`gpu`).
 
 ## Testing the overlays without disturbing your screen
 
@@ -64,7 +66,7 @@ See `tools/screenshots/README.md` for how it works.
 ## Translations
 
 Each tool crate owns **its own** Fluent catalog under
-`crates/<crate>/i18n/<lang>/<crate>.ftl` (domains `wlr_chooser`, `wlr_peek`,
+`crates/<crate>/i18n/<lang>/<domain>.ftl` (domains `wlr_chooser`, `wlr_peek`,
 `wlr_shot`, `wlr_draw`); the shared loader plumbing lives in the `wlr-i18n` crate,
 and `wlr-capture` (the engine) carries no UI strings. To add a language to a tool,
 copy its `en` catalog (e.g. `crates/wlr-draw/i18n/en/wlr_draw.ftl`), translate the

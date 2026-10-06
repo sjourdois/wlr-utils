@@ -30,6 +30,7 @@ The reusable bricks plus the overlay UI helpers they share:
   pixels anyway, allocate shm directly. An import the driver refuses drops the
   client to shm (`Client::disable_gpu`, `WLR_NO_GPU`). Capture is
   occlusion-independent and damage-driven (windows on other workspaces stream live).
+  It also reads and moves the focus (`active_window`, `activate_window`).
 - **`gl`** — the EGL/GL dma-buf core: import a capture dma-buf as a GL texture
   (`EGL_EXT_image_dma_buf_import`) and `GpuReadback`, a headless offscreen context
   that reads such a dma-buf back to CPU RGBA8 (`glReadPixels` on a 1×1 pbuffer).
@@ -39,10 +40,12 @@ The reusable bricks plus the overlay UI helpers they share:
   dma-buf frames read back through `GpuReadback` unless a sink consumes them on the GPU.
 - **`stream` / `diff`** — a shared capture-session driver (arm / poll / reopen /
   give-up) and a frame-difference metric, shared by the mirror, recorder and monitor.
-- **`capture` / `focus`** *(features)* — resolve a source to a `CapturedImage`
-  (cropping + multi-output compositing), and focus backends for active-window /
-  current-output sources: Sway, Hyprland and niri over their IPC, cosmic-comp over
-  `zcosmic_toplevel_info_v1`.
+- **`capture`** *(the `compose` feature)* — resolve a source to a `CapturedImage`
+  (cropping + multi-output compositing).
+- **`focus`** *(feature)* — what only the compositor knows: the active window and
+  output, the focus order, the process behind a window, moving a window to the current
+  workspace and sway's scratchpad. Sway, Hyprland and niri over their IPC, cosmic-comp
+  over its toplevel protocols.
 - **`overlay` / `mirror`** *(features)* — the frozen region/point/magnify selector and
   the floating live-mirror (PiP) host.
 - **`pointer`** *(feature)* — a seat's `wl_pointer` with its `cursor-shape-v1` device,
@@ -52,8 +55,8 @@ The reusable bricks plus the overlay UI helpers they share:
 - **`keys`** *(feature)* — keyboard pieces the tools share: the keystrokes that mean
   cancel (`Esc`, and the terminal's `Ctrl+[`), and a keystroke a user can write down
   (`Shift+Tab`). Pulled in by `overlay` and `mirror`.
-- **`video` / `audio`** *(features)* — FFmpeg encoding (H.264 NVENC/VAAPI/libx264, and
-  animated GIF/WebP) and native-PipeWire audio capture (with an optional Pulse/ALSA
+- **`video` / `audio`** *(features)* — FFmpeg H.264 encoding (NVENC, VAAPI or libx264,
+  the first that opens) and native-PipeWire audio capture (with an optional Pulse/ALSA
   fallback via libavdevice).
 - **`render`** *(toolkit)* — an egui → `egui_glow` rendering core on an EGL/GLES
   context bound to a `wl_surface`, reusing `gl`'s dma-buf import for live textures.
@@ -69,8 +72,8 @@ This is primarily an **internal library** for the wlr-utils binaries; the public
 API is not yet stabilised and may change between minor versions. It is published
 so the tools can depend on it from crates.io.
 
-A lean always-on core (`wl`, `gl`, `clipboard`, `sink`, `stream`, `diff`) plus opt-in
-features. On by default: `gpu`, `toolkit`.
+A lean always-on core (`wl`, `gl`, `clipboard`, `sink`, `stream`, `diff`, with `doctor`,
+the typed `CaptureError` and `paths`) plus opt-in features. On by default: `gpu`, `toolkit`.
 
 - **`gpu`** — the zero-copy dma-buf *capture* path (pulls `gbm`); without it a pure-CPU
   shm build (no `libgbm`). The `gl` dma-buf import + readback is built either way.

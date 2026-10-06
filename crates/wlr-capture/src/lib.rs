@@ -3,7 +3,7 @@
 //! Always available (headless-friendly, no egui/EGL display deps):
 //! - [`wl`]: native Wayland client that enumerates foreign toplevels + outputs and
 //!   captures them (full-resolution, zero-copy GPU dma-buf path) via
-//!   `ext-image-copy-capture`.
+//!   `ext-image-copy-capture`, or `wlr-screencopy` for screens where that is absent.
 //! - [`clipboard`]: put a captured blob on the wlroots clipboard (`data-control`).
 //! - [`gl`]: EGL/GL dma-buf import + headless readback ([`gl::GpuReadback`]).
 //! - [`sink`]: the [`sink::FrameSink`] seam shared by screenshot/record/timelapse,
@@ -43,7 +43,7 @@
 //! - [`render`]: egui → `egui_glow` rendering on an EGL context bound to a surface.
 //! - `icons` / `theme`: shared overlay UI helpers.
 //!
-//! Consumers (`wlr-chooser`, `wlr-pip`, …) build their own windowing host on top
+//! Consumers (`wlr-chooser`, `wlr-peek`, …) build their own windowing host on top
 //! and reuse this engine for the heavy lifting; a future headless recorder can use
 //! the capture engine + readback without pulling in the toolkit.
 

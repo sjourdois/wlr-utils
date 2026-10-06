@@ -7,7 +7,7 @@
 //! - with the `i18n` feature (default) it wraps `i18n-embed` / Fluent ([`build_loader`],
 //!   [`select`]);
 //! - without it, [`build::generate_fallback`] turns the crate's `en` catalog into a plain
-//!   `fallback(id)` function at build time, so English-only builds pull in no Fluent stack.
+//!   `fallback(id, args)` function at build time, so English-only builds pull in no Fluent stack.
 //!
 //! A consuming crate defines a `RustEmbed` `Localizations` over its `i18n/` folder, a
 //! `LOADER` built with [`build_loader`], an `init()` calling [`select`], and its own `tr!`

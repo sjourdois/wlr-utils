@@ -8,7 +8,8 @@
 Shared localisation plumbing for the [wlr-utils](https://github.com/sjourdois/wlr-utils)
 tools (`wlr-chooser`, `wlr-switcher`, `wlr-peek`, `wlr-shot`, `wlr-draw`).
 
-Each tool crate **owns its own** Fluent catalog (`i18n/<lang>/<crate>.ftl`) and its own
+Each tool crate **owns its own** Fluent catalog (`i18n/<lang>/<domain>.ftl`, the crate name
+with underscores: `wlr_draw.ftl`) and its own
 loader — so [`wlr-capture`](../wlr-capture), the engine library, carries no UI strings at
 all. This crate is the reusable core that keeps a tool's `i18n` module down to a few lines.
 
@@ -22,7 +23,7 @@ all. This crate is the reusable core that keeps a tool's `i18n` module down to a
     (`LANGUAGE`/`LC_ALL`/`LC_MESSAGES`/`LANG`), falling back to English. Call once at
     startup.
 - **Without it (`--no-default-features`)** — a build-script helper,
-  `build::generate_fallback("i18n/en/<crate>.ftl")`, that turns the crate's `en` catalog
+  `build::generate_fallback("i18n/en/<domain>.ftl")`, that turns the crate's `en` catalog
   into a plain `fallback(id, args) -> String` function at build time. English-only builds
   then pull in **no Fluent stack** at all.
 

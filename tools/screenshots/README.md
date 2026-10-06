@@ -33,8 +33,8 @@ keeps every frame of the master — set `SHOTS_GIF_FPS` to resample it to anothe
 
 ## Requirements
 
-System tools: `sway`, `wtype`, `foot`, `ffmpeg`, `jq`, `curl`, `gh` (optional, for an
-ad-blocker in the browser scenes), `python3` with
+System tools: `sway`, `wtype`, `foot`, `ffmpeg`, `jq`, `curl`, `gh` and `unzip` (optional,
+for an ad-blocker in the browser scenes), `python3` with
 `websockets`, ImageMagick, plus `batcat`/`tree` for the demo windows. The scenes
 that show a desktop also need `chromium`, `galculator`, `mpv`, `btop` and `cmatrix`. The
 first run also builds a tiny virtual-pointer injector:
@@ -65,9 +65,9 @@ download the desktop falls back to a generated test pattern and says so.
 | `nested-sway.conf` | the isolated compositor's config (one virtual output) |
 | `foot.ini` | dark theme for the demo terminals |
 | `btop.conf` | btop settings for the demo desktop (graph boxes, no process list) |
-| `pointer/` | `shots-pointer`, a `zwlr_virtual_pointer_v1` injector (standalone crate, **not** in the workspace) |
+| `pointer/` | `shots-pointer`, a `zwlr_virtual_pointer_v1` + `zwp_virtual_keyboard_v1` injector, to hold keys (standalone crate, **not** in the workspace) |
 | `cdp.py` | DevTools client that dismisses the browser's cookie dialog by button text |
-| `scenes/*.sh` | one scene per tool |
+| `scenes/*.sh` | the scenes, one or more per tool |
 | `capture.sh` | orchestrator: build + run every scene |
 
 ## Notes

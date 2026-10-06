@@ -160,6 +160,7 @@ shots_start() {
   export WAYLAND_DISPLAY="$NESTED_WAYLAND_DISPLAY"
   export SWAYSOCK="$SHOTS_IPC" I3SOCK="$SHOTS_IPC"
   export LANG="$SHOTS_LANG" LC_ALL="$SHOTS_LANG"
+  unset LANGUAGE # it outranks LANG and LC_ALL in the tools' language lookup
   unset DISPLAY
 
   swaymsg "output HEADLESS-1 resolution $res" >/dev/null 2>&1

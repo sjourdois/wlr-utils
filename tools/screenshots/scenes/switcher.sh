@@ -2,7 +2,7 @@
 # Scene: wlr-switcher — Alt-Tab with LIVE window previews (the differentiator).
 # A realistic desktop (two browser windows + terminals); the strip cycles slowly
 # with Tab so the moving highlight reads clearly. Bonus: the rofi-like card.
-# Produces docs/assets/wlr-switcher/{altab,card}.{png,gif,webp,apng}.
+# Produces docs/assets/wlr-switcher/{altab,expose}.{png,gif,mp4} and card.png.
 set -u
 cd "$(dirname "$0")/.."
 . ./lib.sh

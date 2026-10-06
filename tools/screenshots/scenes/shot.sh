@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Scene: wlr-shot — the frozen interactive region selector (`screenshot -s`).
-# Produces docs/assets/wlr-shot/select.{png,gif,webp,apng}: a dimmed frozen
+# Produces docs/assets/wlr-shot/select.{png,gif,mp4}: a dimmed frozen
 # screen with a bright selection rectangle being dragged out.
 set -u
 cd "$(dirname "$0")/.."

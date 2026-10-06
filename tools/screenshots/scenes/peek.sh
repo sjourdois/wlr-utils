@@ -2,7 +2,7 @@
 # Scene: wlr-peek — the overlay inspectors, as short videos:
 #   color  — the colour picker (pipette) + loupe, sweeping the desktop
 #   loupe  — the standalone magnifier, panning and zooming
-# Produces docs/assets/wlr-peek/{color,loupe}.{mp4,gif,apng,png}.
+# Produces docs/assets/wlr-peek/{color,loupe}.{mp4,gif,png}.
 set -u
 cd "$(dirname "$0")/.."
 . ./lib.sh

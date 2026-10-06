@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Scene: wlr-draw — annotate live on screen (a code-review style moment).
-# Produces docs/assets/wlr-draw/{annotate.png, annotate.gif, annotate.webp}.
+# Produces docs/assets/wlr-draw/{annotate.png, annotate.gif, annotate.mp4}.
 set -u
 cd "$(dirname "$0")/.."
 . ./lib.sh

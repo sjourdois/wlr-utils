@@ -18,8 +18,9 @@ All notable changes to this project are documented here. The format is based on
 ### Changed
 
 - **Each overlay's layer is named after its command** — a compositor rule can now tell
-  `wlr-switcher` from `wlr-chooser`, which both used `wlr-chooser`. Region selection
-  and the colour picker, until now `wlr-overlay`, use `wlr-shot` or `wlr-peek`. Rules
+  `wlr-switcher` from `wlr-chooser`, which both used `wlr-chooser`. Region selection,
+  the colour picker and the loupe, until now `wlr-overlay`, use `wlr-shot` or
+  `wlr-peek`. Rules
   written for the old names need updating; the README lists the namespaces.
 - **`-w ID` names a window in every command** — `wlr-peek mirror -w` opened the chooser,
   which is now `--pick-window` as everywhere else, and `wlr-peek ocr` gains `-w`: the
@@ -30,22 +31,22 @@ All notable changes to this project are documented here. The format is based on
 - **`wlr-switcher` opens past the current window in every layout** — outside
   hold-to-switch (`--layout grid` or `card`, `--no-hold`), it opened on the window you
   were on.
-- **The systemd units start a `cargo install`ed daemon** — systemd looked `wlr-draw` and
-  `wlr-overlayd` up in `/usr/bin` and `/usr/local/bin` only; the units now go through the
-  user manager's `PATH`.
-- **`wlr-peek watch --repeat --timeout` waits for a quiet stretch** — the timeout ran
-  from the start and exited 2, "no trigger", however often it had fired; it now restarts
-  at each trigger, as its help says.
-- **`wlr-peek watch` exits 3 when its window or output goes away** — it exited 0, so
-  `watch … && notify-send` fired when the watched window closed.
-- **`wlr-shot record --timelapse` no longer captures sound it cannot use** — it ran a
-  PipeWire capture and announced `+ audio`, but a timelapse has no sound track.
-- **`wlr-shot screenshot -t ppm` writes PPM** — it wrote PAM, which is now `-t pam`.
-- **`wlr-shot screenshot shot.jpg` writes a JPEG** — without `-t`, the format now
-  follows the file's extension; it was always PNG.
-- **`wlr-shot record` falls back when hardware encoding is unavailable** — `--encoder
-  auto` picked NVENC whenever FFmpeg was built with it, as Debian's and Arch's are, and
-  failed on machines without NVIDIA. It now tries VAAPI, then `libx264`.
+- **Less CPU for live thumbnails without the GPU path** — with `--no-gpu`, or where the
+  GPU path is unavailable, `wlr-chooser` and `wlr-switcher` refreshed them at about
+  30 fps. They now stay at about 6 fps.
+- **Screens carry the screen icon in `wlr-chooser --layout grid`** — they had the
+  window one.
+- **`wlr-chooser --grid` fits its rows whatever the font** — with a larger `font-size`
+  in the theme, the last row was cut off, and with the default font the card ended in
+  empty space.
+- **A non-ASCII colour in `theme.toml` no longer crashes the overlays** — a value such
+  as `"#éa"` made the theme loader panic, taking down `wlr-chooser`, `wlr-switcher`,
+  `wlr-draw`, the `wlr-peek` mirror and the `wlr-overlayd` daemon. It is now ignored
+  like any other colour that does not parse.
+- **Killing `wlr-switcher` or `wlr-chooser` now closes the `wlr-overlayd` overlay** —
+  the daemon kept an overlay up, keyboard held, after the invocation that asked for
+  it was gone, and answered every new one `busy`. It now takes the overlay down as
+  soon as its client hangs up.
 - **A misspelled entry in `wlr-draw`'s `keys.toml` is reported** — it was ignored without
   a word.
 - **`wlr-draw save rel.png` writes to your current directory** — a relative path was
@@ -62,26 +63,26 @@ All notable changes to this project are documented here. The format is based on
 - **`wlr-draw`'s on-screen hints name your keys** — after rebinding help, click-through
   or spotlight in `keys.toml`, the hints still showed the default keys.
 - **The spotlight status shows its ○ mark** — it was an empty box.
-- **Less CPU for live thumbnails without the GPU path** — with `--no-gpu`, or where the
-  GPU path is unavailable, `wlr-chooser` and `wlr-switcher` refreshed them at about
-  30 fps. They now stay at about 6 fps.
-- **Screens carry the screen icon in `wlr-chooser --layout grid`** — they had the
-  window one.
-- **`wlr-chooser --grid` fits its rows whatever the font** — with a larger `font-size`
-  in the theme, the last row was cut off, and with the default font the card ended in
-  empty space.
-- **A non-ASCII colour in `theme.toml` no longer crashes the overlays** — a value such
-  as `"#éa"` made the theme loader panic, taking down `wlr-chooser`, `wlr-switcher`,
-  `wlr-draw`, the `wlr-peek` mirror and the `wlr-overlayd` daemon. It is now ignored
-  like any other colour that does not parse.
 - **A non-ASCII colour no longer crashes `wlr-draw`** — `wlr-draw color '#aébcd'`
   panicked instead of reporting an unknown colour, and the same `color` line sent by
   hand to the daemon's socket killed the thread that reads it: the overlay stayed up
   but took no more commands. Both now report it as an unknown colour.
-- **Killing `wlr-switcher` or `wlr-chooser` now closes the `wlr-overlayd` overlay** —
-  the daemon kept an overlay up, keyboard held, after the invocation that asked for
-  it was gone, and answered every new one `busy`. It now takes the overlay down as
-  soon as its client hangs up.
+- **`wlr-shot record --timelapse` no longer captures sound it cannot use** — it ran a
+  PipeWire capture and announced `+ audio`, but a timelapse has no sound track.
+- **`wlr-shot screenshot -t ppm` writes PPM** — it wrote PAM, which is now `-t pam`.
+- **`wlr-shot screenshot shot.jpg` writes a JPEG** — without `-t`, the format now
+  follows the file's extension; it was always PNG.
+- **`wlr-shot record` falls back when hardware encoding is unavailable** — `--encoder
+  auto` picked NVENC whenever FFmpeg was built with it, as Debian's and Arch's are, and
+  failed on machines without NVIDIA. It now tries VAAPI, then `libx264`.
+- **`wlr-peek watch --repeat --timeout` waits for a quiet stretch** — the timeout ran
+  from the start and exited 2, "no trigger", however often it had fired; it now restarts
+  at each trigger, as its help says.
+- **`wlr-peek watch` exits 3 when its window or output goes away** — it exited 0, so
+  `watch … && notify-send` fired when the watched window closed.
+- **The systemd units start a `cargo install`ed daemon** — systemd looked `wlr-draw` and
+  `wlr-overlayd` up in `/usr/bin` and `/usr/local/bin` only; the units now go through the
+  user manager's `PATH`.
 
 ### Breaking
 

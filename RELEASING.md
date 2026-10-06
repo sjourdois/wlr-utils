@@ -10,10 +10,10 @@ The whole workspace is versioned as one block: every crate shares the
 ```sh
 cargo install cargo-dist cargo-deb
 
-# Generate the release workflow (.github/workflows/release.yml) from the
-# [workspace.metadata.dist] config; commit it.
+# Generate the release workflow (.github/workflows/release.yml) from the [dist]
+# config in dist-workspace.toml; commit it.
 dist init --yes
-git add .github/workflows/release.yml Cargo.toml && git commit -m "ci: cargo-dist release workflow"
+git add .github/workflows/release.yml dist-workspace.toml && git commit -m "ci: cargo-dist release workflow"
 ```
 
 Repository secrets needed on GitHub:
@@ -65,9 +65,9 @@ grep 'for pkg in' .github/workflows/publish.yml   # every crate in the publish o
 ## Cutting a release `vX.Y.Z`
 
 1. **Bump the toolchain** if a newer stable is out: `rustup update`, then set the same
-   version in `rust-toolchain.toml`. That file is the single source of truth — CI, the
-   `.deb` builds and a local checkout all resolve to it, so a green local `clippy` means
-   a green CI `clippy`.
+   version in `rust-toolchain.toml`. CI, the `.deb` builds and a local checkout all
+   resolve to it, so a green local `clippy` means a green CI `clippy`; only the AUR
+   package builds with Arch's own Rust.
 2. **Bump the version.** It lives in `[workspace.package]` **and** in each inter-crate
    dependency pin (the `version = "X.Y.Z"` next to `path = "../wlr-…"`). Every crate's
    own version inherits via `version.workspace = true`, but the tool crates pin the
@@ -90,8 +90,8 @@ grep 'for pkg in' .github/workflows/publish.yml   # every crate in the publish o
    - `deb` and `aur` are **chained to `release`** (a `workflow_run` trigger), because
      both need the release it creates. They take the tag from the upstream run, so
      they check out that tag rather than the default branch.
-   - The `deb` workflow builds the `.deb` per distro and attaches it to the release
-     (only crates with `[package.metadata.deb]` ship there).
+   - The `deb` workflow builds the suite's `.deb` (`cargo deb -p wlr-utils`) per distro
+     and attaches it to the release.
    - The `aur` workflow publishes both AUR packages from an Arch container: it rewrites
      `pkgver` from the tag, runs `updpkgsums`, regenerates `.SRCINFO` and pushes. The
      `pkgver` committed in `packaging/aur/` is only kept in sync for readability.
@@ -107,11 +107,11 @@ grep 'for pkg in' .github/workflows/publish.yml   # every crate in the publish o
 ## Checks before tagging
 
 ```sh
+cargo check --locked              # Cargo.lock is up to date (first: the rest rewrites it)
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
 cargo test
 cargo build -p wlr-utils          # the bundle isn't in the default set
-cargo check --locked              # Cargo.lock is up to date
 ```
 
 When the engine changed, also spot-check its feature combos (see CONTRIBUTING).
