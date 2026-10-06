@@ -403,10 +403,11 @@ fn draw_point_overlay(
                 p.galley(at, galley, t.text);
 
                 // Hint below the readout.
+                let hint_colour = Theme::with_alpha(t.text, 200);
                 let hint = p.layout_no_wrap(
                     hint.to_owned(),
                     egui::FontId::proportional(t.text_size(12.0)),
-                    t.text_dim,
+                    hint_colour,
                 );
                 let hat = egui::pos2(bg.min.x + 2.0, bg.max.y + 4.0);
                 let hbg = egui::Rect::from_min_size(
@@ -414,7 +415,7 @@ fn draw_point_overlay(
                     hint.size() + egui::vec2(8.0, 4.0),
                 );
                 p.rect_filled(hbg, t.radius(4.0), Theme::with_alpha(t.card, 200));
-                p.galley(hat, hint, t.text_dim);
+                p.galley(hat, hint, hint_colour);
             }
         });
 }
