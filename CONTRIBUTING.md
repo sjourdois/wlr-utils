@@ -5,7 +5,7 @@ welcome.
 
 ## The workspace
 
-`wlr-utils` is a Cargo workspace. One library powers a handful of binaries:
+`wlr-utils` is a Cargo workspace. Three libraries power a handful of binaries:
 
 | Crate | Binaries | What it is |
 |-------|----------|------------|
@@ -106,10 +106,10 @@ has to say goes to the daemon's own output.
 
 ## Translations
 
-Each tool crate owns **its own** Fluent catalog under
-`crates/<crate>/i18n/<lang>/<domain>.ftl` (domains `wlr_chooser`, `wlr_peek`,
-`wlr_shot`, `wlr_draw`); the shared loader plumbing lives in the `wlr-i18n` crate,
-and `wlr-capture` (the engine) carries no UI strings. To add a language to a tool,
+Each tool crate, and `wlr-config`, owns **its own** Fluent catalog under
+`crates/<crate>/i18n/<lang>/<domain>.ftl` (domains `wlr_chooser`, `wlr_config`,
+`wlr_peek`, `wlr_shot`, `wlr_draw`); the shared loader plumbing lives in the `wlr-i18n`
+crate, and `wlr-capture` (the engine) carries no UI strings. To add a language to a tool,
 copy its `en` catalog (e.g. `crates/wlr-draw/i18n/en/wlr_draw.ftl`), translate the
 values — keep the `{ $name }` placeables and the message keys — and add the file.
 The English catalog is the source of truth and the per-message fallback; CJK
@@ -117,9 +117,9 @@ renders via an auto-detected CJK font. CLI `--help` text stays English by design
 
 ## Themes
 
-A theme is a file of colours (and optional fonts) shared by the overlays: the keys of
-the `[theme]` section, without its header. Add new palettes to `docs/themes/`; the keys
-are listed in [`docs/config.toml`](docs/config.toml).
+A theme is a file of colours (and optional fonts, `font-size` and `corner-radius`) shared
+by the overlays: the keys of the `[theme]` section, without its header. Add new palettes
+to `docs/themes/`; the keys are listed in [`docs/config.toml`](docs/config.toml).
 
 ## Commit messages & license
 

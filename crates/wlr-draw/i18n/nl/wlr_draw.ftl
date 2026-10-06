@@ -15,7 +15,6 @@ draw-tool-eraser = Gum
 draw-tool-move = Verplaatsen
 draw-palette-title = Kleur
 draw-help-title = wlr-draw — toetsen
-draw-help-tools = gereedschap (pen, lijn, rechthoek, ellips, pijl, tekst, gum)
 draw-help-color = Kleurenpalet
 draw-help-undo = Ongedaan maken / opnieuw
 draw-help-width = Lijndikte

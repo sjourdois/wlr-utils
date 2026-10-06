@@ -15,7 +15,6 @@ draw-tool-eraser = Gomme
 draw-tool-move = Déplacer
 draw-palette-title = Couleur
 draw-help-title = wlr-draw — touches
-draw-help-tools = outils (stylo, ligne, rect, ellipse, flèche, texte, gomme)
 draw-help-color = Palette de couleurs
 draw-help-undo = Annuler / refaire
 draw-help-width = Épaisseur du trait

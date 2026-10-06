@@ -15,7 +15,6 @@ draw-tool-eraser = 消しゴム
 draw-tool-move = 移動
 draw-palette-title = 色
 draw-help-title = wlr-draw — キー操作
-draw-help-tools = ツール（ペン, 線, 四角形, 楕円, 矢印, テキスト, 消しゴム）
 draw-help-color = カラーパレット
 draw-help-undo = 元に戻す / やり直し
 draw-help-width = 線の太さ

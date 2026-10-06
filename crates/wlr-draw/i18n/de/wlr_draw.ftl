@@ -15,7 +15,6 @@ draw-tool-eraser = Radiergummi
 draw-tool-move = Verschieben
 draw-palette-title = Farbe
 draw-help-title = wlr-draw — Tasten
-draw-help-tools = Werkzeuge (Stift, Linie, Rechteck, Ellipse, Pfeil, Text, Radiergummi)
 draw-help-color = Farbpalette
 draw-help-undo = Rückgängig / Wiederholen
 draw-help-width = Strichstärke

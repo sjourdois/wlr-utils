@@ -48,7 +48,6 @@ if [ -z "${SKIP_BUILD:-}" ]; then
 fi
 export SHOTS_BIN="$SHOTS_REPO/target/release"
 
-# wlr-pip is a deprecation stub; it has no showcase scene.
 for s in "${SCENES[@]}"; do
   if [ ! -f "scenes/$s.sh" ]; then shots_msg "no scene '$s' — skipping"; continue; fi
   shots_msg "=== scene: $s ==="

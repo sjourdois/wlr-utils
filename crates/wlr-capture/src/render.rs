@@ -2,7 +2,7 @@
 //! Wayland surface, plus zero-copy dma-buf → GL texture import.
 //!
 //! This is the toolkit half of `wlr-capture`: any windowing host (the
-//! `wlr-chooser` layer-shell overlay, the `wlr-pip` xdg-toplevel mirror, …) binds
+//! `wlr-chooser` layer-shell overlay, the `wlr-peek mirror` xdg-toplevel window, …) binds
 //! a [`Gpu`] to its `wl_surface` and drives one egui frame per repaint with
 //! [`Gpu::render`]. The host owns the GL context, so it (via the importer handed
 //! to the UI closure) turns capture dma-bufs into drawable textures.

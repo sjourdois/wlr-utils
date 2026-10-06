@@ -62,7 +62,7 @@ anyhow.workspace = true
 # A single Debian package shipping every tool, in place of one .deb per crate. EGL/GL and
 # fontconfig are dlopen'd at runtime, so `$auto` (ldd-based) can't see them — name
 # `libegl1` and `libfontconfig1` explicitly; the linked libs (FFmpeg, PipeWire, Tesseract,
-# gbm, D-Bus…) are picked up automatically.
+# gbm…) are picked up automatically.
 # conflicts/replaces let it cleanly supersede any previously installed per-tool packages.
 [package.metadata.deb]
 maintainer = "Stéphane Jourdois <stephane@jourdois.fr>"

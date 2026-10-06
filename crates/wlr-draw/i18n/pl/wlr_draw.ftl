@@ -15,7 +15,6 @@ draw-tool-eraser = Gumka
 draw-tool-move = Przesuń
 draw-palette-title = Kolor
 draw-help-title = wlr-draw — klawisze
-draw-help-tools = narzędzia (pióro, linia, prostokąt, elipsa, strzałka, tekst, gumka)
 draw-help-color = Paleta kolorów
 draw-help-undo = Cofnij / ponów
 draw-help-width = Grubość linii

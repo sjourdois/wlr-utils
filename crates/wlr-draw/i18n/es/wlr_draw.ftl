@@ -15,7 +15,6 @@ draw-tool-eraser = Borrador
 draw-tool-move = Mover
 draw-palette-title = Color
 draw-help-title = wlr-draw — teclas
-draw-help-tools = herramientas (lápiz, línea, rect., elipse, flecha, texto, borrador)
 draw-help-color = Paleta de colores
 draw-help-undo = Deshacer / rehacer
 draw-help-width = Grosor del trazo

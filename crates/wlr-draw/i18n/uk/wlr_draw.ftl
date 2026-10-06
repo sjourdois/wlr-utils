@@ -15,7 +15,6 @@ draw-tool-eraser = Гумка
 draw-tool-move = Перемістити
 draw-palette-title = Колір
 draw-help-title = wlr-draw — клавіші
-draw-help-tools = інструменти (перо, лінія, прямокутник, еліпс, стрілка, текст, гумка)
 draw-help-color = Палітра кольорів
 draw-help-undo = Скасувати / повторити
 draw-help-width = Товщина лінії

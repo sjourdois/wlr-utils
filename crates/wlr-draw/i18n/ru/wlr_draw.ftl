@@ -15,7 +15,6 @@ draw-tool-eraser = Ластик
 draw-tool-move = Переместить
 draw-palette-title = Цвет
 draw-help-title = wlr-draw — клавиши
-draw-help-tools = инструменты (перо, линия, прямоугольник, эллипс, стрелка, текст, ластик)
 draw-help-color = Палитра цветов
 draw-help-undo = Отменить / повторить
 draw-help-width = Толщина линии

@@ -15,7 +15,6 @@ draw-tool-eraser = Eraser
 draw-tool-move = Move
 draw-palette-title = Colour
 draw-help-title = wlr-draw — keys
-draw-help-tools = tools (pen, line, rect, ellipse, arrow, text, eraser)
 draw-help-color = Colour palette
 draw-help-undo = Undo / redo
 draw-help-width = Stroke width

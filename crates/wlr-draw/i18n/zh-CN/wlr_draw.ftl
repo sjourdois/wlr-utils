@@ -15,7 +15,6 @@ draw-tool-eraser = 橡皮擦
 draw-tool-move = 移动
 draw-palette-title = 颜色
 draw-help-title = wlr-draw — 按键
-draw-help-tools = 工具（画笔、直线、矩形、椭圆、箭头、文字、橡皮擦）
 draw-help-color = 调色板
 draw-help-undo = 撤销 / 重做
 draw-help-width = 线条粗细

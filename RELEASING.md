@@ -39,9 +39,10 @@ skip and expensive to miss:
       `Cargo.toml`.
 - [ ] **A new binary** drifts in more places than a new crate, because nothing fails to
       build when one is missed: `[[bin]]` in its own crate *and* in the `wlr-utils`
-      bundle (with the shim under `src/bin/`), the `assets` list of both `.deb`s, both
-      `description`s, the root README's binary count and its Install / Uninstall
-      sections, the crate table in `CONTRIBUTING.md`, and `docs/index.md`. Grep the tree
+      bundle (with the shim under `src/bin/`), the `.deb`'s `assets` list and both its
+      `extended-description`s, `BINS` in `packaging/install.sh`, the loop of
+      `packaging/check-version.sh`, the root README's binary count and its Install /
+      Uninstall sections, the crate table in `CONTRIBUTING.md`, and `docs/index.md`. Grep the tree
       for the binary it sits next to and answer every hit.
 - [ ] **[`CONTRIBUTING.md`](CONTRIBUTING.md)** — the workspace crate table, the
       feature-combo list, the Translations and Themes sections.
@@ -82,12 +83,13 @@ grep 'for pkg in' .github/workflows/publish.yml   # every crate in the publish o
    below the real floor, it makes `resolver = "3"` hold back later `cargo update`s.
 3. **Bump the version.** It lives in `[workspace.package]` **and** in each inter-crate
    dependency pin (the `version = "X.Y.Z"` next to `path = "../wlr-…"`). Every crate's
-   own version inherits via `version.workspace = true`, but the tool crates pin the
-   engine/i18n version explicitly, so those pins must move too. `cargo set-version X.Y.Z`
+   own version inherits via `version.workspace = true`, but every crate that depends on
+   another pins its version explicitly — the tools, and `wlr-capture` on `wlr-config`,
+   `wlr-config` on `wlr-i18n` — so those pins must move too. `cargo set-version X.Y.Z`
    (from `cargo-edit`) handles both; verify the pins and refresh `Cargo.lock`.
 4. **Update [`CHANGELOG.md`](CHANGELOG.md)** — a `## X.Y.Z — YYYY-MM-DD` section
-   (Added / Changed / Fixed), referencing the issues/PRs it closes. Commit
-   (`chore(release): X.Y.Z`) as the last commit of the release PR.
+   (Added / Changed / Fixed / Deprecated / Breaking), referencing the issues/PRs it
+   closes. Commit (`chore(release): X.Y.Z`) as the last commit of the release PR.
 5. **Tag and push:**
    ```sh
    git tag vX.Y.Z

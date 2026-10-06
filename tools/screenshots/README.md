@@ -1,6 +1,6 @@
 # Screenshot generator
 
-Reproducible, hands-off screenshots and short animations of every wlr-utils
+Hands-off screenshots and short animations of every wlr-utils
 tool, used in the project READMEs and the GitHub Pages showcase.
 
 Each scene spins up an **isolated, headless nested sway** in its own
@@ -8,6 +8,9 @@ Each scene spins up an **isolated, headless nested sway** in its own
 pointer + keyboard, and captures the result. The nested compositor uses the
 headless wlroots backend (virtual in-memory outputs, no DRM master), so it runs
 safely **alongside a live session and never touches your real screens**.
+
+The tools in it still read your own configuration: with a `config.toml` (or an old
+`theme.toml`), the captures take your theme. Run it without one for the default look.
 
 ## Usage
 

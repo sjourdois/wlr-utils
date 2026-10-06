@@ -15,7 +15,6 @@ draw-tool-eraser = 지우개
 draw-tool-move = 이동
 draw-palette-title = 색상
 draw-help-title = wlr-draw — 단축키
-draw-help-tools = 도구 (펜, 선, 사각형, 타원, 화살표, 텍스트, 지우개)
 draw-help-color = 색상 팔레트
 draw-help-undo = 실행 취소 / 다시 실행
 draw-help-width = 선 두께
