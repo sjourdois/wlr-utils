@@ -26,12 +26,6 @@ Five graphical tools for **wlroots and derivatives**.
 > windows is the whole point of building on `ext-foreign-toplevel` rather than grabbing a
 > visible output.
 
-They all share two library crates: **[wlr-capture](crates/wlr-capture)**, the wlroots
-capture engine (`ext-image-copy-capture-v1`, full-resolution dma-buf zero-copy with a
-CPU shm fallback) plus an egui/EGL rendering + dma-buf-import toolkit; and
-**[wlr-i18n](crates/wlr-i18n)**, the shared Fluent localisation plumbing each tool builds
-its own message catalog on.
-
 <p align="center">
   <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-draw/annotate.gif" width="49%" alt="wlr-draw — annotate live on screen">
   <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-switcher/altab.gif" width="49%" alt="wlr-switcher — Alt-Tab with live previews">
@@ -41,37 +35,6 @@ its own message catalog on.
   <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-peek/color.gif" width="49%" alt="wlr-peek — colour picker with loupe">
 </p>
 <p align="center"><sub>wlr-draw · wlr-switcher · wlr-shot · wlr-peek — see the <a href="https://sjourdois.github.io/wlr-utils/">showcase</a></sub></p>
-
-## Requirements
-
-A compositor that speaks the wlroots protocols — wlroots-based or not, since Hyprland,
-niri and cosmic-comp implement them on their own stacks. What you get depends on which
-capture protocols it exposes:
-
-| Capability | Compositor floor | Wayland protocol |
-| --- | --- | --- |
-| **Overlays** (pickers, region selection, annotation) | any | `wlr-layer-shell` |
-| **Screen** capture (screenshots, recording, loupe, wlr-draw's freeze and save) | wlroots ≥ 0.19 · Sway ≥ 1.11, or any compositor with `wlr-screencopy` | `ext-image-copy-capture-v1` (else `wlr-screencopy`) |
-| **Window** capture (switcher, `-w`, window mirror/record) | wlroots ≥ 0.20 · Sway ≥ 1.12 | adds the foreign-toplevel capture source and `ext-foreign-toplevel-list-v1` |
-
-Tools degrade gracefully: where windows aren't capturable they keep their screen features
-and say so. See [COMPATIBILITY.md](COMPATIBILITY.md) for the full matrix (Hyprland, niri,
-labwc, …), or run the `doctor` command that every tool but `wlr-overlayd` exposes (e.g.
-`wlr-shot doctor`, or `wlr-chooser --doctor`) to check your own compositor. It also
-captures a frame through the GPU path and reports whether it can be imported, which is
-the line to quote in a bug report.
-
-Runtime libraries:
-
-| Library | Needed by | Why |
-| --- | --- | --- |
-| `libegl1` | every tool | EGL/GLES overlay rendering |
-| `libfontconfig1` | every tool | looking up the UI font; without it the overlay falls back to the embedded fonts, which have no CJK coverage |
-| `libgbm` (Mesa) | every tool | zero-copy GPU capture path; `--no-gpu` (or `WLR_NO_GPU=1`) captures through shared memory instead, but the library must still be there |
-| FFmpeg (`libav*`), `libpipewire-0.3` | `wlr-shot record` | encoding, and recording system sound |
-| Tesseract, Leptonica, the `eng` tessdata pack | `wlr-peek ocr` / `grep` | text recognition |
-| `xdg-desktop-portal-wlr` ≥ 0.8 | `wlr-chooser` | portal-based picking |
-| `wlr-foreign-toplevel-management-v1`, or `cosmic-toplevel-management` | `wlr-switcher` | focusing windows |
 
 ## Install
 
@@ -188,7 +151,154 @@ cargo build --release -p wlr-utils
 sudo sh packaging/install.sh
 ```
 
-### Uninstall
+## Requirements
+
+A compositor that speaks the wlroots protocols — wlroots-based or not, since Hyprland,
+niri and cosmic-comp implement them on their own stacks. What you get depends on which
+capture protocols it exposes:
+
+| Capability | Compositor floor | Wayland protocol |
+| --- | --- | --- |
+| **Overlays** (pickers, region selection, annotation) | any | `wlr-layer-shell` |
+| **Screen** capture (screenshots, recording, loupe, wlr-draw's freeze and save) | wlroots ≥ 0.19 · Sway ≥ 1.11, or any compositor with `wlr-screencopy` | `ext-image-copy-capture-v1` (else `wlr-screencopy`) |
+| **Window** capture (switcher, `-w`, window mirror/record) | wlroots ≥ 0.20 · Sway ≥ 1.12 | adds the foreign-toplevel capture source and `ext-foreign-toplevel-list-v1` |
+
+Tools degrade gracefully: where windows aren't capturable they keep their screen features
+and say so. See [COMPATIBILITY.md](COMPATIBILITY.md) for the full matrix (Hyprland, niri,
+labwc, …), and [Troubleshooting](#troubleshooting) to check your own compositor.
+
+Runtime libraries:
+
+| Library | Needed by | Why |
+| --- | --- | --- |
+| `libegl1` | every tool | EGL/GLES overlay rendering |
+| `libfontconfig1` | every tool | looking up the UI font; without it the overlay falls back to the embedded fonts, which have no CJK coverage |
+| `libgbm` (Mesa) | every tool | zero-copy GPU capture path; `--no-gpu` (or `WLR_NO_GPU=1`) captures through shared memory instead, but the library must still be there |
+| FFmpeg (`libav*`), `libpipewire-0.3` | `wlr-shot record` | encoding, and recording system sound |
+| Tesseract, Leptonica, the `eng` tessdata pack | `wlr-peek ocr` / `grep` | text recognition |
+| `xdg-desktop-portal-wlr` ≥ 0.8 | `wlr-chooser` | portal-based picking |
+| `wlr-foreign-toplevel-management-v1`, or `cosmic-toplevel-management` | `wlr-switcher` | focusing windows |
+
+## First steps
+
+```sh
+wlr-shot doctor                   # what your compositor supports
+wlr-shot screenshot -s shot.png   # drag a region on a frozen screen, saved to shot.png
+wlr-peek color                    # pick a colour anywhere, printed as #rrggbb
+wlr-switcher                      # the Alt-Tab switcher, opened once from the terminal
+wlr-draw &                        # the annotation daemon…
+wlr-draw toggle                   # …then draw on screen; Esc gives the pointer back
+```
+
+Then bind them to keys, in sway for instance:
+
+```
+bindsym Mod1+Tab exec wlr-switcher
+bindsym Print exec wlr-shot screenshot -s -c
+bindsym $mod+p exec wlr-draw toggle
+```
+
+The first binding gives a true Alt-Tab: hold Alt, Tab cycles, release switches. The
+second copies the region to the clipboard. [Key bindings on other
+compositors](#key-bindings-on-other-compositors) has the same in Hyprland and niri, and
+each tool's README has more. For screen sharing, [point the portal at
+`wlr-chooser`](crates/wlr-chooser/README.md#set-up-the-portal).
+
+## Configuration
+
+Every tool reads one file, `~/.config/wlr-utils/config.toml` (`$XDG_CONFIG_HOME` is
+honoured). `~/.wlr-utils.toml` works too, and `/etc/xdg/wlr-utils/config.toml` is the
+system's default: the first one found is the only one read. Nothing in it is required.
+A mistake is reported on stderr and by `doctor`, and the rest still applies.
+
+```toml
+[theme]
+name = "catppuccin-mocha"   # a theme, by name or by path
+accent = "#89b4fa"          # …and any of its keys, set over it
+corner-radius = 0           # square corners
+
+[chooser]
+tile-width = 360            # the overlays' sizes
+
+[draw]
+dwell-ms = 400
+
+[draw.keys]
+undo = ["u", "z"]
+```
+
+[`docs/config.toml`](docs/config.toml) lists every setting, commented out at its default:
+copy it and uncomment what you change. Packages install it in `/usr/share/doc/wlr-utils`.
+They install the themes in
+`/usr/share/wlr-utils/themes`, named for `name` as `catppuccin-mocha`,
+`catppuccin-macchiato`, `catppuccin-frappe`, `catppuccin-latte`, `nord`, `gruvbox-dark`,
+`dracula` and `tokyo-night`. Yours go in `~/.config/wlr-utils/themes`, and that is also
+where to copy [`docs/themes`](docs/themes) after a `cargo install`, which installs none. A
+`name` holding a `/` is a path instead, relative to the folder of `config.toml` (`~` is
+not expanded).
+
+Until wlr-utils 2.0, the old `~/.config/wlr-chooser/theme.toml` and
+`~/.config/wlr-draw/keys.toml` are still read when there is no `config.toml`, with a
+warning. One command moves them in, comments included, then deletes them; with `-`, it
+prints the new file instead and touches nothing, for a configuration kept in a dotfile
+manager:
+
+```sh
+wlr-draw migrate-config     # also wlr-shot and wlr-peek, or wlr-chooser/wlr-switcher --migrate-config
+wlr-draw migrate-config -
+```
+
+## Key bindings on other compositors
+
+The examples in these READMEs are written for sway. The same binding, and the same
+command run at startup, elsewhere:
+
+| | Key binding | At startup |
+| --- | --- | --- |
+| sway | `bindsym Mod1+Tab exec wlr-switcher` | `exec wlr-overlayd` |
+| Hyprland ≥ 0.55 (`hyprland.lua`) | `hl.bind("ALT + Tab", hl.dsp.exec_cmd("wlr-switcher"))` | `hl.on("hyprland.start", function () hl.exec_cmd("wlr-overlayd") end)` |
+| Hyprland, `hyprland.conf` | `bind = ALT, Tab, exec, wlr-switcher` | `exec-once = wlr-overlayd` |
+| niri | `Alt+Tab { spawn "wlr-switcher"; }` in `binds` | `spawn-at-startup "wlr-overlayd"` |
+
+On niri, a command with a pipe or a `$(…)` goes through `spawn-sh "…"` (or
+`spawn-sh-at-startup`), and each argument of `spawn` is its own string:
+`spawn "wlr-switcher" "--layout" "grid"`. What runs where is in each tool's README and in
+[COMPATIBILITY.md](COMPATIBILITY.md).
+
+## Compositor rules
+
+Each overlay is a `wlr-layer-shell` surface named after the command that shows it, so a
+layer rule (blur, animation, …) can target one tool:
+
+| Namespace | Overlay |
+| --- | --- |
+| `wlr-chooser` | the source picker, also when `wlr-shot` or `wlr-peek` asks it for a window |
+| `wlr-switcher` | the window switcher and its exposé |
+| `wlr-draw` | the annotation overlay |
+| `wlr-shot` | region selection |
+| `wlr-peek` | the colour picker, the loupe and region selection |
+
+`wlr-peek mirror` is an ordinary window instead, with the app id `wlr-peek-mirror` for
+window rules.
+
+## Troubleshooting
+
+- **What does my compositor support?** `wlr-shot doctor` (or `wlr-peek doctor`,
+  `wlr-draw doctor`, `wlr-chooser --doctor`) lists the protocols it advertises and says
+  what screen capture, window capture and window focus will do there. It also captures a
+  frame through the GPU path and reports whether it can be imported: if previews or
+  captures come out broken, `--no-gpu` (or `WLR_NO_GPU=1`) captures through shared memory
+  instead.
+- **A mistake in `config.toml`** is named, with its file and key, on stderr when a tool
+  starts, by `wlr-draw reload`, and by `doctor`; the rest of the file still applies.
+- **A daemon's output** — `journalctl --user -t wlr-draw -f` (or `-t wlr-overlayd`) when
+  systemd started it; started from the compositor, it goes wherever the compositor's
+  output goes.
+- **Reporting a bug** — paste the whole `doctor` output into the
+  [issue](https://github.com/sjourdois/wlr-utils/issues): it is the environment block a
+  report needs.
+
+## Uninstall
 
 Package installs come off the usual way (`paru -R wlr-utils-bin`, `sudo apt remove wlr-utils`);
 run `systemctl --user disable --now` first on any unit you enabled.
@@ -237,83 +347,6 @@ systemctl --user disable --now wlr-overlayd.service
 rm -f ~/.config/systemd/user/wlr-overlayd.service   # only if you copied it there
 ```
 
-## Configuration
-
-Every tool reads one file, `~/.config/wlr-utils/config.toml` (`$XDG_CONFIG_HOME` is
-honoured). `~/.wlr-utils.toml` works too, and `/etc/xdg/wlr-utils/config.toml` is the
-system's default: the first one found is the only one read. Nothing in it is required.
-A mistake is reported on stderr and by `doctor`, and the rest still applies.
-
-```toml
-[theme]
-name = "catppuccin-mocha"   # a theme, by name or by path
-accent = "#89b4fa"          # …and any of its keys, set over it
-corner-radius = 0           # square corners
-
-[chooser]
-tile-width = 360            # the overlays' sizes
-
-[draw]
-dwell-ms = 400
-
-[draw.keys]
-undo = ["u", "z"]
-```
-
-[`docs/config.toml`](docs/config.toml) lists every setting, commented out at its default:
-copy it and uncomment what you change. Packages install it in `/usr/share/doc/wlr-utils`.
-They install the themes in
-`/usr/share/wlr-utils/themes`, named for `name` as `catppuccin-mocha`,
-`catppuccin-macchiato`, `catppuccin-frappe`, `catppuccin-latte`, `nord`, `gruvbox-dark`,
-`dracula` and `tokyo-night`. Yours go in `~/.config/wlr-utils/themes`, and that is also
-where to copy [`docs/themes`](docs/themes) after a `cargo install`, which installs none. A
-`name` holding a `/` is a path instead, relative to the folder of `config.toml` (`~` is
-not expanded).
-
-Until wlr-utils 2.0, the old `~/.config/wlr-chooser/theme.toml` and
-`~/.config/wlr-draw/keys.toml` are still read when there is no `config.toml`, with a
-warning. One command moves them in, comments included, then deletes them; with `-`, it
-prints the new file instead and touches nothing, for a configuration kept in a dotfile
-manager:
-
-```sh
-wlr-draw migrate-config     # also wlr-shot and wlr-peek, or wlr-chooser/wlr-switcher --migrate-config
-wlr-draw migrate-config -
-```
-
-## Compositor rules
-
-Each overlay is a `wlr-layer-shell` surface named after the command that shows it, so a
-layer rule (blur, animation, …) can target one tool:
-
-| Namespace | Overlay |
-| --- | --- |
-| `wlr-chooser` | the source picker, also when `wlr-shot` or `wlr-peek` asks it for a window |
-| `wlr-switcher` | the window switcher and its exposé |
-| `wlr-draw` | the annotation overlay |
-| `wlr-shot` | region selection |
-| `wlr-peek` | the colour picker, the loupe and region selection |
-
-`wlr-peek mirror` is an ordinary window instead, with the app id `wlr-peek-mirror` for
-window rules.
-
-## Key bindings on other compositors
-
-The examples in these READMEs are written for sway. The same binding, and the same
-command run at startup, elsewhere:
-
-| | Key binding | At startup |
-| --- | --- | --- |
-| sway | `bindsym Mod1+Tab exec wlr-switcher` | `exec wlr-overlayd` |
-| Hyprland ≥ 0.55 (`hyprland.lua`) | `hl.bind("ALT + Tab", hl.dsp.exec_cmd("wlr-switcher"))` | `hl.on("hyprland.start", function () hl.exec_cmd("wlr-overlayd") end)` |
-| Hyprland, `hyprland.conf` | `bind = ALT, Tab, exec, wlr-switcher` | `exec-once = wlr-overlayd` |
-| niri | `Alt+Tab { spawn "wlr-switcher"; }` in `binds` | `spawn-at-startup "wlr-overlayd"` |
-
-On niri, a command with a pipe or a `$(…)` goes through `spawn-sh "…"` (or
-`spawn-sh-at-startup`), and each argument of `spawn` is its own string:
-`spawn "wlr-switcher" "--layout" "grid"`. What runs where is in each tool's README and in
-[COMPATIBILITY.md](COMPATIBILITY.md).
-
 ## Documentation
 
 - **[wlr-chooser README](crates/wlr-chooser/README.md)** — portal setup, options,
@@ -325,7 +358,9 @@ On niri, a command with a pipe or a `$(…)` goes through `spawn-sh "…"` (or
   timelapse, with system audio and hardware encoding.
 - **[wlr-draw README](crates/wlr-draw/README.md)** — the annotation overlay: daemon,
   control socket, tools and example key bindings.
-- **[wlr-capture README](crates/wlr-capture/README.md)** — the shared engine.
+- **[wlr-capture README](crates/wlr-capture/README.md)** — the capture engine every
+  tool shares: `ext-image-copy-capture-v1`, zero-copy dma-buf with a shared-memory
+  fallback, and the egui/EGL toolkit the overlays draw with.
 - **[wlr-config README](crates/wlr-config/README.md)** — the configuration, its themes
   and the migration from the old files.
 - **[wlr-i18n README](crates/wlr-i18n/README.md)** — the shared localisation plumbing.
