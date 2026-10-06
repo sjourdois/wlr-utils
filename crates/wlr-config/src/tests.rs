@@ -261,10 +261,11 @@ fn invalid_toml_names_its_line() {
     assert_warns(&config, &["config.toml", "3"]);
 }
 
-/// The themes shipped in `docs/themes` set only keys a theme has, with valid colours.
+/// The themes shipped in `docs/themes` (`themes/` in this crate) set only keys a theme
+/// has, with valid colours.
 #[test]
 fn the_shipped_themes_are_clean() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/themes");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("themes");
     let mut count = 0;
     for entry in fs::read_dir(&dir).unwrap() {
         let path = entry.unwrap().path();
@@ -285,7 +286,7 @@ fn the_shipped_themes_are_clean() {
 /// one the tools know.
 #[test]
 fn the_example_holds_the_defaults() {
-    let example = include_str!("../../../docs/config.toml");
+    let example = crate::EXAMPLE;
     let home = Home::new();
     home.write("home/.config/wlr-utils/config.toml", example);
     home.write("usr/share/wlr-utils/themes/nord.toml", "");

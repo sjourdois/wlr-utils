@@ -44,6 +44,10 @@ use theme::Problem;
 /// The sections of `config.toml`: any other top-level key is a mistake.
 const SECTIONS: [&str; 3] = ["theme", "chooser", "draw"];
 
+/// The example `config.toml`: every setting, commented out, at its default
+/// (`docs/config.toml` in the repository).
+pub const EXAMPLE: &str = include_str!("../config.example.toml");
+
 /// Where the settings came from.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Source {

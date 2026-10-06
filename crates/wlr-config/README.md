@@ -14,6 +14,8 @@ The configuration of the [wlr-utils](https://github.com/sjourdois/wlr-utils) too
   localised warning, which the tool prints with `Config::report`.
 - `migrate::run` writes `config.toml` from the old `wlr-chooser/theme.toml` and
   `wlr-draw/keys.toml`, comments included, then deletes them.
+- `EXAMPLE` is the example `config.toml`, every setting commented out at its default; the
+  crate also carries the ready-made themes in `themes/`.
 
 The file it reads, and every setting, are described in the
 [main README](https://github.com/sjourdois/wlr-utils#configuration) and the

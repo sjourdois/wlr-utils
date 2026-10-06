@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn the_example_holds_the_defaults() {
         let mut current = "";
-        let example: String = include_str!("../../../docs/config.toml")
+        let example: String = wlr_config::EXAMPLE
             .lines()
             .map(|line| {
                 if line.starts_with('[') {
