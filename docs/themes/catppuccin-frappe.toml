@@ -1,4 +1,4 @@
-# Catppuccin Frappé theme for wlr-chooser.
+# Catppuccin Frappé theme for wlr-utils.
 # Copy or symlink to ~/.config/wlr-chooser/theme.toml.
 backdrop       = "#232634cc"
 bg             = "#292c3c"

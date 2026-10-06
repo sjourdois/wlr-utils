@@ -1,4 +1,4 @@
-# Catppuccin Latte theme for wlr-chooser (light).
+# Catppuccin Latte theme for wlr-utils (light).
 # Copy or symlink to ~/.config/wlr-chooser/theme.toml.
 backdrop       = "#4c4f6966"
 bg             = "#e6e9ef"

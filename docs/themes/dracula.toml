@@ -1,4 +1,4 @@
-# Dracula theme for wlr-chooser. https://draculatheme.com/
+# Dracula theme for wlr-utils. https://draculatheme.com/
 # Copy or symlink to ~/.config/wlr-chooser/theme.toml.
 backdrop       = "#191a21cc"
 bg             = "#282a36"

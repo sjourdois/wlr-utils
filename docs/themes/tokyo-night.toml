@@ -1,4 +1,4 @@
-# Tokyo Night theme for wlr-chooser.
+# Tokyo Night theme for wlr-utils.
 # Copy or symlink to ~/.config/wlr-chooser/theme.toml.
 backdrop       = "#16161ecc"
 bg             = "#1a1b26"

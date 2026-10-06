@@ -42,9 +42,10 @@ instead of ninety — see [Instant overlays](#instant-overlays--wlr-overlayd).
 - **Captures any window** — including ones on other workspaces/outputs — via the
   compositor's native toplevel capture (`ext-image-copy-capture-v1`), not
   screen-region grabs. Off-screen windows are real previews, not icons.
-- **Live thumbnails that actually move**: previews refresh in real time, and on
-  the GPU path (default) the dma-buf is imported straight as a texture — no
-  read-back, near-zero CPU. Falls back to CPU shm where the GPU path isn't usable.
+- **Live thumbnails that actually move**: on the GPU path (default) the dma-buf is
+  imported straight as a texture — no read-back, near-zero CPU — and previews refresh
+  at about 30 fps. Where the GPU path isn't usable they go through shared memory, at
+  about 6 fps to spare the CPU.
 - **Doubles as a window switcher**: the `wlr-switcher` binary picks a window to focus it.
 - **Wayland-native**, built in Rust with [egui]; opens near-instantly.
 - **Themeable** (8 ready palettes incl. Catppuccin), **localised** (13 languages,
@@ -52,7 +53,9 @@ instead of ninety — see [Instant overlays](#instant-overlays--wlr-overlayd).
 
 ## Requirements
 
-- A compositor speaking the wlroots protocols, with `wlr-layer-shell` and a capture protocol.
+- A compositor speaking the wlroots protocols, with `wlr-layer-shell` (layers named
+  `wlr-chooser` and `wlr-switcher`, for [compositor rules](../../README.md#compositor-rules))
+  and a capture protocol.
   Screen sources need `ext-image-copy-capture-v1` with the **output** source
   (**Sway ≥ 1.11 / wlroots ≥ 0.19**), or `wlr-screencopy`; live **window** thumbnails
   and **`wlr-switcher`** need the **foreign-toplevel** source +
@@ -61,16 +64,16 @@ instead of ninety — see [Instant overlays](#instant-overlays--wlr-overlayd).
   window capture and exits. Run `wlr-chooser --doctor` (or `wlr-switcher --doctor`) to
   check your own; see [COMPATIBILITY.md](../../COMPATIBILITY.md).
 - `xdg-desktop-portal-wlr` ≥ 0.8 (for the screencast chooser use).
-- For the **GPU path** (default): a working EGL/GLES driver and `libgbm`
-  (ships with Mesa). It falls back to CPU automatically if unavailable.
+- A working EGL/GLES driver: the overlay renders through it. The zero-copy capture path
+  also needs `libgbm` (ships with Mesa), and falls back to shared memory without it.
 - For **`wlr-switcher`**: `zwlr-foreign-toplevel-management-v1`, or COSMIC's
   `cosmic-toplevel-management` where that is missing.
 
 ## Install
 
 > **Want the whole suite?** Install the bundle instead — `cargo install wlr-utils` gets
-> every tool (`wlr-chooser`, `wlr-switcher`, `wlr-peek`, `wlr-shot`, `wlr-draw`) in one
-> go. The single-tool install below is the lighter, à-la-carte option.
+> every tool (`wlr-chooser`, `wlr-switcher`, `wlr-overlayd`, `wlr-peek`, `wlr-shot`,
+> `wlr-draw`) in one go. The single-tool install below is the lighter, à-la-carte option.
 
 ```sh
 cargo install wlr-chooser        # wlr-chooser, wlr-switcher and their wlr-overlayd daemon
@@ -83,20 +86,21 @@ cargo build --release -p wlr-chooser
 ```
 
 The `gpu` feature (on by default) enables zero-copy dma-buf capture and needs `libgbm-dev`
-at build time (`libgbm` at runtime, from Mesa). `--no-default-features` builds a pure-CPU
-binary with no gbm dependency; `--no-gpu` (or `WLR_NO_GPU=1`) switches the same build to
-shared memory at runtime, and previews fall back to it on their own if an import fails. The whole suite also ships as a single `wlr-utils` `.deb`
-on every [release](https://github.com/sjourdois/wlr-utils/releases/latest).
+at build time (`libgbm` at runtime, from Mesa). `--no-default-features` builds a binary
+with no gbm dependency, English-only; `--no-gpu` (or `WLR_NO_GPU=1`) switches the same
+build to shared memory at runtime, and previews fall back to it on their own if an
+import fails. The whole suite also ships as a single `wlr-utils` `.deb` on every
+[release](https://github.com/sjourdois/wlr-utils/releases/latest).
 
 ## Uninstall
 
-The crate ships two binaries — `wlr-chooser` and `wlr-switcher`. Remove both the way you
-installed them:
+The crate ships three binaries — `wlr-chooser`, `wlr-switcher` and `wlr-overlayd`. Remove
+them the way you installed them:
 
 ```sh
 cargo uninstall wlr-chooser                       # crates.io install (~/.cargo/bin)
-rm -f ~/.local/bin/wlr-chooser ~/.local/bin/wlr-switcher   # manual `install` from source
-sudo apt remove wlr-chooser                        # the .deb package
+rm -f ~/.local/bin/{wlr-chooser,wlr-switcher,wlr-overlayd}   # manual `install` from source
+sudo apt remove wlr-utils                          # the suite's .deb
 ```
 
 ## Set up the portal
@@ -137,6 +141,7 @@ focused output. You can pass options in `chooser_cmd`, e.g.
                        Order windows by name (default) or most recently focused
                        first, if supported by the compositor
     --no-gpu           Capture through shared memory instead of dma-buf
+    --no-daemon        Show the overlay in this process, even with wlr-overlayd running
     --doctor           Report the compositor's capture protocols, then exit
 -h, --help             Print help
 -V, --version          Print version
@@ -238,8 +243,8 @@ Three presentations via `--layout`:
 - `grid` — a full-screen, mission-control exposé;
 - `card` — the centred rofi-like card.
 
-Each tile shows a live preview with the app icon as a badge; tune it with
-`--live none|current|all` (default `all`): `current` previews only the highlighted
+In the strip, each tile shows a live preview with the app icon as a badge; tune it
+with `--live none|current|all` (default `all`): `current` previews only the highlighted
 window, `none` shows app icons only.
 
 `--hints [home|top]` labels the tiles with the key that picks them, as it does in the
@@ -251,7 +256,8 @@ bindsym Mod1+Tab exec wlr-switcher --hints
 ```
 
 `--app-id`, `--title` and `--pid` restrict the switcher to a subset of the open
-windows, with the same meaning as in `wlr-chooser` above:
+windows, and `--include-system` adds the windows with no app-id, with the same meaning
+as in `wlr-chooser` above:
 
 ```
 bindsym Mod1+grave exec wlr-switcher --app-id foot --app-id firefox
@@ -280,7 +286,7 @@ Bind `wlr-switcher` to a **held** modifier and it behaves like a classic Alt-Tab
 
 ```
 bindsym Mod1+Tab exec wlr-switcher                 # hold Alt, Tab cycles, release switches
-bindsym $mod+Tab exec wlr-switcher --layout grid   # full-screen exposé
+bindsym $mod+Tab exec wlr-switcher --layout grid --hold   # full-screen exposé
 ```
 
 - The overlay appears while the modifier (Alt **or** Super) is held.
@@ -388,8 +394,8 @@ provided systemd `--user` unit ([`contrib/wlr-overlayd.service`](contrib/wlr-ove
 systemctl --user enable --now wlr-overlayd.service
 ```
 
-The AUR and `.deb` packages install it in `/usr/lib/systemd/user`. With `cargo install`,
-copy it in place first:
+The AUR packages and the suite's `.deb` install it in `/usr/lib/systemd/user`. With
+`cargo install`, copy it in place first:
 
 ```sh
 install -Dm644 contrib/wlr-overlayd.service ~/.config/systemd/user/wlr-overlayd.service
@@ -399,7 +405,8 @@ It is bound to `graphical-session.target`, so it comes up with the Wayland sessi
 goes down with it — this needs a session that populates that target, which uwsm does. The
 unit finds `wlr-overlayd` through the user manager's `PATH` (`systemctl --user
 show-environment`), which uwsm fills from your login environment. Elsewhere, import yours
-(`systemctl --user import-environment PATH`) or write the full path in `ExecStart`. **Use one mechanism, not both.**
+(`systemctl --user import-environment PATH`) or write the full path in `ExecStart`.
+**Use one mechanism, not both.**
 
 To check it took, run `wlr-switcher` from a terminal: silence means the daemon served it,
 and a line on stderr says why it did not.
@@ -409,11 +416,11 @@ and a line on stderr says why it did not.
 ```sh
 wlr-overlayd --quit                          # stop the running daemon
 systemctl --user restart wlr-overlayd        # after installing a new build
-journalctl --user -t wlr-overlayd -f         # its output, however it was started
+journalctl --user -t wlr-overlayd -f         # its output
 ```
 
-Filtering the journal by the **binary name** rather than the unit works whichever way you
-started it. Set `WLR_CHOOSER_TIMING=1` in its environment and it prints, for every overlay
+`-t wlr-overlayd` finds the daemon's output when systemd starts it; started from the
+compositor, its output goes wherever the compositor's does. Set `WLR_CHOOSER_TIMING=1` in its environment and it prints, for every overlay
 it shows, where the milliseconds went.
 
 ### What it does and does not hold
@@ -484,30 +491,30 @@ Window: <foreign-toplevel-identifier>
 Monitor: <output-name>
 ```
 
-On cancel it writes nothing and exits non-zero.
+On cancel it writes nothing and exits `1`, and `2` on a failure. `--format json` writes
+one JSON object instead of the line (see [`--format`](#output----format)).
 
 ## Theming
 
-Colours and fonts come from `~/.config/wlr-chooser/theme.toml`
-(`$XDG_CONFIG_HOME` is honoured) with sensible dark defaults. Colour keys are
-`#rrggbb` / `#rrggbbaa`:
+Colours and fonts come from `~/.config/wlr-chooser/theme.toml` (`$XDG_CONFIG_HOME` is
+honoured), with sensible dark defaults. The same file themes `wlr-switcher`, `wlr-draw`
+and the `wlr-peek` mirror. Colours are `#rgb`, `#rrggbb` or `#rrggbbaa`:
 
 ```toml
 accent        = "#89b4fa"
-screen-accent = "#74c7ec"   # outline for screens
-window-accent = "#cba6f7"   # outline for windows
+screen-accent = "#74c7ec"   # screen tiles
+window-accent = "#cba6f7"   # window tiles
 backdrop      = "#11111baa" # dimmed overlay
 
 font      = "JetBrains Mono" # UI font family (via fontconfig)
 # font-path = "/path/to/Font.ttf"
 # cjk-font = "Noto Sans CJK JP"
-font-size = 15.0
+font-size = 15.0             # the card's text: tabs and filter
 ```
 
-Screens are outlined in `screen-accent`, windows in `window-accent`, so the two
-can't be confused. Ready-made themes live in [`docs/themes/`](../../docs/themes/):
-Catppuccin (Mocha, Macchiato, Frappé, Latte), Nord, Gruvbox, Dracula, Tokyo Night.
-Symlink one so it tracks updates:
+Ready-made themes, which set every colour key, live in
+[`docs/themes/`](../../docs/themes/): Catppuccin (Mocha, Macchiato, Frappé, Latte), Nord,
+Gruvbox, Dracula, Tokyo Night. Symlink one so it tracks updates:
 
 ```sh
 mkdir -p ~/.config/wlr-chooser

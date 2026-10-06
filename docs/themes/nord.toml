@@ -1,4 +1,4 @@
-# Nord theme for wlr-chooser. https://www.nordtheme.com/
+# Nord theme for wlr-utils. https://www.nordtheme.com/
 # Copy or symlink to ~/.config/wlr-chooser/theme.toml.
 backdrop       = "#242933cc"
 bg             = "#2e3440"
