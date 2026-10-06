@@ -1,9 +1,9 @@
 # Traduzione italiana (stringhe dell'interfaccia) di wlr-draw.
 
-draw-hint = Disegna · h per aiuto · Esc per uscire
-draw-passthrough-hint = Click passante — Bloc Maiusc per disegnare di nuovo
+draw-hint = Disegna · { $help } per aiuto · Esc per uscire
+draw-passthrough-hint = Click passante — { $passthrough } per disegnare di nuovo
 draw-text-hint = Digita · Invio per confermare · Esc per annullare
-draw-spotlight-hint = Faretto · trascina una forma o muovi il cursore · rotella/i k dimensione · inclina/j l intensità · rilascia Shift per terminare
+draw-spotlight-hint = Faretto · trascina una forma o muovi il cursore · rotella/i k dimensione · inclina/j l intensità · rilascia { $spotlight } per terminare
 draw-snap-off = senza aggancio
 draw-tool-pen = Penna
 draw-tool-rect = Rettangolo

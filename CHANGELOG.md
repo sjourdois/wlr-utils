@@ -17,6 +17,8 @@ All notable changes to this project are documented here. The format is based on
 
 - **`systemctl --user reload wlr-draw` reloads instead of stopping the daemon** — it
   now re-reads `keys.toml` and the theme and keeps the drawing.
+- **`wlr-draw`'s on-screen hints name your keys** — after rebinding help, click-through
+  or spotlight in `keys.toml`, the hints still showed the default keys.
 - **Less CPU for live thumbnails without the GPU path** — with `--no-gpu`, or where the
   GPU path is unavailable, `wlr-chooser` and `wlr-switcher` refreshed them at about
   30 fps. They now stay at about 6 fps.

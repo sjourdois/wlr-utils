@@ -1,9 +1,9 @@
 # Chaînes d'interface de wlr-draw (la ligne de commande, via clap, est en anglais).
 
-draw-hint = Dessin · h pour l'aide · Échap pour quitter
-draw-passthrough-hint = Clic transparent — Verr. Maj pour redessiner
+draw-hint = Dessin · { $help } pour l'aide · Échap pour quitter
+draw-passthrough-hint = Clic transparent — { $passthrough } pour redessiner
 draw-text-hint = Saisissez · Entrée pour valider · Échap pour annuler
-draw-spotlight-hint = Spotlight · tracez une forme, ou bougez le curseur · molette/i k taille · inclinaison/j l assombrir · relâchez Maj pour finir
+draw-spotlight-hint = Spotlight · tracez une forme, ou bougez le curseur · molette/i k taille · inclinaison/j l assombrir · relâchez { $spotlight } pour finir
 draw-snap-off = sans alignement
 draw-tool-pen = Stylo
 draw-tool-rect = Rectangle

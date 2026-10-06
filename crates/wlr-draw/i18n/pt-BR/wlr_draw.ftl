@@ -1,9 +1,9 @@
 # Tradução em português do Brasil (textos da interface) do wlr-draw.
 
-draw-hint = Desenhar · h para ajuda · Esc para sair
-draw-passthrough-hint = Clique passa direto — Caps Lock para desenhar de novo
+draw-hint = Desenhar · { $help } para ajuda · Esc para sair
+draw-passthrough-hint = Clique passa direto — { $passthrough } para desenhar de novo
 draw-text-hint = Digite · Enter para confirmar · Esc para cancelar
-draw-spotlight-hint = Holofote · arraste uma forma, ou mova o cursor · roda/i k tamanho · inclinar/j l escurecer · solte Shift para terminar
+draw-spotlight-hint = Holofote · arraste uma forma, ou mova o cursor · roda/i k tamanho · inclinar/j l escurecer · solte { $spotlight } para terminar
 draw-snap-off = sem ajuste
 draw-tool-pen = Caneta
 draw-tool-rect = Retângulo

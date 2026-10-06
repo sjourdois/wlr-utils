@@ -1,9 +1,9 @@
 # Polskie tłumaczenie (teksty interfejsu) wlr-draw.
 
-draw-hint = Rysuj · h pomoc · Esc wyjście
-draw-passthrough-hint = Klikanie przez warstwę — Caps Lock wraca do rysowania
+draw-hint = Rysuj · { $help } pomoc · Esc wyjście
+draw-passthrough-hint = Klikanie przez warstwę — { $passthrough } wraca do rysowania
 draw-text-hint = Pisz · Enter zatwierdza · Esc anuluje
-draw-spotlight-hint = Reflektor · przeciągnij kształt lub poruszaj kursorem · kółko/i k rozmiar · przechył/j l przyciemnienie · puść Shift, aby zakończyć
+draw-spotlight-hint = Reflektor · przeciągnij kształt lub poruszaj kursorem · kółko/i k rozmiar · przechył/j l przyciemnienie · puść { $spotlight }, aby zakończyć
 draw-snap-off = bez dopasowania
 draw-tool-pen = Pióro
 draw-tool-rect = Prostokąt

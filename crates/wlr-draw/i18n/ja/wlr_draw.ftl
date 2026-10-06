@@ -1,9 +1,9 @@
 # 日本語訳（UI 文字列）— wlr-draw キャプチャツール群。
 
-draw-hint = 描画 · h でヘルプ · Esc で終了
-draw-passthrough-hint = クリックスルー中 — Caps Lock で描画に戻る
+draw-hint = 描画 · { $help } でヘルプ · Esc で終了
+draw-passthrough-hint = クリックスルー中 — { $passthrough } で描画に戻る
 draw-text-hint = 入力 · Enter で確定 · Esc でキャンセル
-draw-spotlight-hint = スポットライト · 図形をドラッグ、またはカーソルを移動 · ホイール/i k サイズ · 傾き/j l 暗さ · Shift を離して終了
+draw-spotlight-hint = スポットライト · 図形をドラッグ、またはカーソルを移動 · ホイール/i k サイズ · 傾き/j l 暗さ · { $spotlight } を離して終了
 draw-snap-off = 補正オフ
 draw-tool-pen = ペン
 draw-tool-rect = 四角形

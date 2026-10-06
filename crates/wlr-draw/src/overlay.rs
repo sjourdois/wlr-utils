@@ -17,7 +17,7 @@
 //! additionally takes single-key shortcuts (incl. `h` help, `c` colour picker) and text.
 
 use crate::ipc;
-use crate::keymap::{Action, Keymap, ModKind, Trigger};
+use crate::keymap::{Action, Keymap, ModKind, Trigger, trigger_label};
 use crate::model;
 use crate::model::{Color, Document, Element, Recognized, ShapeKind, Tool, constrain, recognize};
 use crate::proto::Cmd;
@@ -2130,14 +2130,22 @@ fn paint_hud(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
     let t = frame.theme;
     let screen = ui.max_rect();
     let in_spotlight = spotlight_active(frame);
+    // The hints name the configured keys, as the help legend does.
+    let km = frame.keymap;
     let hint = if frame.passthrough {
-        tr!("draw-passthrough-hint")
+        tr!(
+            "draw-passthrough-hint",
+            passthrough = trigger_label(km.passthrough)
+        )
     } else if frame.text_edit.is_some() {
         tr!("draw-text-hint")
     } else if in_spotlight {
-        tr!("draw-spotlight-hint")
+        tr!(
+            "draw-spotlight-hint",
+            spotlight = trigger_label(km.spotlight)
+        )
     } else {
-        tr!("draw-hint")
+        tr!("draw-hint", help = km.label_for(Action::Help))
     };
     let font = egui::FontId::proportional(13.0);
     let tool = p.layout_no_wrap(
@@ -2289,7 +2297,6 @@ pub(crate) enum HelpRow {
 /// key-free (the key lives in its own column). Shared by the on-screen [`paint_help`] legend
 /// and the tray's Shortcuts submenu, so they never drift apart.
 pub(crate) fn shortcut_rows(km: &Keymap, capture_available: bool) -> Vec<HelpRow> {
-    use crate::keymap::trigger_label;
     let key = |a| km.label_for(a);
     let mut rows = vec![HelpRow::Group(tr!("draw-help-group-tools"))];
     let mut entry = |k: String, d: String| rows.push(HelpRow::Entry(k, d));

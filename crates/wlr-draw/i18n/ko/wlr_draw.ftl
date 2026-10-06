@@ -1,9 +1,9 @@
 # 한국어 번역 (UI 문자열) — wlr-draw.
 
-draw-hint = 그리기 · h 도움말 · Esc 나가기
-draw-passthrough-hint = 클릭 통과 — Caps Lock 다시 그리기
+draw-hint = 그리기 · { $help } 도움말 · Esc 나가기
+draw-passthrough-hint = 클릭 통과 — { $passthrough } 다시 그리기
 draw-text-hint = 입력 · Enter 확정 · Esc 취소
-draw-spotlight-hint = 스포트라이트 · 도형을 드래그하거나 커서를 이동 · 휠/i k 크기 · 기울이기/j l 어둡기 · Shift 떼면 종료
+draw-spotlight-hint = 스포트라이트 · 도형을 드래그하거나 커서를 이동 · 휠/i k 크기 · 기울이기/j l 어둡기 · { $spotlight } 떼면 종료
 draw-snap-off = 맞춤 꺼짐
 draw-tool-pen = 펜
 draw-tool-rect = 사각형

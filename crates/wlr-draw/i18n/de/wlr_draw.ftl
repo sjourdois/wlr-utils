@@ -1,9 +1,9 @@
 # Deutsche Übersetzung (UI-Strings) für wlr-draw.
 
-draw-hint = Zeichnen · h für Hilfe · Esc zum Verlassen
-draw-passthrough-hint = Klick durchreichen — Feststelltaste zum Weiterzeichnen
+draw-hint = Zeichnen · { $help } für Hilfe · Esc zum Verlassen
+draw-passthrough-hint = Klick durchreichen — { $passthrough } zum Weiterzeichnen
 draw-text-hint = Tippen · Enter zum Übernehmen · Esc zum Abbrechen
-draw-spotlight-hint = Spotlight · Form ziehen oder Cursor bewegen · Rad/i k Größe · Neigen/j l Abdunklung · Shift los zum Beenden
+draw-spotlight-hint = Spotlight · Form ziehen oder Cursor bewegen · Rad/i k Größe · Neigen/j l Abdunklung · { $spotlight } los zum Beenden
 draw-snap-off = Einrasten aus
 draw-tool-pen = Stift
 draw-tool-rect = Rechteck

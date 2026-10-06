@@ -1,9 +1,9 @@
 # Nederlandse vertaling (interfaceteksten) van wlr-draw.
 
-draw-hint = Tekenen · h voor hulp · Esc om te stoppen
-draw-passthrough-hint = Klik-door — Caps Lock om opnieuw te tekenen
+draw-hint = Tekenen · { $help } voor hulp · Esc om te stoppen
+draw-passthrough-hint = Klik-door — { $passthrough } om opnieuw te tekenen
 draw-text-hint = Typ · Enter om te bevestigen · Esc om te annuleren
-draw-spotlight-hint = Spotlight · sleep een vorm, of beweeg de cursor · wiel/i k grootte · kantel/j l dimmen · Shift los om te stoppen
+draw-spotlight-hint = Spotlight · sleep een vorm, of beweeg de cursor · wiel/i k grootte · kantel/j l dimmen · { $spotlight } los om te stoppen
 draw-snap-off = uitlijnen uit
 draw-tool-pen = Pen
 draw-tool-rect = Rechthoek

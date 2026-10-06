@@ -1,9 +1,9 @@
 # Русский перевод (строки интерфейса) wlr-draw.
 
-draw-hint = Рисование · h — справка · Esc — выйти
-draw-passthrough-hint = Сквозной клик — Caps Lock, чтобы снова рисовать
+draw-hint = Рисование · { $help } — справка · Esc — выйти
+draw-passthrough-hint = Сквозной клик — { $passthrough }, чтобы снова рисовать
 draw-text-hint = Печатайте · Enter — готово · Esc — отмена
-draw-spotlight-hint = Подсветка · обведите фигуру или ведите курсор · колесо/i k размер · наклон/j l затемнение · отпустите Shift для завершения
+draw-spotlight-hint = Подсветка · обведите фигуру или ведите курсор · колесо/i k размер · наклон/j l затемнение · отпустите { $spotlight } для завершения
 draw-snap-off = привязка выкл.
 draw-tool-pen = Перо
 draw-tool-rect = Прямоугольник

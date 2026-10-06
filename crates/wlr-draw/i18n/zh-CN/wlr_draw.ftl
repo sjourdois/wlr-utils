@@ -1,9 +1,9 @@
 # 简体中文翻译（界面文本）— wlr-draw。
 
-draw-hint = 绘图 · h 帮助 · Esc 离开
-draw-passthrough-hint = 点击穿透 — 按 Caps Lock 重新绘图
+draw-hint = 绘图 · { $help } 帮助 · Esc 离开
+draw-passthrough-hint = 点击穿透 — 按 { $passthrough } 重新绘图
 draw-text-hint = 输入文字 · Enter 确定 · Esc 取消
-draw-spotlight-hint = 聚光灯 · 拖出形状或移动光标 · 滚轮/i k 大小 · 倾斜/j l 暗度 · 松开 Shift 结束
+draw-spotlight-hint = 聚光灯 · 拖出形状或移动光标 · 滚轮/i k 大小 · 倾斜/j l 暗度 · 松开 { $spotlight } 结束
 draw-snap-off = 吸附关闭
 draw-tool-pen = 画笔
 draw-tool-rect = 矩形

@@ -1,9 +1,9 @@
 # Український переклад (рядки інтерфейсу) wlr-draw.
 
-draw-hint = Малювання · h — довідка · Esc — вийти
-draw-passthrough-hint = Наскрізні кліки — Caps Lock, щоб знову малювати
+draw-hint = Малювання · { $help } — довідка · Esc — вийти
+draw-passthrough-hint = Наскрізні кліки — { $passthrough }, щоб знову малювати
 draw-text-hint = Введіть текст · Enter — готово · Esc — скасувати
-draw-spotlight-hint = Підсвітка · перетягніть фігуру або рухайте курсор · колесо/i k розмір · нахил/j l затемнення · відпустіть Shift, щоб завершити
+draw-spotlight-hint = Підсвітка · перетягніть фігуру або рухайте курсор · колесо/i k розмір · нахил/j l затемнення · відпустіть { $spotlight }, щоб завершити
 draw-snap-off = прив'язку вимк.
 draw-tool-pen = Перо
 draw-tool-rect = Прямокутник

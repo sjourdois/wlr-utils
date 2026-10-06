@@ -1,9 +1,9 @@
 # Traducción al español (cadenas de la interfaz) de wlr-draw.
 
-draw-hint = Dibuja · h para ayuda · Esc para salir
-draw-passthrough-hint = Clic atravesado — Bloq Mayús para volver a dibujar
+draw-hint = Dibuja · { $help } para ayuda · Esc para salir
+draw-passthrough-hint = Clic atravesado — { $passthrough } para volver a dibujar
 draw-text-hint = Escribe · Enter para confirmar · Esc para cancelar
-draw-spotlight-hint = Foco · arrastra una forma o mueve el cursor · rueda/i k tamaño · inclina/j l atenúa · suelta Shift para terminar
+draw-spotlight-hint = Foco · arrastra una forma o mueve el cursor · rueda/i k tamaño · inclina/j l atenúa · suelta { $spotlight } para terminar
 draw-snap-off = sin ajuste
 draw-tool-pen = Lápiz
 draw-tool-rect = Rectángulo
