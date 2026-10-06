@@ -30,9 +30,10 @@ All notable changes to this project are documented here. The format is based on
 - **A list for a held control no longer discards all of `wlr-draw`'s `keys.toml`** —
   `passthrough`, `constrain`, `spotlight` and `snap-invert` now take a list like the
   other bindings, and any of its keys or modifiers engages the control.
-- **A key rebound in `wlr-draw`'s `keys.toml` goes where you put it** — `pen = "r"`
-  left `r` on the rectangle and the pen with no key. The action that had the key by
-  default now gives it up, and the help shows it as unassigned if it has no key left.
+- **A key or modifier rebound in `wlr-draw`'s `keys.toml` goes where you put it** —
+  `pen = "r"` left `r` on the rectangle and the pen with no key, and
+  `passthrough = "alt"` shared Alt with snap-invert. What had it by default now gives it
+  up, and the help shows it as unassigned if nothing is left.
 - **`systemctl --user reload wlr-draw` reloads instead of stopping the daemon** — it
   now re-reads `keys.toml` and the theme and keeps the drawing.
 - **`wlr-draw`'s on-screen hints name your keys** — after rebinding help, click-through

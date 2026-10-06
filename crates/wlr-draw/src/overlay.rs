@@ -2158,12 +2158,15 @@ fn paint_hud(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
     let hint = if frame.passthrough {
         tr!(
             "draw-passthrough-hint",
-            passthrough = km.passthrough.label()
+            passthrough = key_label(km.passthrough.label())
         )
     } else if frame.text_edit.is_some() {
         tr!("draw-text-hint")
     } else if in_spotlight {
-        tr!("draw-spotlight-hint", spotlight = km.spotlight.label())
+        tr!(
+            "draw-spotlight-hint",
+            spotlight = key_label(km.spotlight.label())
+        )
     } else {
         match km.label_for(Action::Help) {
             Some(help) => tr!("draw-hint", help = help),
@@ -2309,6 +2312,12 @@ fn paint_palette(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
     }
 }
 
+/// A binding's label for the key column, or the unassigned marker when `keys.toml` gave
+/// all its triggers to something else.
+fn key_label(label: Option<String>) -> String {
+    label.unwrap_or_else(|| tr!("draw-help-key-unassigned"))
+}
+
 /// One line of the cheat-sheet: a section header, or a `(key, description)` entry.
 #[derive(Clone)]
 pub(crate) enum HelpRow {
@@ -2321,10 +2330,7 @@ pub(crate) enum HelpRow {
 /// key-free (the key lives in its own column). Shared by the on-screen [`paint_help`] legend
 /// and the tray's Shortcuts submenu, so they never drift apart.
 pub(crate) fn shortcut_rows(km: &Keymap, capture_available: bool) -> Vec<HelpRow> {
-    let key = |a| {
-        km.label_for(a)
-            .unwrap_or_else(|| tr!("draw-help-key-unassigned"))
-    };
+    let key = |a| key_label(km.label_for(a));
     let mut rows = vec![HelpRow::Group(tr!("draw-help-group-tools"))];
     let mut entry = |k: String, d: String| rows.push(HelpRow::Entry(k, d));
     entry(key(Action::Pen), tool_label(Tool::Pen));
@@ -2369,11 +2375,11 @@ pub(crate) fn shortcut_rows(km: &Keymap, capture_available: bool) -> Vec<HelpRow
 
     rows.push(HelpRow::Group(tr!("draw-help-group-hold")));
     rows.push(HelpRow::Entry(
-        km.constrain.label(),
+        key_label(km.constrain.label()),
         tr!("draw-help-constrain"),
     ));
     rows.push(HelpRow::Entry(
-        km.spotlight.label(),
+        key_label(km.spotlight.label()),
         tr!("draw-help-spotlight"),
     ));
     rows.push(HelpRow::Entry(
@@ -2381,11 +2387,11 @@ pub(crate) fn shortcut_rows(km: &Keymap, capture_available: bool) -> Vec<HelpRow
         tr!("draw-help-spotlight-tune"),
     ));
     rows.push(HelpRow::Entry(
-        km.snap_invert.label(),
+        key_label(km.snap_invert.label()),
         tr!("draw-help-snap-invert"),
     ));
     rows.push(HelpRow::Entry(
-        km.passthrough.label(),
+        key_label(km.passthrough.label()),
         tr!("draw-help-passthrough"),
     ));
 

@@ -29,7 +29,7 @@ snap = "d"
 
 # --- Held controls: a modifier (caps/ctrl/shift/alt/super), a regular key, or a list ---
 # On a keyboard without a usable Caps Lock (e.g. HHKB), point `passthrough` elsewhere:
-#   passthrough = "alt"      # or "super", or any key
+#   passthrough = "alt"      # or "super", or any key; "alt" leaves snap-invert unassigned
 passthrough = "caps"
 constrain = "ctrl"
 spotlight = "shift"

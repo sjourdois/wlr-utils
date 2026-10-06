@@ -102,7 +102,8 @@ The four held controls — `passthrough` (click-through), `constrain`, `spotligh
 `snap-invert` — take **a modifier** (`caps`, `ctrl`, `shift`, `alt`, `super`), **a
 regular key**, or a list of them, any of which engages the control. This is the fix for
 keyboards without a usable Caps Lock (e.g. HHKB): point `passthrough` at `alt`, `super`,
-or any key. A modifier engages while held (Caps Lock latches); a regular key bound to
+or any key (`alt` takes it from `snap-invert`, which you can then move elsewhere). A
+modifier engages while held (Caps Lock latches); a regular key bound to
 `passthrough` toggles, and to `constrain`/`spotlight`/`snap-invert` engages while held.
 
 The same file carries the two settings the `snap` binding acts on: `dwell` (whether a
@@ -118,10 +119,11 @@ your changes without losing the drawing.
 Fixed (not rebindable): `Esc` and its alias `Ctrl+[` (always back out), the arrow-key
 nudge, and the spotlight size/dim cluster (`i`/`j`/`k`/`l` + wheel, live only while
 spotlighting). The nudge step size still reads the physical `Shift` (1px) / `Ctrl` (big)
-keys. A bad name is reported on stderr, and that entry keeps its default. A key you bind
-goes where you put it: the action that had it by default gives it up and keeps its other
-keys, or shows as unassigned. Two entries of your file on one key are reported; the first
-in the example's order wins, and a held control wins over an action. The on-screen `h`
+keys. A bad name is reported on stderr, and that entry keeps its default. A key or
+modifier you bind goes where you put it: the action or held control that had it by
+default gives it up and keeps its other ones, or shows as unassigned. Two entries of your
+file on one key or modifier are reported; the first in the example's order wins, a held
+control wins over an action, and two held controls both engage. The on-screen `h`
 legend and the tray's Shortcuts menu reflect your bindings.
 
 ## Drawing

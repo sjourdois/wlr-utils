@@ -83,10 +83,11 @@ impl Role {
         })
     }
 
-    /// Every trigger's label, for the HUD and the help legend: `Caps / F13`.
-    pub fn label(&self) -> String {
+    /// Every trigger's label, for the HUD and the help legend: `Caps / F13`. `None` when
+    /// the file gave all its triggers to another role.
+    pub fn label(&self) -> Option<String> {
         let labels: Vec<String> = self.0.iter().map(|t| trigger_label(*t)).collect();
-        labels.join(" / ")
+        (!labels.is_empty()).then(|| labels.join(" / "))
     }
 }
 
@@ -257,14 +258,26 @@ impl Keymap {
 
     /// Whether `ks` engages a held role.
     pub fn is_role_key(&self, ks: Keysym) -> bool {
+        self.roles().into_iter().any(|role| role.has_key(ks))
+    }
+
+    /// The held roles: pass-through, constrain, spotlight, snap-invert.
+    fn roles(&self) -> [&Role; 4] {
         [
             &self.passthrough,
             &self.constrain,
             &self.spotlight,
             &self.snap_invert,
         ]
-        .into_iter()
-        .any(|role| role.has_key(ks))
+    }
+
+    fn roles_mut(&mut self) -> [&mut Role; 4] {
+        [
+            &mut self.passthrough,
+            &mut self.constrain,
+            &mut self.spotlight,
+            &mut self.snap_invert,
+        ]
     }
 
     /// The label for an action's (first) trigger — for the help legend — or `None` when
@@ -277,13 +290,15 @@ impl Keymap {
     }
 
     /// Replace a held role's triggers from a config value (or keep the default if the
-    /// value is absent or has no parseable trigger).
-    fn override_role(opt: Option<OneOrMany>, role: &mut Role, name: &str) {
-        let Some(o) = opt else { return };
+    /// value is absent or has no parseable trigger). Returns whether it did.
+    fn override_role(opt: Option<OneOrMany>, role: &mut Role, name: &str) -> bool {
+        let Some(o) = opt else { return false };
         let triggers = parse_triggers(o, name);
-        if !triggers.is_empty() {
+        let set = !triggers.is_empty();
+        if set {
             *role = Role(triggers);
         }
+        set
     }
 
     fn apply(&mut self, raw: RawConfig) {
@@ -332,24 +347,35 @@ impl Keymap {
             }
         }
 
-        Self::override_role(raw.passthrough, &mut self.passthrough, "passthrough");
-        Self::override_role(raw.constrain, &mut self.constrain, "constrain");
-        Self::override_role(raw.spotlight, &mut self.spotlight, "spotlight");
-        Self::override_role(raw.snap_invert, &mut self.snap_invert, "snap-invert");
+        let from_file = [
+            Self::override_role(raw.passthrough, &mut self.passthrough, "passthrough"),
+            Self::override_role(raw.constrain, &mut self.constrain, "constrain"),
+            Self::override_role(raw.spotlight, &mut self.spotlight, "spotlight"),
+            Self::override_role(raw.snap_invert, &mut self.snap_invert, "snap-invert"),
+        ];
 
-        // A key the file names goes where the file puts it: the action that had it by
-        // default gives it up and keeps its other keys, or none. That is the user's
-        // choice, not a mistake to report. (The roles' defaults are modifiers, which no
-        // default action key is.)
-        let role_triggers: Vec<Trigger> = [
-            &self.passthrough,
-            &self.constrain,
-            &self.spotlight,
-            &self.snap_invert,
-        ]
-        .into_iter()
-        .flat_map(|role| role.0.iter().copied())
-        .collect();
+        // A trigger the file names goes where the file puts it: the action or held role
+        // that had it by default gives it up and keeps its other triggers, or none —
+        // `passthrough = "alt"` takes Alt from snap-invert. That is the user's choice, not
+        // a mistake to report. (The roles' defaults are modifiers, which no default
+        // action key is.)
+        let file_role_triggers: Vec<Trigger> = self
+            .roles()
+            .into_iter()
+            .zip(from_file)
+            .filter(|&(_, from_file)| from_file)
+            .flat_map(|(role, _)| role.0.iter().copied())
+            .collect();
+        for (role, from_file) in self.roles_mut().into_iter().zip(from_file) {
+            if !from_file {
+                role.0.retain(|t| !file_role_triggers.contains(t));
+            }
+        }
+        let role_triggers: Vec<Trigger> = self
+            .roles()
+            .into_iter()
+            .flat_map(|role| role.0.iter().copied())
+            .collect();
         self.keys
             .retain(|(t, _)| !file.iter().any(|(f, _)| f == t) && !role_triggers.contains(t));
         self.keys.extend(file);
@@ -358,8 +384,9 @@ impl Keymap {
     }
 
     /// Best-effort diagnostics for the file's own clashes, since the defaults have given
-    /// up every key it names: one key named for two actions (the first one wins), or for
-    /// a held role and an action (the role wins). Doesn't change anything — just warns.
+    /// up every trigger it names: one key named for two actions (the first one wins), for
+    /// a held role and an action (the role wins), or one trigger for two held roles (both
+    /// engage). Doesn't change anything — just warns.
     fn warn_conflicts(&self) {
         for i in 0..self.keys.len() {
             for j in (i + 1)..self.keys.len() {
@@ -371,16 +398,18 @@ impl Keymap {
                 }
             }
         }
-        for role in [
-            &self.passthrough,
-            &self.constrain,
-            &self.spotlight,
-            &self.snap_invert,
-        ] {
+        let roles = self.roles();
+        for (i, role) in roles.iter().enumerate() {
             for &t in &role.0 {
                 if matches!(t, Trigger::Key(_)) && self.keys.iter().any(|(k, _)| *k == t) {
                     eprintln!(
                         "wlr-draw: `{}` is bound to both a held role and a tool",
+                        trigger_label(t)
+                    );
+                }
+                if roles[i + 1..].iter().any(|other| other.0.contains(&t)) {
+                    eprintln!(
+                        "wlr-draw: `{}` is bound to two held roles",
                         trigger_label(t)
                     );
                 }
@@ -574,7 +603,7 @@ mod tests {
             Role(vec![Trigger::Mod(ModKind::Caps), Trigger::Key(Keysym::F13)])
         );
         assert!(km.is_role_key(Keysym::F13));
-        assert_eq!(km.passthrough.label(), "Caps / F13");
+        assert_eq!(km.passthrough.label().as_deref(), Some("Caps / F13"));
         assert_eq!(km.action_for_key(Keysym::from_char('b')), Some(Action::Pen));
     }
 
@@ -599,6 +628,21 @@ mod tests {
         km.apply(toml::from_str(r#"spotlight = "s""#).unwrap());
         assert!(km.is_role_key(Keysym::from_char('s')));
         assert_eq!(km.label_for(Action::Move), None);
+    }
+
+    /// The same for the held roles' triggers: the advice for keyboards without a usable
+    /// Caps Lock, `passthrough = "alt"`, takes Alt from snap-invert.
+    #[test]
+    fn the_file_takes_a_trigger_from_a_default_role() {
+        let mut km = Keymap::default();
+        km.apply(toml::from_str(r#"passthrough = "alt""#).unwrap());
+        assert_eq!(km.passthrough, Role::one(Trigger::Mod(ModKind::Alt)));
+        assert_eq!(km.snap_invert.label(), None);
+
+        // A role the file sets itself keeps what it names.
+        let mut km = Keymap::default();
+        km.apply(toml::from_str("passthrough = \"alt\"\nsnap-invert = \"super\"").unwrap());
+        assert_eq!(km.snap_invert, Role::one(Trigger::Mod(ModKind::Logo)));
     }
 
     /// A file that mentions neither leaves both at their default, and turning snapping
