@@ -96,12 +96,25 @@ On NixOS, add `wlr-utils` to `environment.systemPackages`.
 
 ### Prebuilt binaries
 
-One archive with every binary, no Rust toolchain needed. It is built on Ubuntu 24.04 and linked to its FFmpeg, PipeWire and Leptonica, so elsewhere it
-needs those same versions — a package or a source build is the safer route:
+One archive with every binary, no Rust toolchain needed. It is built on Ubuntu 24.04 and
+linked to its FFmpeg, PipeWire and Leptonica, so elsewhere it needs those same versions —
+a package or a source build is the safer route. The one-line installer puts the binaries
+in `~/.cargo/bin` and adds it to your `PATH` (unless `WLR_UTILS_NO_MODIFY_PATH=1`), with no
+theme and no systemd unit:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf \
   https://github.com/sjourdois/wlr-utils/releases/latest/download/wlr-utils-installer.sh | sh
+```
+
+The archive, unpacked by hand, installs itself with its units, themes and example
+configuration, into `/usr/local`:
+
+```sh
+curl -LO https://github.com/sjourdois/wlr-utils/releases/latest/download/wlr-utils-x86_64-unknown-linux-gnu.tar.xz
+tar xf wlr-utils-x86_64-unknown-linux-gnu.tar.xz
+cd wlr-utils-x86_64-unknown-linux-gnu
+sudo sh install.sh                 # or elsewhere: sudo env PREFIX=/usr sh install.sh
 ```
 
 ### From source
