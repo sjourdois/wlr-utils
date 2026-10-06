@@ -37,7 +37,8 @@ window-accent = "#b48ead"
 corner-radius = 12
 
 [chooser]
-# Sizes in pixels. The card, when --grid does not size it to its tiles.
+# Sizes in pixels, for wlr-chooser and wlr-switcher. The card, when --grid does not size
+# it to its tiles.
 card-width = 1000
 card-height = 760
 # The narrowest a card tile gets: a row holds as many as fit, widened to fill it.
@@ -76,7 +77,8 @@ width-dec = ["minus", "KP_Subtract"]
 freeze = ["space", "KP_Space"]
 snap = "d"
 
-# Held controls: a modifier (caps, ctrl, shift, alt, super), a key, or a list.
+# Held controls: a modifier (caps, ctrl, shift, alt, super), a key, a mouse button (but
+# not for passthrough, whose overlay gets no clicks), or a list.
 passthrough = "caps"
 constrain = "ctrl"
 spotlight = "shift"

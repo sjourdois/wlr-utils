@@ -99,7 +99,6 @@ them the way you installed them:
 
 ```sh
 cargo uninstall wlr-chooser                       # crates.io install (~/.cargo/bin)
-rm -f ~/.local/bin/{wlr-chooser,wlr-switcher,wlr-overlayd}   # manual `install` from source
 sudo apt remove wlr-utils                          # the suite's .deb
 ```
 
@@ -143,6 +142,8 @@ focused output. You can pass options in `chooser_cmd`, e.g.
     --no-gpu           Capture through shared memory instead of dma-buf
     --no-daemon        Show the overlay in this process, even with wlr-overlayd running
     --doctor           Report the compositor's capture protocols, then exit
+    --migrate-config [-]
+                       Move the old theme.toml into config.toml; with -, print it
 -h, --help             Print help
 -V, --version          Print version
 ```
@@ -285,8 +286,10 @@ expose that protocol, so the overlay opens on the first tile there.
 Bind `wlr-switcher` to a **held** modifier and it behaves like a classic Alt-Tab:
 
 ```
-bindsym Mod1+Tab exec wlr-switcher                 # hold Alt, Tab cycles, release switches
-bindsym $mod+Tab exec wlr-switcher --layout grid --hold   # full-screen exposé
+# hold Alt, Tab cycles, release switches
+bindsym Mod1+Tab exec wlr-switcher
+# full-screen exposé
+bindsym $mod+Tab exec wlr-switcher --layout grid --hold
 ```
 
 - The overlay appears while the modifier (Alt **or** Super) is held.
@@ -381,11 +384,9 @@ as before when there is none.
 
 One line in your compositor's config:
 
-```
-exec wlr-overlayd                 # sway
-exec-once = wlr-overlayd          # Hyprland
-spawn-at-startup "wlr-overlayd"   # niri
-```
+- sway: `exec wlr-overlayd`
+- Hyprland: `exec-once = wlr-overlayd`
+- niri: `spawn-at-startup "wlr-overlayd"`
 
 Or, if you would rather have it in the journal and restarted with the session, the
 provided systemd `--user` unit ([`contrib/wlr-overlayd.service`](contrib/wlr-overlayd.service)):
@@ -456,7 +457,7 @@ deliberate choice, `--no-daemon` makes it explicit and silences the notice:
 bindsym Mod1+Tab exec wlr-switcher --no-daemon
 ```
 
-| | |
+| Command | What it does |
 |---|---|
 | `wlr-overlayd` | run the daemon in the foreground (what your autostart runs) |
 | `wlr-overlayd --quit` | stop the running daemon |
@@ -513,14 +514,19 @@ backdrop      = "#11111baa"  # dimmed overlay
 font      = "JetBrains Mono" # UI font family (via fontconfig)
 # font-path = "/path/to/Font.ttf"
 # cjk-font = "Noto Sans CJK JP"
-font-size = 15.0             # the card's text: tabs and filter
+font-size = 15.0             # every text scales with it; 13 by default
 
 corner-radius = 0            # square corners everywhere; 12 by default
 ```
 
-The ready-made themes set every colour key: Catppuccin (Mocha, Macchiato, Frappé,
-Latte), Nord, Gruvbox, Dracula, Tokyo Night. A theme file holds the keys of `[theme]`
-without its header; yours go in `~/.config/wlr-utils/themes`.
+The ready-made themes set every colour key. Their `name` values are
+`catppuccin-mocha`, `catppuccin-macchiato`, `catppuccin-frappe`, `catppuccin-latte`,
+`nord`, `gruvbox-dark`, `dracula` and `tokyo-night`. A theme file holds the keys of
+`[theme]` without its header; yours go in `~/.config/wlr-utils/themes`. A `name` holding a
+`/` is a path instead, relative to the folder of `config.toml` (`~` is not expanded).
+
+An old `~/.config/wlr-chooser/theme.toml` is still read when there is no `config.toml`;
+`wlr-chooser --migrate-config` moves it in.
 
 The sizes, in pixels, come from the `[chooser]` section:
 

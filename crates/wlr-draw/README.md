@@ -96,8 +96,8 @@ the colour — and it **pulses** a few times when you enter draw mode on an empt
 
 The shortcuts above are rebindable in the **`[draw.keys]`** section of
 [`config.toml`](../../README.md#configuration), except the fixed ones listed below. Key
-names are the same **XKB keysym names** sway/Hyprland use in `bindsym` (`a`, `space`,
-`plus`, `F5`…), matched case-insensitively. Each binding is a single name or a list;
+names are the same **XKB keysym names** sway's `bindsym` and Hyprland's `bind` use
+(`a`, `space`, `plus`, `F5`…), matched case-insensitively. Each binding is a single name or a list;
 missing entries keep their default, so a partial section is fine and none at all means
 the defaults above.
 
@@ -130,7 +130,8 @@ how snapping is switched off.
 
 [`docs/config.toml`](../../docs/config.toml) lists every binding with its default. A
 [reload](#stopping-restarting-logs) applies your changes without losing the drawing, and
-names what it could not apply.
+names what it could not apply. An old `~/.config/wlr-draw/keys.toml` is still read when
+there is no `config.toml`; `wlr-draw migrate-config` moves it in.
 
 Fixed (not rebindable): `Esc` and its alias `Ctrl+[` (always back out), the arrow-key
 nudge, and the spotlight size/dim cluster (`i`/`j`/`k`/`l` + wheel, live only while
@@ -218,11 +219,9 @@ If you would rather say it yourself — or you build `--no-default-features`, wh
 tray and so no self-registration — start the daemon the way you start anything else with
 your session. One line in your compositor's config:
 
-```
-exec wlr-draw                # sway
-exec-once = wlr-draw         # Hyprland
-spawn-at-startup "wlr-draw"  # niri
-```
+- sway: `exec wlr-draw`
+- Hyprland: `exec-once = wlr-draw`
+- niri: `spawn-at-startup "wlr-draw"`
 
 Or the provided systemd `--user` unit
 ([`contrib/wlr-draw.service`](contrib/wlr-draw.service)), which also restarts the daemon
@@ -248,7 +247,7 @@ show-environment`), which uwsm fills from your login environment. Elsewhere, imp
 login** in the tray so the autostart entry does not race yours.
 
 You will know soon enough either way: with no daemon listening, every command but
-`doctor` exits non-zero with `no wlr-draw daemon listening on … ; start one with wlr-draw`.
+`doctor` and `migrate-config` exits non-zero with `no wlr-draw daemon listening on … ; start one with wlr-draw`.
 
 ### Stopping, restarting, logs
 
@@ -321,7 +320,7 @@ cargo build --release -p wlr-draw
 - **GL stack** — `libegl1` at runtime; the overlay renders through EGL/GLES. The
   freeze-frame capture goes through shared memory, so `--no-gpu` (or `WLR_NO_GPU=1`)
   changes nothing here — it is accepted for consistency with the other tools.
-- **Compositor** — a wlroots one advertising `wlr-layer-shell` (sway, Hyprland, niri, …)
+- **Compositor** — one advertising `wlr-layer-shell` (sway, Hyprland, niri, …)
   for the always-on-top overlay, whose layer is named `wlr-draw` for
   [compositor rules](../../README.md#compositor-rules). Plain annotation needs only that,
   at any version.

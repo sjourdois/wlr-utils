@@ -33,6 +33,7 @@ wlr-shot record [-s | -o NAME | -g GEOM | -w ID | --app-id ID | --title TEXT
                 [--crf N] [--fps N] [--timelapse INTERVAL] [-d SECS]
                 [--no-audio | --audio-source NODE] FILE
 wlr-shot doctor
+wlr-shot migrate-config [-]
 ```
 
 Source (pick one; defaults to the sole output):
@@ -156,8 +157,9 @@ wlr-shot record -o DP-4 --no-audio clip.mp4     # video only (audio is on by def
   `--audio-source NODE` captures a specific node instead (e.g. a microphone). Needs the
   `audio` build feature (on by default; links libpipewire). Timelapses and GIF/WebP
   carry no audio.
-  For a PipeWire-less host, build with `--features audio-fallback` to add a **Pulse/ALSA**
-  path (via FFmpeg's libavdevice, no extra system dep), tried after PipeWire.
+  For a host with no PipeWire server running, build with `--features audio-fallback`
+  to add a **Pulse/ALSA** path (via FFmpeg's libavdevice, no extra system dep), tried
+  after PipeWire.
 
 Recording needs the `video` build feature (on by default), which links the system
 FFmpeg libraries. A screenshots-only build drops it: `cargo build -p wlr-shot
@@ -198,7 +200,8 @@ exposes; see [COMPATIBILITY.md](../../COMPATIBILITY.md) for the full matrix.
 
 The interactive region selector (`-s`) renders a frozen overlay through EGL/GLES — its
 layer is named `wlr-shot`, for [compositor rules](../../README.md#compositor-rules) — so
-**every build** needs a working GL stack (`libegl1`) and `libfontconfig1` at runtime.
+**every build** needs a working GL stack (`libegl1`) at runtime, and looks up the UI font
+with `libfontconfig1` when it is there (the embedded fonts otherwise).
 The default build also links `libgbm` for the zero-copy dma-buf path used by `record`; screenshots themselves are
 captured through shared memory. `--no-gpu` (or `WLR_NO_GPU=1`) forces the shm path
 everywhere, and `wlr-shot doctor` reports whether the dma-buf path actually works here.
@@ -215,10 +218,11 @@ of this.
 
 ```sh
 cargo uninstall wlr-shot          # crates.io install
-rm -f ~/.local/bin/wlr-shot       # manual install from source
 ```
 
-wlr-shot writes no config or state files — removing the binary is enough.
+wlr-shot writes no state files. It reads the suite's shared
+`~/.config/wlr-utils/config.toml`, which `migrate-config` writes from an old
+`theme.toml`; leave it if another tool of the suite still uses it.
 
 ## License
 

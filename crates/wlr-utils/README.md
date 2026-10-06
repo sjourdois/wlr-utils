@@ -19,7 +19,7 @@ This installs every binary at once:
 | `wlr-switcher` | Alt-Tab / exposé window switcher with live previews. |
 | `wlr-overlayd` | Optional daemon that keeps the switcher's and the chooser's overlay warm, so it appears at once. |
 | `wlr-peek` | Inspect the screen — colour picker, loupe, OCR, live mirror, change monitor, visual grep. |
-| `wlr-shot` | Screenshots (PNG/JPEG/PPM/PAM) and recording (H.264, GIF/WebP) with system audio. |
+| `wlr-shot` | Screenshots (PNG/JPEG/PPM/PAM) and recording (MP4/MKV in H.264, GIF/WebP) with system audio. |
 | `wlr-draw` | Draw on screen — annotation overlay with shapes, text, spotlight, freeze-frame. |
 
 This crate is just a **bundle**: it ships no library and no logic of its own, only thin
@@ -55,7 +55,7 @@ cargo uninstall wlr-utils
 ```
 
 The prebuilt installer's binaries are not cargo's to remove: delete them from
-`~/.cargo/bin`, with the receipt it leaves in `~/.config/wlr-utils/`.
+`~/.cargo/bin`, with the receipt it leaves, `~/.config/wlr-utils/wlr-utils-receipt.json`.
 
 `wlr-draw` registers an XDG autostart entry on first run — see the
 [main README](https://github.com/sjourdois/wlr-utils#uninstall) for the leftover files to

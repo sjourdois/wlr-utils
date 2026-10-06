@@ -183,6 +183,13 @@ capture carries no such position (that is exactly why it can read an occluded or
 off-workspace window). Coordinates for a window source would be window-local and
 silently incompatible with the rest of the output. Use `ocr --app-id` for the text.
 
+### `doctor` and `migrate-config`
+
+`wlr-peek doctor` reports what your compositor supports (see [Requirements](#requirements)).
+`wlr-peek migrate-config` moves an old `theme.toml` and `keys.toml` into the suite's
+`~/.config/wlr-utils/config.toml`, then deletes them; `migrate-config -` prints the new
+file instead.
+
 ## Requirements
 
 A wlroots compositor exposing a capture protocol. Screen inspection (`color`, `loupe`,
@@ -197,8 +204,9 @@ app id `wlr-peek-mirror`; `color --clipboard` and `ocr -c` need
 `zwlr_data_control_manager_v1`. `wlr-peek doctor` prints exactly what your compositor
 advertises; see [COMPATIBILITY.md](../../COMPATIBILITY.md) for the full matrix.
 
-- **GL stack** — `libegl1` and `libfontconfig1` at runtime (the overlays render
-  through EGL/GLES), plus `libgbm` for the zero-copy dma-buf path `mirror` and `watch`
+- **GL stack** — `libegl1` at runtime (the overlays render through EGL/GLES), and
+  `libfontconfig1` to look up the UI font when it is there (the embedded fonts
+  otherwise), plus `libgbm` for the zero-copy dma-buf path `mirror` and `watch`
   stream through (the `gpu` feature, on by default). One-shot reads (`color`, `ocr`) capture through shared memory regardless.
   `--no-gpu` (or `WLR_NO_GPU=1`) forces the shm path; `wlr-peek doctor` reports whether the
   dma-buf path works here.
@@ -238,11 +246,11 @@ capture path and the Fluent catalog. Pick the ones you want with `--features` �
 
 ```sh
 cargo uninstall wlr-peek          # crates.io install
-rm -f ~/.local/bin/wlr-peek       # manual install from source
 ```
 
-wlr-peek writes no config files; `mirror` only leaves a lock file per mirrored window in
-`$XDG_RUNTIME_DIR`.
+wlr-peek writes no state files; `mirror` only leaves a lock file per mirrored window in
+`$XDG_RUNTIME_DIR`. It reads the suite's shared `~/.config/wlr-utils/config.toml`, which
+`migrate-config` writes; leave it if another tool of the suite still uses it.
 
 ## License
 

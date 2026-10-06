@@ -16,7 +16,7 @@ Five graphical tools for **wlroots and derivatives**.
 | **[wlr-chooser](crates/wlr-chooser)** | Window & screen picker for screencast portals (`xdg-desktop-portal-wlr`) — a rofi-like overlay with live thumbnails. | [![v](https://img.shields.io/crates/v/wlr-chooser.svg)](https://crates.io/crates/wlr-chooser) |
 | **[wlr-switcher](crates/wlr-chooser)** | Live **Alt-Tab / exposé** window switcher (macOS-style strip, full-screen grid, or card) with hold-to-switch and live previews. Ships with `wlr-chooser`, and with `wlr-overlayd` — the optional daemon that puts either overlay on screen in milliseconds. | [![v](https://img.shields.io/crates/v/wlr-chooser.svg)](https://crates.io/crates/wlr-chooser) |
 | **[wlr-peek](crates/wlr-peek)** | **Inspect the screen** — colour picker, loupe, OCR, live picture-in-picture **mirror** (window or region), **change monitor** (`watch`), and **visual grep**. | [![v](https://img.shields.io/crates/v/wlr-peek.svg)](https://crates.io/crates/wlr-peek) |
-| **[wlr-shot](crates/wlr-shot)** | **Screen capture** — screenshots of an output/region/window (PNG/JPEG/PPM), copy to clipboard; plus **recording** (H.264, or animated GIF/WebP) with **system audio** & **timelapse** (NVENC/VAAPI/libx264). Shoots and records **windows, even those you can't see** — occluded behind others, or on another workspace — by name, with no clicking. | [![v](https://img.shields.io/crates/v/wlr-shot.svg)](https://crates.io/crates/wlr-shot) |
+| **[wlr-shot](crates/wlr-shot)** | **Screen capture** — screenshots of an output/region/window (PNG/JPEG/PPM/PAM), copy to clipboard; plus **recording** (MP4/MKV in H.264, or animated GIF/WebP) with **system audio** & **timelapse** (NVENC/VAAPI/libx264). Shoots and records **windows, even those you can't see** — occluded behind others, or on another workspace — by name, with no clicking. | [![v](https://img.shields.io/crates/v/wlr-shot.svg)](https://crates.io/crates/wlr-shot) |
 | **[wlr-draw](crates/wlr-draw)** | **Draw on screen** — a transparent annotation overlay (gromit-mpx-style): freehand, shapes, arrows, text, dwell-to-snap, element move, plus presenter **spotlight**, **freeze-frame** and **save**. Daemon + control socket. | [![v](https://img.shields.io/crates/v/wlr-draw.svg)](https://crates.io/crates/wlr-draw) |
 
 > **Point at a window you can't see.** `wlr-shot` and `wlr-peek` take `--app-id`/`--title`,
@@ -56,10 +56,10 @@ capture protocols it exposes:
 
 Tools degrade gracefully: where windows aren't capturable they keep their screen features
 and say so. See [COMPATIBILITY.md](COMPATIBILITY.md) for the full matrix (Hyprland, niri,
-labwc, …), or run the `doctor` command that every tool exposes (e.g. `wlr-shot doctor`,
-or `wlr-chooser --doctor`) to check your own compositor. It also captures a frame through
-the GPU path and reports whether it can be imported, which is the line to quote in a bug
-report.
+labwc, …), or run the `doctor` command that every tool but `wlr-overlayd` exposes (e.g.
+`wlr-shot doctor`, or `wlr-chooser --doctor`) to check your own compositor. It also
+captures a frame through the GPU path and reports whether it can be imported, which is
+the line to quote in a bug report.
 
 Runtime libraries:
 
@@ -71,7 +71,7 @@ Runtime libraries:
 | FFmpeg (`libav*`), `libpipewire-0.3` | `wlr-shot record` | encoding, and recording system sound |
 | Tesseract, Leptonica, the `eng` tessdata pack | `wlr-peek ocr` / `grep` | text recognition |
 | `xdg-desktop-portal-wlr` ≥ 0.8 | `wlr-chooser` | portal-based picking |
-| `zwlr-foreign-toplevel-management-v1`, or `cosmic-toplevel-management` | `wlr-switcher` | focusing windows |
+| `wlr-foreign-toplevel-management-v1`, or `cosmic-toplevel-management` | `wlr-switcher` | focusing windows |
 
 ## Install
 
@@ -184,7 +184,7 @@ Each tool's README says which of these its features pull in.
 
 ### Uninstall
 
-Package installs come off the usual way (`paru -R wlr-utils-bin`, `apt remove wlr-utils`);
+Package installs come off the usual way (`paru -R wlr-utils-bin`, `sudo apt remove wlr-utils`);
 run `systemctl --user disable --now` first on any unit you enabled.
 A `cargo install` drops the binaries in `~/.cargo/bin`; remove the bundle with
 `cargo uninstall wlr-utils`, or an individual tool the same way:
@@ -256,10 +256,12 @@ undo = ["u", "z"]
 
 [`docs/config.toml`](docs/config.toml) lists every setting at its default; packages
 install it in `/usr/share/doc/wlr-utils`. They install the themes in
-`/usr/share/wlr-utils/themes`: Catppuccin (Mocha, Macchiato, Frappé, Latte), Nord,
-Gruvbox, Dracula and Tokyo Night. Yours go in `~/.config/wlr-utils/themes`, and that is
-also where to copy [`docs/themes`](docs/themes) after a `cargo install`, which installs
-none.
+`/usr/share/wlr-utils/themes`, named for `name` as `catppuccin-mocha`,
+`catppuccin-macchiato`, `catppuccin-frappe`, `catppuccin-latte`, `nord`, `gruvbox-dark`,
+`dracula` and `tokyo-night`. Yours go in `~/.config/wlr-utils/themes`, and that is also
+where to copy [`docs/themes`](docs/themes) after a `cargo install`, which installs none. A
+`name` holding a `/` is a path instead, relative to the folder of `config.toml` (`~` is
+not expanded).
 
 Until wlr-utils 2.0, the old `~/.config/wlr-chooser/theme.toml` and
 `~/.config/wlr-draw/keys.toml` are still read when there is no `config.toml`, with a
@@ -268,7 +270,7 @@ prints the new file instead and touches nothing, for a configuration kept in a d
 manager:
 
 ```sh
-wlr-draw migrate-config     # also wlr-shot and wlr-peek, or wlr-chooser --migrate-config
+wlr-draw migrate-config     # also wlr-shot and wlr-peek, or wlr-chooser/wlr-switcher --migrate-config
 wlr-draw migrate-config -
 ```
 

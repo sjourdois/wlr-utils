@@ -41,7 +41,7 @@ screencast portal — pick from live previews, not a text list. It also answers 
 scripts: `--layout grid --hints` for one keystroke per window, `--format json` for
 the app id, title and pid of what you picked.
 
-<img src="assets/wlr-chooser/picker.png" width="900">
+<img src="assets/wlr-chooser/picker.png" width="900" alt="wlr-chooser's card over a dimmed desktop: tabs, a filter field, and live thumbnails of a screen and seven windows">
 
 ---
 
@@ -78,15 +78,15 @@ captured while it waits, and neither tool needs a daemon to work.
 
 ## wlr-shot — capture the screen
 
-**Screenshot or record anything.** Region, window or whole output → PNG/JPEG,
-or H.264 / GIF — with **system audio** and **timelapse**.
+**Screenshot or record anything.** Region, window or whole output → PNG/JPEG/PPM/PAM,
+or MP4/MKV in H.264, GIF or WebP — with **system audio** and **timelapse**.
 
 Target a window **by name** (`--app-id`/`--title`) — even hidden, on another
 workspace, or behind a lock screen. It grabs the window itself, not the visible
 pixels, so there's no need to raise it first.
 
 Whole-screen grabbers like `grim` shoot the visible output — so they miss what
-isn't on it: occluded or unmapped windows, overlays, other workspaces.
+isn't on it: occluded or unmapped windows, other workspaces.
 
 Below: the frozen region selector.
 
@@ -136,7 +136,7 @@ even when it's occluded or off-workspace.
 The live **mirror** (picture-in-picture, zooming a region ×2), and the CLI
 subcommands (`ocr`, `watch`, …) running against the screen:
 
-<img src="assets/wlr-peek/mirror.png" width="49%">
+<img src="assets/wlr-peek/mirror.png" width="49%" alt="The wlr-peek mirror: a floating window showing part of a video, zoomed twice">
 <video src="assets/wlr-peek/cli.mp4" autoplay loop muted playsinline width="49%"></video>
 
 ```sh
