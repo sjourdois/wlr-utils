@@ -252,7 +252,8 @@ the dash as `\x2d`, so the quotes matter. Started from the systemd unit above in
 it is plain `systemctl --user restart wlr-draw`.
 
 A reload re-reads `keys.toml` and the theme (`~/.config/wlr-chooser/theme.toml`) and
-keeps the drawing, the tool, the colour and the width. `kill -HUP` on the daemon does the
+keeps the drawing, the tool, the colour, the width, and snapping as `d` left it unless you
+changed `dwell`. `kill -HUP` on the daemon does the
 same, and so does `systemctl --user reload wlr-draw` with the systemd unit above.
 
 ### Tray icon

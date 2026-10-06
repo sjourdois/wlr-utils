@@ -818,11 +818,15 @@ impl State {
 
     /// Re-read `keys.toml` and the theme (`wlr-draw reload`, or SIGHUP). The
     /// drawing and what was changed at runtime — tool, colour, width, snapping toggled by
-    /// `snap` — are kept. Held roles are released, since their triggers may have moved;
-    /// those on a modifier still active re-engage from it.
+    /// `snap` — are kept, unless the file changed `dwell` itself. Held roles are released,
+    /// since their triggers may have moved; those on a modifier still active re-engage
+    /// from it.
     fn reload_config(&mut self) {
         self.theme = Theme::load();
-        self.keymap = Keymap::load();
+        let previous = std::mem::replace(&mut self.keymap, Keymap::load());
+        if self.keymap.snap_on_dwell != previous.snap_on_dwell {
+            self.snap_on_dwell = self.keymap.snap_on_dwell;
+        }
         self.role_keys_down.clear();
         self.passthrough_latched = false;
         self.sync_roles();
