@@ -55,6 +55,8 @@ draw-config-dwell-zero = deve ser pelo menos 1; `dwell = false` desativa o ajust
 draw-config-two-actions = `{ $key }` está atribuída a duas ações
 draw-config-role-and-tool = `{ $key }` está atribuída ao mesmo tempo a um controle mantido e a uma ferramenta
 draw-config-two-roles = `{ $key }` está atribuída a dois controles mantidos
+draw-config-reserved-button = `{ $name }` não pode ser atribuído: o botão esquerdo desenha e o direito move
+draw-config-passthrough-button = `{ $name }` não pode encerrar o clique transparente: a sobreposição não recebe cliques nesse momento
 tray-status-drawing = Desenhando
 tray-status-idle = Ocioso (clique passa direto)
 tray-toggle = Alternar modo desenho

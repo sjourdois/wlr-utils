@@ -55,6 +55,8 @@ draw-config-dwell-zero = 至少应为 1；关闭吸附请用 `dwell = false`
 draw-config-two-actions = `{ $key }` 被绑定到两个动作
 draw-config-role-and-tool = `{ $key }` 同时绑定到按住的控制和工具
 draw-config-two-roles = `{ $key }` 被绑定到两个按住的控制
+draw-config-reserved-button = 无法绑定 `{ $name }`：左键用于绘制，右键用于移动
+draw-config-passthrough-button = `{ $name }` 无法结束点击穿透：此时覆盖层收不到点击
 tray-status-drawing = 绘图中
 tray-status-idle = 空闲（点击穿透）
 tray-toggle = 切换绘图模式

@@ -55,6 +55,8 @@ draw-config-dwell-zero = must be at least 1; `dwell = false` turns snapping off
 draw-config-two-actions = `{ $key }` is bound to two actions
 draw-config-role-and-tool = `{ $key }` is bound to both a held control and a tool
 draw-config-two-roles = `{ $key }` is bound to two held controls
+draw-config-reserved-button = `{ $name }` cannot be bound: the left button draws and the right one moves
+draw-config-passthrough-button = `{ $name }` cannot end click-through: the overlay gets no clicks then
 tray-status-drawing = Drawing
 tray-status-idle = Idle (click-through)
 tray-toggle = Toggle draw mode

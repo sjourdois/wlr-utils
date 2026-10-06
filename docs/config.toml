@@ -52,7 +52,9 @@ dwell-ms = 650
 
 [draw.keys]
 # Key names are XKB keysym names, as in sway's bindsym: a, space, plus, F5. A binding
-# takes one name or a list.
+# takes one name or a list. Mouse buttons are named as sway names them too: button2 (the
+# middle one), button8 and button9 (the side ones), or BTN_SIDE and the like. The left
+# and right buttons stay for drawing and moving.
 pen = "p"
 rect = "r"
 mask = "m"

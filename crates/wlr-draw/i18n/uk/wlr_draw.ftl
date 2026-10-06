@@ -55,6 +55,8 @@ draw-config-dwell-zero = має бути щонайменше 1; `dwell = false`
 draw-config-two-actions = `{ $key }` призначена двом діям
 draw-config-role-and-tool = `{ $key }` призначена одночасно утримуваному керуванню та інструменту
 draw-config-two-roles = `{ $key }` призначена двом утримуваним керуванням
+draw-config-reserved-button = `{ $name }` не можна призначити: ліва кнопка малює, а права переміщує
+draw-config-passthrough-button = `{ $name }` не може вимкнути наскрізний клік: у цей момент оверлей не отримує кліків
 tray-status-drawing = Малювання
 tray-status-idle = Очікування (наскрізні кліки)
 tray-toggle = Перемкнути режим малювання

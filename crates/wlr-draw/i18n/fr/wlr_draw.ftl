@@ -55,6 +55,8 @@ draw-config-dwell-zero = doit valoir au moins 1 ; `dwell = false` désactive l'a
 draw-config-two-actions = `{ $key }` est affecté à deux actions
 draw-config-role-and-tool = `{ $key }` est affecté à la fois à un contrôle maintenu et à un outil
 draw-config-two-roles = `{ $key }` est affecté à deux contrôles maintenus
+draw-config-reserved-button = `{ $name }` ne peut pas être affecté : le bouton gauche dessine et le droit déplace
+draw-config-passthrough-button = `{ $name }` ne peut pas terminer le clic transparent : l'overlay ne reçoit alors aucun clic
 tray-status-drawing = Dessin
 tray-status-idle = Inactif (clic à travers)
 tray-toggle = Activer/désactiver le dessin

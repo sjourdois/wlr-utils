@@ -55,6 +55,8 @@ draw-config-dwell-zero = moet minstens 1 zijn; `dwell = false` zet uitlijnen uit
 draw-config-two-actions = `{ $key }` is aan twee acties gekoppeld
 draw-config-role-and-tool = `{ $key }` is zowel aan een ingedrukt gehouden bediening als aan een gereedschap gekoppeld
 draw-config-two-roles = `{ $key }` is aan twee ingedrukt gehouden bedieningen gekoppeld
+draw-config-reserved-button = `{ $name }` kan niet worden toegewezen: de linkerknop tekent en de rechter verplaatst
+draw-config-passthrough-button = `{ $name }` kan doorklikken niet beëindigen: de overlay krijgt dan geen klikken
 tray-status-drawing = Aan het tekenen
 tray-status-idle = Inactief (klik-door)
 tray-toggle = Tekenmodus wisselen

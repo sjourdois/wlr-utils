@@ -17,7 +17,7 @@
 //! additionally takes single-key shortcuts (incl. `h` help, `c` colour picker) and text.
 
 use crate::ipc;
-use crate::keymap::{Action, Keymap, ModKind, Role};
+use crate::keymap::{Action, BTN_LEFT, BTN_RIGHT, Keymap, ModKind, Role, Trigger};
 use crate::model;
 use crate::model::{Color, Document, Element, Recognized, ShapeKind, Tool, constrain, recognize};
 use crate::proto::Cmd;
@@ -87,9 +87,6 @@ const TEXT_SIZE_MAX: f32 = 220.0;
 const ERASE_RADIUS: f32 = 10.0;
 /// How close (logical px) a click must be to grab an element (Move tool / right-drag).
 const SELECT_RADIUS: f32 = 8.0;
-/// Pointer buttons we act on: left draws, right grabs-and-moves.
-const BTN_LEFT: u32 = 0x110;
-const BTN_RIGHT: u32 = 0x111;
 /// Time budget for the one-shot capture behind freeze-frame.
 const FREEZE_BUDGET: Duration = Duration::from_secs(2);
 
@@ -361,9 +358,9 @@ struct State {
     /// Snap-invert role active (the snap-invert bind): the stroke in progress dwells the
     /// other way round from the persistent setting.
     snap_invert_active: bool,
-    /// Keys bound to a held role that are down right now: a role stays engaged while any
-    /// of its triggers is, and a key repeat is not a new press.
-    role_keys_down: Vec<Keysym>,
+    /// Keys and buttons bound to a held role that are down right now: a role stays
+    /// engaged while any of its triggers is, and a key repeat is not a new press.
+    role_triggers_down: Vec<Trigger>,
     /// Pass-through as toggled by its keys; its modifiers count on top of this.
     passthrough_latched: bool,
     /// The modifier state last reported, to re-evaluate the roles on a key event.
@@ -564,7 +561,7 @@ impl State {
             self.flash_start = None;
             // The keyboard is released here, so a role key released afterwards is never
             // seen: drop the momentary state rather than carry it over.
-            self.role_keys_down.clear();
+            self.role_triggers_down.clear();
             self.passthrough_latched = false;
             self.set_snap_invert(false);
         } else if self.doc.elements().is_empty() {
@@ -657,7 +654,7 @@ impl State {
         let mods = self.modifiers;
         let by_mod = |role: &Role| role.mods().any(|m| mod_active(&mods, m));
         let engaged =
-            |role: &Role| by_mod(role) || self.role_keys_down.iter().any(|&ks| role.has_key(ks));
+            |role: &Role| by_mod(role) || self.role_triggers_down.iter().any(|&t| role.has(t));
         let km = &self.keymap;
         let passthrough = by_mod(&km.passthrough) || self.passthrough_latched;
         let constrain = engaged(&km.constrain);
@@ -829,7 +826,7 @@ impl State {
         if self.keymap.snap_on_dwell != previous.snap_on_dwell {
             self.snap_on_dwell = self.keymap.snap_on_dwell;
         }
-        self.role_keys_down.clear();
+        self.role_triggers_down.clear();
         self.passthrough_latched = false;
         self.sync_roles();
         #[cfg(feature = "tray")]
@@ -1316,14 +1313,14 @@ impl State {
         }
 
         // --- Configurable bindings ---
-        let ks = event.keysym;
+        let trigger = Trigger::Key(event.keysym);
         // Held roles bound to a key: pass-through toggles (parity with the Caps latch),
         // the others engage while held (released in `on_key_release`). A key already down
         // is a repeat, not a press.
-        if self.keymap.is_role_key(ks) {
-            if !self.role_keys_down.contains(&ks) {
-                self.role_keys_down.push(ks);
-                if self.keymap.passthrough.has_key(ks) {
+        if self.keymap.is_role_trigger(trigger) {
+            if !self.role_triggers_down.contains(&trigger) {
+                self.role_triggers_down.push(trigger);
+                if self.keymap.passthrough.has(trigger) {
                     self.passthrough_latched = !self.passthrough_latched;
                 }
                 self.sync_roles();
@@ -1331,7 +1328,7 @@ impl State {
             return;
         }
         // Discrete actions.
-        if let Some(action) = self.keymap.action_for_key(ks) {
+        if let Some(action) = self.keymap.action_for(trigger) {
             self.do_action(action);
         }
     }
@@ -1340,8 +1337,34 @@ impl State {
     /// (discrete actions only fire on press); pass-through is a toggle, so its release
     /// only ends the key's repeat.
     fn on_key_release(&mut self, ks: Keysym) {
-        if let Some(i) = self.role_keys_down.iter().position(|&k| k == ks) {
-            self.role_keys_down.swap_remove(i);
+        self.release_trigger(Trigger::Key(ks));
+    }
+
+    /// A press of a mouse button other than the two that draw and move: the held role it
+    /// engages, or the action it is bound to. While a label is typed it does nothing, as
+    /// a key would not. (Pass-through takes no button: its overlay gets no clicks.)
+    fn on_button_press(&mut self, button: u32) {
+        if self.text_edit.is_some() {
+            return;
+        }
+        let trigger = Trigger::Button(button);
+        if self.keymap.is_role_trigger(trigger) {
+            if !self.role_triggers_down.contains(&trigger) {
+                self.role_triggers_down.push(trigger);
+                self.sync_roles();
+            }
+            return;
+        }
+        if let Some(action) = self.keymap.action_for(trigger) {
+            self.end_move_session();
+            self.do_action(action);
+        }
+    }
+
+    /// Release a held role's key or button.
+    fn release_trigger(&mut self, trigger: Trigger) {
+        if let Some(i) = self.role_triggers_down.iter().position(|&t| t == trigger) {
+            self.role_triggers_down.swap_remove(i);
             self.sync_roles();
         }
     }
@@ -1463,7 +1486,7 @@ pub fn run() -> anyhow::Result<()> {
         constrain_active: false,
         spotlight_active: false,
         snap_invert_active: false,
-        role_keys_down: Vec::new(),
+        role_triggers_down: Vec::new(),
         passthrough_latched: false,
         modifiers: Modifiers::default(),
         ctrl_held: false,
@@ -2721,7 +2744,8 @@ impl KeyboardHandler for State {
         _: u32,
     ) {
         // Keys released from now on are not ours to see: the roles they hold let go.
-        self.role_keys_down.clear();
+        self.role_triggers_down
+            .retain(|t| !matches!(t, Trigger::Key(_)));
         self.sync_roles();
     }
     fn press_key(
@@ -2851,6 +2875,11 @@ impl PointerHandler for State {
                 }
                 PointerEventKind::Leave { .. } => {
                     self.pointer_pos = None;
+                    // Buttons released from now on are not ours to see: the roles they
+                    // hold let go.
+                    self.role_triggers_down
+                        .retain(|t| !matches!(t, Trigger::Button(_)));
+                    self.sync_roles();
                     self.dirty = true;
                 }
                 PointerEventKind::Press {
@@ -2886,6 +2915,11 @@ impl PointerHandler for State {
                 PointerEventKind::Release {
                     button: BTN_RIGHT, ..
                 } => self.on_right_release(),
+                // Any other button: what the configuration binds it to.
+                PointerEventKind::Press { button, .. } => self.on_button_press(button),
+                PointerEventKind::Release { button, .. } => {
+                    self.release_trigger(Trigger::Button(button))
+                }
                 // In spotlight mode the wheel resizes the light; the tilt/second wheel
                 // dims it. (Stroke width stays on +/-.)
                 PointerEventKind::Axis {

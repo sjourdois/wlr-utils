@@ -55,6 +55,8 @@ draw-config-dwell-zero = deve valere almeno 1; `dwell = false` disattiva l'aggan
 draw-config-two-actions = `{ $key }` è assegnato a due azioni
 draw-config-role-and-tool = `{ $key }` è assegnato sia a un controllo tenuto premuto sia a uno strumento
 draw-config-two-roles = `{ $key }` è assegnato a due controlli tenuti premuti
+draw-config-reserved-button = `{ $name }` non si può assegnare: il tasto sinistro disegna e il destro sposta
+draw-config-passthrough-button = `{ $name }` non può terminare il clic trasparente: l'overlay non riceve clic in quel momento
 tray-status-drawing = Disegno in corso
 tray-status-idle = Inattivo (click passante)
 tray-toggle = Attiva/disattiva modalità disegno

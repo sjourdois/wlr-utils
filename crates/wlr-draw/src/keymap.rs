@@ -1,15 +1,16 @@
 //! Configurable keybindings and the pen's dwell settings: the `[draw]` section of
 //! `config.toml`.
 //!
-//! Each action resolves to a [`Trigger`] — either a regular key (an XKB keysym) or a
-//! modifier. Names follow the XKB keysym convention used by sway / Hyprland `bindsym`
-//! (`space`, `Caps_Lock`, `plus`, `a`, …), parsed case-insensitively via libxkbcommon, so
-//! anything you can bind in your compositor you can bind here. A missing section or key
-//! falls back to the built-in defaults.
+//! Each action resolves to a [`Trigger`] — a regular key (an XKB keysym), a modifier, or
+//! a mouse button. Names follow the convention of sway's `bindsym` (`space`, `Caps_Lock`,
+//! `plus`, `a`, `button8`, `BTN_SIDE`, …), parsed case-insensitively, keys via
+//! libxkbcommon, so anything you can bind in your compositor you can bind here. The left
+//! and right buttons draw and move, and stay out of reach. A missing section or key falls
+//! back to the built-in defaults.
 //!
 //! The held roles (`passthrough`, `constrain`, `spotlight`, `snap-invert`) take a modifier,
-//! a regular key, or a list of them, any of which engages the role; the rest are discrete
-//! actions.
+//! a regular key, a button (but `passthrough`, whose overlay gets no clicks), or a list of
+//! them, any of which engages the role; the rest are discrete actions.
 //!
 //! Next to the bindings, `[draw]` holds the two settings the `snap` binding acts on:
 //! `dwell` (whether the pen snaps on its own) and `dwell-ms` (how long it must hold
@@ -58,11 +59,31 @@ pub enum Trigger {
     Key(Keysym),
     /// A modifier held (or, for Caps Lock, latched).
     Mod(ModKind),
+    /// A mouse button, by its evdev code.
+    Button(u32),
 }
 
+/// The left button: it draws, so no binding can take it.
+pub const BTN_LEFT: u32 = 0x110;
+/// The right button: it moves an element, so no binding can take it.
+pub const BTN_RIGHT: u32 = 0x111;
+
+/// The mouse buttons a binding can name, by their evdev name and the `buttonN` name sway's
+/// `bindsym` gives them (X11 numbering, where 4 to 7 are the wheel, not buttons).
+const BUTTONS: &[(&str, Option<&str>, u32)] = &[
+    ("BTN_LEFT", Some("button1"), BTN_LEFT),
+    ("BTN_RIGHT", Some("button3"), BTN_RIGHT),
+    ("BTN_MIDDLE", Some("button2"), 0x112),
+    ("BTN_SIDE", Some("button8"), 0x113),
+    ("BTN_EXTRA", Some("button9"), 0x114),
+    ("BTN_FORWARD", None, 0x115),
+    ("BTN_BACK", None, 0x116),
+    ("BTN_TASK", None, 0x117),
+];
+
 /// The triggers of a held role (pass-through, constrain, spotlight, snap-invert). Any of
-/// them engages it: a modifier while it is active, a key while it is held — or, for
-/// pass-through, a key toggles it on each press, like the Caps Lock latch.
+/// them engages it: a modifier while it is active, a key or a button while it is held —
+/// or, for pass-through, a key toggles it on each press, like the Caps Lock latch.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Role(Vec<Trigger>);
 
@@ -71,16 +92,16 @@ impl Role {
         Self(vec![t])
     }
 
-    /// Whether `ks` is one of this role's keys.
-    pub fn has_key(&self, ks: Keysym) -> bool {
-        self.0.contains(&Trigger::Key(ks))
+    /// Whether `t` is one of this role's triggers.
+    pub fn has(&self, t: Trigger) -> bool {
+        self.0.contains(&t)
     }
 
     /// The modifiers among this role's triggers.
     pub fn mods(&self) -> impl Iterator<Item = ModKind> + '_ {
         self.0.iter().filter_map(|t| match t {
             Trigger::Mod(m) => Some(*m),
-            Trigger::Key(_) => None,
+            Trigger::Key(_) | Trigger::Button(_) => None,
         })
     }
 
@@ -118,10 +139,16 @@ pub enum Action {
 }
 
 /// Parse one trigger name. Modifier aliases first (`ctrl`, `shift`, `alt`, `super`/`logo`,
-/// `caps`/`caps_lock`), otherwise an XKB keysym name (case-insensitive). `None` for an
-/// unknown name, so the loader can warn and keep the default.
+/// `caps`/`caps_lock`), then mouse buttons (`button2`, `button8`, `BTN_SIDE`…),
+/// otherwise an XKB keysym name; all case-insensitive. `None` for an unknown name, so the
+/// loader can warn and keep the default.
 pub fn parse_trigger(name: &str) -> Option<Trigger> {
     let n = name.trim();
+    if let Some(&(_, _, code)) = BUTTONS.iter().find(|(evdev, x11, _)| {
+        evdev.eq_ignore_ascii_case(n) || x11.is_some_and(|x11| x11.eq_ignore_ascii_case(n))
+    }) {
+        return Some(Trigger::Button(code));
+    }
     match n.to_ascii_lowercase().as_str() {
         "ctrl" | "control" => return Some(Trigger::Mod(ModKind::Ctrl)),
         "shift" => return Some(Trigger::Mod(ModKind::Shift)),
@@ -142,9 +169,15 @@ pub fn parse_trigger(name: &str) -> Option<Trigger> {
 }
 
 /// The display label for a trigger (the key column of the help legend). Modifiers get a
-/// short name; keys use libxkbcommon's canonical name, with a few prettied for the HUD.
+/// short name; keys use libxkbcommon's canonical name, with a few prettied for the HUD;
+/// buttons their `buttonN` name, else their evdev one.
 pub fn trigger_label(t: Trigger) -> String {
     match t {
+        Trigger::Button(code) => match BUTTONS.iter().find(|&&(_, _, c)| c == code) {
+            Some((_, Some(x11), _)) => format!("Button{}", &x11["button".len()..]),
+            Some((evdev, None, _)) => (*evdev).into(),
+            None => format!("{code:#x}"),
+        },
         Trigger::Mod(ModKind::Ctrl) => "Ctrl".into(),
         Trigger::Mod(ModKind::Shift) => "Shift".into(),
         Trigger::Mod(ModKind::Alt) => "Alt".into(),
@@ -239,17 +272,17 @@ impl Keymap {
         km
     }
 
-    /// The discrete action a key press triggers, if any.
-    pub fn action_for_key(&self, ks: Keysym) -> Option<Action> {
+    /// The discrete action a key or button press triggers, if any.
+    pub fn action_for(&self, trigger: Trigger) -> Option<Action> {
         self.keys
             .iter()
-            .find(|(t, _)| *t == Trigger::Key(ks))
+            .find(|(t, _)| *t == trigger)
             .map(|(_, a)| *a)
     }
 
-    /// Whether `ks` engages a held role.
-    pub fn is_role_key(&self, ks: Keysym) -> bool {
-        self.roles().into_iter().any(|role| role.has_key(ks))
+    /// Whether `trigger` engages a held role.
+    pub fn is_role_trigger(&self, trigger: Trigger) -> bool {
+        self.roles().into_iter().any(|role| role.has(trigger))
     }
 
     /// The held roles: pass-through, constrain, spotlight, snap-invert.
@@ -419,7 +452,7 @@ impl Keymap {
         let roles = self.roles();
         for (i, role) in roles.iter().enumerate() {
             for &t in &role.0 {
-                if matches!(t, Trigger::Key(_)) && self.keys.iter().any(|(k, _)| *k == t) {
+                if !matches!(t, Trigger::Mod(_)) && self.keys.iter().any(|(k, _)| *k == t) {
                     warn(tr!("draw-config-role-and-tool", key = trigger_label(t)));
                 }
                 if roles[i + 1..].iter().any(|other| other.0.contains(&t)) {
@@ -435,12 +468,22 @@ fn parse_triggers(o: OneOrMany, name: &str, warnings: &mut Vec<Warning>) -> Vec<
     o.into_vec()
         .iter()
         .filter_map(|s| {
-            let trigger = parse_trigger(s);
-            if trigger.is_none() {
-                let message = tr!("draw-config-bad-key-name", name = s.as_str());
-                warnings.push((format!("draw.keys.{name}"), message));
-            }
-            trigger
+            let message = match parse_trigger(s) {
+                None => tr!("draw-config-bad-key-name", name = s.as_str()),
+                // The left button draws and the right one moves: taking either would
+                // leave no way to do that.
+                Some(Trigger::Button(BTN_LEFT | BTN_RIGHT)) => {
+                    tr!("draw-config-reserved-button", name = s.as_str())
+                }
+                // Click-through empties the overlay's input region: no click reaches it
+                // to end click-through.
+                Some(Trigger::Button(_)) if name == "passthrough" => {
+                    tr!("draw-config-passthrough-button", name = s.as_str())
+                }
+                trigger => return trigger,
+            };
+            warnings.push((format!("draw.keys.{name}"), message));
+            None
         })
         .collect()
 }
@@ -547,7 +590,15 @@ mod tests {
 
     #[test]
     fn label_round_trips_through_parse() {
-        for name in ["p", "space", "plus", "Delete", "F5"] {
+        for name in [
+            "p",
+            "space",
+            "plus",
+            "Delete",
+            "F5",
+            "button8",
+            "BTN_FORWARD",
+        ] {
             let t = parse_trigger(name).unwrap();
             // The label re-parses to the same trigger (prettied labels included).
             assert_eq!(parse_trigger(&trigger_label(t)).unwrap(), t, "{name}");
@@ -557,19 +608,31 @@ mod tests {
     #[test]
     fn default_keymap_matches_legacy_layout() {
         let km = Keymap::default();
-        assert_eq!(km.action_for_key(Keysym::from_char('p')), Some(Action::Pen));
         assert_eq!(
-            km.action_for_key(Keysym::from_char('w')),
+            km.action_for(Trigger::Key(Keysym::from_char('p'))),
+            Some(Action::Pen)
+        );
+        assert_eq!(
+            km.action_for(Trigger::Key(Keysym::from_char('w'))),
             Some(Action::Save)
         );
-        assert_eq!(km.action_for_key(Keysym::plus), Some(Action::WidthInc));
-        assert_eq!(km.action_for_key(Keysym::equal), Some(Action::WidthInc));
-        assert_eq!(km.action_for_key(Keysym::space), Some(Action::Freeze));
         assert_eq!(
-            km.action_for_key(Keysym::from_char('d')),
+            km.action_for(Trigger::Key(Keysym::plus)),
+            Some(Action::WidthInc)
+        );
+        assert_eq!(
+            km.action_for(Trigger::Key(Keysym::equal)),
+            Some(Action::WidthInc)
+        );
+        assert_eq!(
+            km.action_for(Trigger::Key(Keysym::space)),
+            Some(Action::Freeze)
+        );
+        assert_eq!(
+            km.action_for(Trigger::Key(Keysym::from_char('d'))),
             Some(Action::Snap)
         );
-        assert_eq!(km.action_for_key(Keysym::from_char('z')), None);
+        assert_eq!(km.action_for(Trigger::Key(Keysym::from_char('z'))), None);
         assert_eq!(km.passthrough, Role::one(Trigger::Mod(ModKind::Caps)));
         assert_eq!(km.constrain, Role::one(Trigger::Mod(ModKind::Ctrl)));
         assert_eq!(km.spotlight, Role::one(Trigger::Mod(ModKind::Shift)));
@@ -590,13 +653,16 @@ mod tests {
         );
         assert!(warnings.is_empty(), "{warnings:?}");
         // pen moved to 'b', the old 'p' is freed.
-        assert_eq!(km.action_for_key(Keysym::from_char('b')), Some(Action::Pen));
-        assert_eq!(km.action_for_key(Keysym::from_char('p')), None);
+        assert_eq!(
+            km.action_for(Trigger::Key(Keysym::from_char('b'))),
+            Some(Action::Pen)
+        );
+        assert_eq!(km.action_for(Trigger::Key(Keysym::from_char('p'))), None);
         // role rebound, others untouched.
         assert_eq!(km.passthrough, Role::one(Trigger::Mod(ModKind::Alt)));
         assert_eq!(km.constrain, Role::one(Trigger::Mod(ModKind::Ctrl)));
         assert_eq!(
-            km.action_for_key(Keysym::from_char('w')),
+            km.action_for(Trigger::Key(Keysym::from_char('w'))),
             Some(Action::Save)
         );
     }
@@ -615,10 +681,10 @@ mod tests {
         "#,
         );
         assert_eq!(
-            km.action_for_key(Keysym::from_char('n')),
+            km.action_for(Trigger::Key(Keysym::from_char('n'))),
             Some(Action::Snap)
         );
-        assert_eq!(km.action_for_key(Keysym::from_char('d')), None);
+        assert_eq!(km.action_for(Trigger::Key(Keysym::from_char('d'))), None);
         assert!(!km.snap_on_dwell);
         assert_eq!(km.dwell, Duration::from_millis(1200));
         assert_eq!(km.snap_invert, Role::one(Trigger::Mod(ModKind::Logo)));
@@ -630,10 +696,13 @@ mod tests {
     fn an_unknown_key_name_is_named() {
         let (km, warnings) = apply("[keys]\nundo = \"wobble\"\npen = \"b\"");
         assert_eq!(
-            km.action_for_key(Keysym::from_char('u')),
+            km.action_for(Trigger::Key(Keysym::from_char('u'))),
             Some(Action::Undo)
         );
-        assert_eq!(km.action_for_key(Keysym::from_char('b')), Some(Action::Pen));
+        assert_eq!(
+            km.action_for(Trigger::Key(Keysym::from_char('b'))),
+            Some(Action::Pen)
+        );
         assert!(
             matches!(&warnings[..], [(key, message)] if key == "draw.keys.undo"
                 && message.contains("wobble")),
@@ -656,9 +725,12 @@ mod tests {
             km.passthrough,
             Role(vec![Trigger::Mod(ModKind::Caps), Trigger::Key(Keysym::F13)])
         );
-        assert!(km.is_role_key(Keysym::F13));
+        assert!(km.is_role_trigger(Trigger::Key(Keysym::F13)));
         assert_eq!(km.passthrough.label().as_deref(), Some("Caps / F13"));
-        assert_eq!(km.action_for_key(Keysym::from_char('b')), Some(Action::Pen));
+        assert_eq!(
+            km.action_for(Trigger::Key(Keysym::from_char('b'))),
+            Some(Action::Pen)
+        );
         assert!(
             matches!(&warnings[..], [(key, _)] if key == "draw.keys.passthrough"),
             "{warnings:?}"
@@ -671,18 +743,27 @@ mod tests {
     fn the_file_takes_a_key_from_a_default() {
         let (km, warnings) = apply("[keys]\npen = \"r\"");
         assert!(warnings.is_empty(), "{warnings:?}");
-        assert_eq!(km.action_for_key(Keysym::from_char('r')), Some(Action::Pen));
-        assert_eq!(km.action_for_key(Keysym::from_char('p')), None);
+        assert_eq!(
+            km.action_for(Trigger::Key(Keysym::from_char('r'))),
+            Some(Action::Pen)
+        );
+        assert_eq!(km.action_for(Trigger::Key(Keysym::from_char('p'))), None);
         assert_eq!(km.label_for(Action::Rect), None);
 
         // An action with several keys keeps the others.
         let (km, _) = apply("[keys]\nundo = \"plus\"");
-        assert_eq!(km.action_for_key(Keysym::plus), Some(Action::Undo));
-        assert_eq!(km.action_for_key(Keysym::equal), Some(Action::WidthInc));
+        assert_eq!(
+            km.action_for(Trigger::Key(Keysym::plus)),
+            Some(Action::Undo)
+        );
+        assert_eq!(
+            km.action_for(Trigger::Key(Keysym::equal)),
+            Some(Action::WidthInc)
+        );
 
         // A held role takes a key the same way.
         let (km, _) = apply("[keys]\nspotlight = \"s\"");
-        assert!(km.is_role_key(Keysym::from_char('s')));
+        assert!(km.is_role_trigger(Trigger::Key(Keysym::from_char('s'))));
         assert_eq!(km.label_for(Action::Move), None);
     }
 
@@ -698,6 +779,78 @@ mod tests {
         // A role the file sets itself keeps what it names.
         let (km, _) = apply("[keys]\npassthrough = \"alt\"\nsnap-invert = \"super\"");
         assert_eq!(km.snap_invert, Role::one(Trigger::Mod(ModKind::Logo)));
+    }
+
+    /// Mouse buttons go by sway's `buttonN` names or their evdev ones, in any case; 4 to
+    /// 7 are the wheel, which is no button.
+    #[test]
+    fn mouse_buttons_are_named_as_in_sway() {
+        assert_eq!(parse_trigger("button2"), Some(Trigger::Button(0x112)));
+        assert_eq!(parse_trigger("BTN_MIDDLE"), Some(Trigger::Button(0x112)));
+        assert_eq!(parse_trigger("Button8"), Some(Trigger::Button(0x113)));
+        assert_eq!(parse_trigger("btn_side"), Some(Trigger::Button(0x113)));
+        assert_eq!(parse_trigger("button9"), Some(Trigger::Button(0x114)));
+        assert_eq!(parse_trigger("BTN_EXTRA"), Some(Trigger::Button(0x114)));
+        assert_eq!(parse_trigger("button4"), None);
+        assert_eq!(trigger_label(Trigger::Button(0x113)), "Button8");
+    }
+
+    /// The side buttons the issue asked for: back undoes, forward redoes.
+    #[test]
+    fn a_mouse_button_takes_an_action() {
+        let (km, warnings) = apply("[keys]\nundo = \"button8\"\nredo = [\"y\", \"button9\"]");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(km.action_for(Trigger::Button(0x113)), Some(Action::Undo));
+        assert_eq!(km.action_for(Trigger::Button(0x114)), Some(Action::Redo));
+        assert_eq!(km.label_for(Action::Undo).as_deref(), Some("Button8"));
+        // The key undo had is free again, as for any binding.
+        assert_eq!(km.action_for(Trigger::Key(Keysym::from_char('u'))), None);
+    }
+
+    /// The left button draws and the right one moves: neither can be bound, and the rest
+    /// of the binding stands.
+    #[test]
+    fn the_drawing_buttons_cannot_be_bound() {
+        let (km, warnings) = apply("[keys]\npen = [\"button1\", \"q\"]\nundo = \"BTN_RIGHT\"");
+        assert_eq!(
+            km.action_for(Trigger::Key(Keysym::from_char('q'))),
+            Some(Action::Pen)
+        );
+        assert_eq!(km.action_for(Trigger::Button(BTN_LEFT)), None);
+        assert_eq!(km.action_for(Trigger::Button(BTN_RIGHT)), None);
+        assert_eq!(
+            km.action_for(Trigger::Key(Keysym::from_char('u'))),
+            Some(Action::Undo)
+        );
+        let keys: Vec<&str> = warnings.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, ["draw.keys.pen", "draw.keys.undo"], "{warnings:?}");
+    }
+
+    /// A held control takes a button, except pass-through: click-through gives the overlay
+    /// no clicks, so a button could never end it.
+    #[test]
+    fn a_held_control_takes_a_button_but_passthrough() {
+        let (km, warnings) =
+            apply("[keys]\nspotlight = \"button2\"\npassthrough = [\"button9\", \"caps\"]");
+        assert!(km.is_role_trigger(Trigger::Button(0x112)));
+        assert_eq!(km.spotlight, Role::one(Trigger::Button(0x112)));
+        assert_eq!(km.passthrough, Role::one(Trigger::Mod(ModKind::Caps)));
+        assert!(
+            matches!(&warnings[..], [(key, message)] if key == "draw.keys.passthrough"
+                && message.contains("button9")),
+            "{warnings:?}"
+        );
+    }
+
+    /// A button bound both to a held control and to an action is a clash like a key.
+    #[test]
+    fn a_button_bound_to_a_control_and_an_action_is_named() {
+        let (_, warnings) = apply("[keys]\nundo = \"button8\"\nspotlight = \"button8\"");
+        assert!(
+            matches!(&warnings[..], [(key, message)] if key == "draw.keys"
+                && message.contains("Button8")),
+            "{warnings:?}"
+        );
     }
 
     /// The file's own clashes are named, against the bindings as a whole.

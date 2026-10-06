@@ -55,6 +55,8 @@ draw-config-dwell-zero = muss mindestens 1 sein; `dwell = false` schaltet das Ei
 draw-config-two-actions = `{ $key }` ist zwei Aktionen zugewiesen
 draw-config-role-and-tool = `{ $key }` ist zugleich einer gehaltenen Steuerung und einem Werkzeug zugewiesen
 draw-config-two-roles = `{ $key }` ist zwei gehaltenen Steuerungen zugewiesen
+draw-config-reserved-button = `{ $name }` kann nicht belegt werden: die linke Taste zeichnet, die rechte verschiebt
+draw-config-passthrough-button = `{ $name }` kann das Durchklicken nicht beenden: das Overlay erhält dann keine Klicks
 tray-status-drawing = Zeichnen
 tray-status-idle = Inaktiv (Klick durchreichen)
 tray-toggle = Zeichenmodus umschalten

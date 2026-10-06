@@ -55,6 +55,8 @@ draw-config-dwell-zero = musi wynosić co najmniej 1; `dwell = false` wyłącza 
 draw-config-two-actions = `{ $key }` jest przypisany do dwóch akcji
 draw-config-role-and-tool = `{ $key }` jest przypisany jednocześnie do przytrzymywanej kontrolki i do narzędzia
 draw-config-two-roles = `{ $key }` jest przypisany do dwóch przytrzymywanych kontrolek
+draw-config-reserved-button = nie można przypisać `{ $name }`: lewy przycisk rysuje, a prawy przesuwa
+draw-config-passthrough-button = `{ $name }` nie może zakończyć przepuszczania kliknięć: nakładka nie dostaje wtedy kliknięć
 tray-status-drawing = Rysowanie
 tray-status-idle = Bezczynny (klikanie przez warstwę)
 tray-toggle = Przełącz tryb rysowania

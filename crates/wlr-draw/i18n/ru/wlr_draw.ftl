@@ -55,6 +55,8 @@ draw-config-dwell-zero = должно быть не меньше 1; `dwell = fal
 draw-config-two-actions = `{ $key }` назначена двум действиям
 draw-config-role-and-tool = `{ $key }` назначена одновременно удерживаемому управлению и инструменту
 draw-config-two-roles = `{ $key }` назначена двум удерживаемым управлениям
+draw-config-reserved-button = `{ $name }` нельзя назначить: левая кнопка рисует, а правая перемещает
+draw-config-passthrough-button = `{ $name }` не может выключить сквозной клик: в этот момент оверлей не получает кликов
 tray-status-drawing = Рисование
 tray-status-idle = Ожидание (сквозной клик)
 tray-toggle = Переключить режим рисования

@@ -20,6 +20,10 @@ All notable changes to this project are documented here. The format is based on
   ([#23](https://github.com/sjourdois/wlr-utils/issues/23)) — `corner-radius` in
   `[theme]` rounds every corner in proportion, `0` squaring them all. `[chooser]` sets
   the card's size, the tiles' width, the spacing and the Alt-Tab row's size.
+- **Mouse buttons in `wlr-draw`'s bindings**
+  ([#25](https://github.com/sjourdois/wlr-utils/issues/25)) — `button2`, `button8`,
+  `button9` or a `BTN_` name, as in sway: `undo = "button8"` puts undo on the back
+  button. The left and right buttons stay for drawing and moving.
 - **`migrate-config`** — moves the old `theme.toml` and `keys.toml` into `config.toml`,
   comments included, then deletes them; `-` prints the new file instead.
 - **`wlr-draw reload`** — re-reads the configuration and keeps the drawing, however the

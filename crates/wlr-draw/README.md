@@ -103,17 +103,25 @@ the defaults above.
 
 ```toml
 [draw.keys]
-undo = ["u", "z"]
+undo = ["u", "button8"]   # the mouse's back button too
+redo = ["y", "button9"]
 passthrough = "alt"
 ```
 
+**Mouse buttons** are named as in sway's `bindsym`: `button2` (the middle one),
+`button8` and `button9` (the side ones, usually back and forward), or their evdev name
+(`BTN_SIDE`, `BTN_EXTRA`, `BTN_FORWARD`…). The left and right buttons stay for drawing
+and moving.
+
 The four held controls — `passthrough` (click-through), `constrain`, `spotlight`,
 `snap-invert` — take **a modifier** (`caps`, `ctrl`, `shift`, `alt`, `super`), **a
-regular key**, or a list of them, any of which engages the control. This is the fix for
-keyboards without a usable Caps Lock (e.g. HHKB): point `passthrough` at `alt`, `super`,
-or any key (`alt` takes it from `snap-invert`, which you can then move elsewhere). A
-modifier engages while held (Caps Lock latches); a regular key bound to
-`passthrough` toggles, and to `constrain`/`spotlight`/`snap-invert` engages while held.
+regular key**, a mouse button, or a list of them, any of which engages the control. This
+is the fix for keyboards without a usable Caps Lock (e.g. HHKB): point `passthrough` at
+`alt`, `super`, or any key (`alt` takes it from `snap-invert`, which you can then move
+elsewhere). A modifier engages while held (Caps Lock latches); a regular key bound to
+`passthrough` toggles, and a key or button bound to `constrain`/`spotlight`/`snap-invert`
+engages while held. `passthrough` takes no mouse button: in click-through, the overlay
+gets no clicks.
 
 The `[draw]` section holds the two settings the `snap` binding acts on: `dwell` (whether
 a pen stroke snaps on its own) and `dwell-ms` (how long it must hold still, 650 by
