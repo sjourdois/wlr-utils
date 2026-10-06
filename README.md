@@ -115,6 +115,7 @@ curl -LO https://github.com/sjourdois/wlr-utils/releases/latest/download/wlr-uti
 tar xf wlr-utils-x86_64-unknown-linux-gnu.tar.xz
 cd wlr-utils-x86_64-unknown-linux-gnu
 sudo sh install.sh                 # or elsewhere: sudo env PREFIX=/usr sh install.sh
+# or for yourself alone, without root: PREFIX=~/.local sh install.sh
 ```
 
 ### From source
@@ -161,7 +162,7 @@ AUR packages do:
 
 ```sh
 cargo build --release -p wlr-utils
-sudo sh packaging/install.sh
+sudo sh packaging/install.sh      # or for yourself alone: PREFIX=~/.local sh packaging/install.sh
 ```
 
 ## Requirements
@@ -330,6 +331,9 @@ sudo rm -rf /usr/local/bin/wlr-{chooser,switcher,overlayd,peek,shot,draw} \
   /usr/local/lib/systemd/user/wlr-{overlayd,draw}.service \
   /usr/local/share/{wlr-utils,doc/wlr-utils,licenses/wlr-utils}
 ```
+
+Installed for yourself alone (`PREFIX=~/.local`), the same files sit under `~/.local`,
+with the units in `~/.local/share/systemd/user`.
 
 The prebuilt installer also puts the binaries in `~/.cargo/bin`, but cargo does not know
 them, and it leaves a receipt; on Nix, remove the profile entry:

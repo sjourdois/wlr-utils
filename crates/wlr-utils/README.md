@@ -59,6 +59,7 @@ curl -LO https://github.com/sjourdois/wlr-utils/releases/latest/download/wlr-uti
 tar xf wlr-utils-x86_64-unknown-linux-gnu.tar.xz
 cd wlr-utils-x86_64-unknown-linux-gnu
 sudo sh install.sh                 # or elsewhere: sudo env PREFIX=/usr sh install.sh
+# or for yourself alone, without root: PREFIX=~/.local sh install.sh
 ```
 
 ## Uninstall
