@@ -94,10 +94,11 @@ struct ShotArgs {
     /// Composite the mouse cursor into the capture (it is left out by default).
     #[arg(long)]
     cursor: bool,
-    /// Output image format.
-    #[arg(short = 't', long, value_enum, default_value_t = Fmt::Png)]
-    r#type: Fmt,
-    /// JPEG quality (1–100), only for `--type jpeg`.
+    /// Output image format. Without it, FILE's extension picks it (`.jpg`/`.jpeg`,
+    /// `.ppm`, `.png`), and anything else is PNG.
+    #[arg(short = 't', long, value_enum)]
+    r#type: Option<Fmt>,
+    /// JPEG quality (1–100), only for JPEG.
     #[arg(short = 'q', long, default_value_t = 90)]
     quality: u8,
     /// Copy the screenshot to the Wayland clipboard instead of writing it out.
@@ -120,7 +121,7 @@ struct ShotArgs {
     file: String,
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, PartialEq, Debug, ValueEnum)]
 enum Fmt {
     Png,
     Jpeg,
@@ -212,14 +213,31 @@ fn screenshot(args: ShotArgs) -> Result<()> {
         capture::capture_output(&mut client, args.output.as_deref(), DEFAULT_BUDGET)?
     };
 
-    let bytes = encode(&img, args.r#type, args.quality).context("encoding image")?;
+    let fmt = image_format(args.r#type, &args.file);
+    let bytes = encode(&img, fmt, args.quality).context("encoding image")?;
     if args.clipboard {
-        clipboard_copy(mime_for(args.r#type), bytes, args.clipboard_foreground)
+        clipboard_copy(mime_for(fmt), bytes, args.clipboard_foreground)
             .context("copying to clipboard")?;
     } else {
         write_out(&args.file, &bytes).context("writing output")?;
     }
     Ok(())
+}
+
+/// The image format: `-t` when given, else the one `file`'s extension names, else PNG
+/// (stdout, the clipboard, or an extension that names none of them).
+fn image_format(explicit: Option<Fmt>, file: &str) -> Fmt {
+    explicit.unwrap_or_else(|| {
+        let ext = std::path::Path::new(file)
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_ascii_lowercase);
+        match ext.as_deref() {
+            Some("jpg" | "jpeg") => Fmt::Jpeg,
+            Some("ppm") => Fmt::Ppm,
+            _ => Fmt::Png,
+        }
+    })
 }
 
 /// The clipboard MIME type for an output format.
@@ -940,3 +958,22 @@ mod record_impl {
 
 #[cfg(feature = "video")]
 use record_impl::{RecordArgs, record};
+
+#[cfg(test)]
+mod tests {
+    use super::{Fmt, image_format};
+
+    #[test]
+    fn image_format_follows_the_extension_unless_told() {
+        assert_eq!(image_format(None, "shot.jpg"), Fmt::Jpeg);
+        assert_eq!(image_format(None, "Shot.JPEG"), Fmt::Jpeg);
+        assert_eq!(image_format(None, "shot.ppm"), Fmt::Ppm);
+        assert_eq!(image_format(None, "shot.png"), Fmt::Png);
+        // Nothing to go by: PNG, as before.
+        assert_eq!(image_format(None, "-"), Fmt::Png);
+        assert_eq!(image_format(None, "shot"), Fmt::Png);
+        assert_eq!(image_format(None, "shot.webp"), Fmt::Png);
+        // `-t` wins over the extension.
+        assert_eq!(image_format(Some(Fmt::Png), "shot.jpg"), Fmt::Png);
+    }
+}

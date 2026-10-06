@@ -24,6 +24,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **`wlr-shot screenshot shot.jpg` writes a JPEG** — without `-t`, the format now
+  follows the file's extension; it was always PNG.
 - **`wlr-shot record` falls back when hardware encoding is unavailable** — `--encoder
   auto` picked NVENC whenever FFmpeg was built with it, as Debian's and Arch's are, and
   failed on machines without NVIDIA. It now tries VAAPI, then `libx264`.

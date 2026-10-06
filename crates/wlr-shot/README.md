@@ -66,7 +66,8 @@ Contents:
 
 Encoding & destination:
 
-- `-t, --type` — `png` (default), `jpeg`, or `ppm`.
+- `-t, --type` — `png`, `jpeg`, or `ppm`. Without it, the file's extension picks
+  (`.jpg`/`.jpeg`, `.ppm`, `.png`), and anything else — stdout included — is PNG.
 - `-q, --quality` — JPEG quality, 1–100 (default 90).
 - `-c, --clipboard` — copy to the Wayland clipboard instead of writing a file. A
   small daemon detaches to serve the selection (wlroots `data-control`, the
