@@ -297,6 +297,23 @@ layer rule (blur, animation, …) can target one tool:
 `wlr-peek mirror` is an ordinary window instead, with the app id `wlr-peek-mirror` for
 window rules.
 
+## Key bindings on other compositors
+
+The examples in these READMEs are written for sway. The same binding, and the same
+command run at startup, elsewhere:
+
+| | Key binding | At startup |
+| --- | --- | --- |
+| sway | `bindsym Mod1+Tab exec wlr-switcher` | `exec wlr-overlayd` |
+| Hyprland ≥ 0.55 (`hyprland.lua`) | `hl.bind("ALT + Tab", hl.dsp.exec_cmd("wlr-switcher"))` | `hl.on("hyprland.start", function () hl.exec_cmd("wlr-overlayd") end)` |
+| Hyprland, `hyprland.conf` | `bind = ALT, Tab, exec, wlr-switcher` | `exec-once = wlr-overlayd` |
+| niri | `Alt+Tab { spawn "wlr-switcher"; }` in `binds` | `spawn-at-startup "wlr-overlayd"` |
+
+On niri, a command with a pipe or a `$(…)` goes through `spawn-sh "…"` (or
+`spawn-sh-at-startup`), and each argument of `spawn` is its own string:
+`spawn "wlr-switcher" "--layout" "grid"`. What runs where is in each tool's README and in
+[COMPATIBILITY.md](COMPATIBILITY.md).
+
 ## Documentation
 
 - **[wlr-chooser README](crates/wlr-chooser/README.md)** — portal setup, options,

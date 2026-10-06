@@ -222,7 +222,8 @@ tray and so no self-registration — start the daemon the way you start anything
 your session. One line in your compositor's config:
 
 - sway: `exec wlr-draw`
-- Hyprland: `exec-once = wlr-draw`
+- Hyprland: `hl.on("hyprland.start", function () hl.exec_cmd("wlr-draw") end)` in
+  `hyprland.lua` (0.55 and later), or `exec-once = wlr-draw` in `hyprland.conf`
 - niri: `spawn-at-startup "wlr-draw"`
 
 Or the provided systemd `--user` unit
@@ -324,6 +325,11 @@ cargo build --release -p wlr-draw
 `--no-default-features` drops Fluent (English-only hints) **and** the tray.
 
 ## Requirements
+
+**Works on** every compositor with `wlr-layer-shell`: sway, Hyprland, niri, labwc,
+Wayfire, river, dwl, cosmic-comp, and KDE's KWin, where freeze-frame and save are missing
+for want of a capture protocol. Not on GNOME. Details in
+[COMPATIBILITY.md](../../COMPATIBILITY.md).
 
 - **GL stack** — `libegl1` at runtime; the overlay renders through EGL/GLES. The
   freeze-frame capture goes through shared memory, so `--no-gpu` (or `WLR_NO_GPU=1`)

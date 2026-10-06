@@ -188,6 +188,12 @@ The default build records video and links the system FFmpeg libraries (see
 
 ## Requirements
 
+**Works on** — screens and regions on every compositor that captures screens (sway,
+Hyprland, niri, labwc, Wayfire, river, dwl, cosmic-comp); windows (`-w`, `--app-id`,
+`--title`, `--pick-window`) where windows can be captured (Sway ≥ 1.12, Hyprland ≥ 0.54,
+river ≥ 0.4, cosmic-comp, and partly labwc ≥ 0.20 and dwl ≥ 0.9). Not on GNOME or KDE.
+Details in [COMPATIBILITY.md](../../COMPATIBILITY.md).
+
 A wlroots compositor exposing a capture protocol. Output/region screenshots and
 recording need `ext-image-copy-capture-v1` with the
 `ext-output-image-capture-source-manager-v1` source — **Sway ≥ 1.11 / wlroots ≥ 0.19** —

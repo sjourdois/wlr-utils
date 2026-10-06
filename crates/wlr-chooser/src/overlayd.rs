@@ -30,9 +30,10 @@ context an overlay would otherwise build from scratch every time — some ninety
 milliseconds, paid once here instead of at every overlay.\n\n\
 Start it with your session and nothing else changes: `wlr-switcher` and `wlr-chooser` \
 find it on their own, and work exactly as before when it is not running.\n\n\
-    sway:      exec wlr-overlayd\n\
-    Hyprland:  exec-once = wlr-overlayd\n\
-    niri:      spawn-at-startup \"wlr-overlayd\"\n\n\
+    sway:             exec wlr-overlayd\n\
+    Hyprland (.lua):  hl.on(\"hyprland.start\", function () hl.exec_cmd(\"wlr-overlayd\") end)\n\
+    Hyprland (.conf): exec-once = wlr-overlayd\n\
+    niri:             spawn-at-startup \"wlr-overlayd\"\n\n\
 A systemd --user unit comes with it: `wlr-overlayd --print-unit` prints it. Nothing is \
 captured while the daemon waits. To show an overlay in its own process anyway, pass --no-daemon \
 to wlr-switcher or wlr-chooser."

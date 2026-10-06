@@ -53,6 +53,13 @@ instead of ninety — see [Instant overlays](#instant-overlays--wlr-overlayd).
 
 ## Requirements
 
+**Works on** — `wlr-chooser` offers screens on every compositor that captures them (sway,
+Hyprland, niri, labwc, Wayfire, river, dwl, cosmic-comp) and windows where windows can be
+captured (Sway ≥ 1.12, Hyprland ≥ 0.54, river ≥ 0.4, cosmic-comp, and partly labwc ≥ 0.20
+and dwl ≥ 0.9). `wlr-switcher` needs those windows, and dwl cannot focus the one picked;
+it does not run on niri or Wayfire. Neither runs on GNOME or KDE. Details in
+[COMPATIBILITY.md](../../COMPATIBILITY.md).
+
 - A compositor speaking the wlroots protocols, with `wlr-layer-shell` (layers named
   `wlr-chooser` and `wlr-switcher`, for [compositor rules](../../README.md#compositor-rules))
   and a capture protocol.
@@ -389,7 +396,8 @@ as before when there is none.
 One line in your compositor's config:
 
 - sway: `exec wlr-overlayd`
-- Hyprland: `exec-once = wlr-overlayd`
+- Hyprland: `hl.on("hyprland.start", function () hl.exec_cmd("wlr-overlayd") end)` in
+  `hyprland.lua` (0.55 and later), or `exec-once = wlr-overlayd` in `hyprland.conf`
 - niri: `spawn-at-startup "wlr-overlayd"`
 
 Or, if you would rather have it in the journal and restarted with the session, the
