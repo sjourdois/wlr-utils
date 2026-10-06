@@ -530,9 +530,15 @@ impl State {
 
 /// Drag a rectangle on a frozen overlay spanning every captured output; returns the
 /// chosen region (global logical coordinates) or `None` if cancelled (`Esc`).
-pub fn select_region(captures: &[OutputCapture], hint: &str) -> Result<Option<Region>> {
+/// `namespace` names the overlay's layer surfaces for compositor rules: the name of the
+/// command that shows it.
+pub fn select_region(
+    namespace: &str,
+    captures: &[OutputCapture],
+    hint: &str,
+) -> Result<Option<Region>> {
     let conn = Connection::connect_to_env().context("Wayland connection")?;
-    select_region_on(&conn, captures, hint)
+    select_region_on(&conn, namespace, captures, hint)
 }
 
 /// [`select_region`] on a caller-provided connection. Use this to chain a second
@@ -542,20 +548,28 @@ pub fn select_region(captures: &[OutputCapture], hint: &str) -> Result<Option<Re
 /// avoids it — the same way the per-output surfaces already share one here.
 pub fn select_region_on(
     conn: &Connection,
+    namespace: &str,
     captures: &[OutputCapture],
     hint: &str,
 ) -> Result<Option<Region>> {
-    Ok(run(conn, captures, Mode::Region, hint)?.map(|o| match o {
-        Outcome::Region(r) => r,
-        Outcome::Point { .. } => unreachable!("region mode yields a region"),
-    }))
+    Ok(
+        run(conn, namespace, captures, Mode::Region, hint)?.map(|o| match o {
+            Outcome::Region(r) => r,
+            Outcome::Point { .. } => unreachable!("region mode yields a region"),
+        }),
+    )
 }
 
 /// Pick a single pixel on a frozen overlay (with a magnifying loupe); returns its
 /// position in global logical coordinates, or `None` if cancelled (`Esc`).
-pub fn pick_point(captures: &[OutputCapture], hint: &str) -> Result<Option<(i32, i32)>> {
+/// `namespace` is as for [`select_region`].
+pub fn pick_point(
+    namespace: &str,
+    captures: &[OutputCapture],
+    hint: &str,
+) -> Result<Option<(i32, i32)>> {
     let conn = Connection::connect_to_env().context("Wayland connection")?;
-    pick_point_on(&conn, captures, hint)
+    pick_point_on(&conn, namespace, captures, hint)
 }
 
 /// [`pick_point`] on a caller-provided connection. Establish this connection *before*
@@ -565,35 +579,44 @@ pub fn pick_point(captures: &[OutputCapture], hint: &str) -> Result<Option<(i32,
 /// BadAlloc`). Creating the overlay connection first keeps its `EGLDisplay` valid.
 pub fn pick_point_on(
     conn: &Connection,
+    namespace: &str,
     captures: &[OutputCapture],
     hint: &str,
 ) -> Result<Option<(i32, i32)>> {
-    Ok(run(conn, captures, Mode::Point, hint)?.map(|o| match o {
-        Outcome::Point { x, y } => (x, y),
-        Outcome::Region(_) => unreachable!("point mode yields a point"),
-    }))
+    Ok(
+        run(conn, namespace, captures, Mode::Point, hint)?.map(|o| match o {
+            Outcome::Point { x, y } => (x, y),
+            Outcome::Region(_) => unreachable!("point mode yields a point"),
+        }),
+    )
 }
 
 /// Magnify the frozen `captures` around the cursor: a full-screen zoom that pans as
 /// the pointer moves, scroll to change the zoom, `Esc` to quit. Returns when the user
 /// quits. Not live (the screen is frozen on entry) — a fullscreen live magnifier
-/// would capture its own output.
-pub fn magnify(captures: &[OutputCapture], hint: &str) -> Result<()> {
+/// would capture its own output. `namespace` is as for [`select_region`].
+pub fn magnify(namespace: &str, captures: &[OutputCapture], hint: &str) -> Result<()> {
     let conn = Connection::connect_to_env().context("Wayland connection")?;
-    magnify_on(&conn, captures, hint)
+    magnify_on(&conn, namespace, captures, hint)
 }
 
 /// [`magnify`] on a caller-provided connection. As with [`pick_point_on`], open this
 /// connection before capturing so the overlay's `EGLDisplay` can't alias a freed one.
-pub fn magnify_on(conn: &Connection, captures: &[OutputCapture], hint: &str) -> Result<()> {
-    run(conn, captures, Mode::Magnify, hint)?;
+pub fn magnify_on(
+    conn: &Connection,
+    namespace: &str,
+    captures: &[OutputCapture],
+    hint: &str,
+) -> Result<()> {
+    run(conn, namespace, captures, Mode::Magnify, hint)?;
     Ok(())
 }
 
-/// Run the frozen overlay over `captures` in the given [`Mode`] on `conn`; returns the
-/// user's choice or `None` if cancelled.
+/// Run the frozen overlay over `captures` in the given [`Mode`] on `conn`, its layer
+/// surfaces named `namespace`; returns the user's choice or `None` if cancelled.
 fn run(
     conn: &Connection,
+    namespace: &str,
     captures: &[OutputCapture],
     mode: Mode,
     hint: &str,
@@ -649,7 +672,7 @@ fn run(
             &qh,
             surface,
             Layer::Overlay,
-            Some("wlr-overlay"),
+            Some(namespace),
             Some(&wl_out),
         );
         layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);

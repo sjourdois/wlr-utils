@@ -51,7 +51,6 @@ impl Selection {
     }
 }
 
-pub const APP_ID: &str = "wlr-chooser";
 const TILE_W: f32 = 300.0; // reference tile size (aspect ratio for the thumbnail)
 const TILE_H: f32 = 180.0;
 const MIN_TILE: f32 = 280.0; // tiles grow from here to fill the row width
@@ -971,6 +970,9 @@ pub struct Options {
     pub auto_select: bool,
     /// The keys that move the highlight.
     pub cycle: CycleKeys,
+    /// The layer-shell namespace of the overlay's surface: the name of the command
+    /// that shows it, so compositor rules can tell the chooser from the switcher.
+    pub namespace: &'static str,
 }
 
 /// How long the tiles stay hidden in hold-to-switch mode if keyboard focus
@@ -1045,6 +1047,7 @@ pub struct App {
     /// The hints handed to the tiles, in tile order; empty until the host delivers a
     /// keymap (see [`App::set_keymap`]).
     hints: Vec<Hint>,
+    namespace: &'static str,
 }
 
 impl App {
@@ -1088,6 +1091,7 @@ impl App {
             theme,
             hint_row: opts.hints,
             hints: Vec::new(),
+            namespace: opts.namespace,
         }
     }
 
@@ -1099,6 +1103,11 @@ impl App {
     /// Cancel without a selection (e.g. the compositor closed the surface).
     pub fn cancel(&mut self) {
         self.closing = true;
+    }
+
+    /// The layer-shell namespace the host gives the overlay's surface.
+    pub fn namespace(&self) -> &'static str {
+        self.namespace
     }
 
     /// How hold-to-switch runs; the host uses this to decide whether to watch the
@@ -2244,6 +2253,7 @@ mod tests {
     /// on what they exercise.
     fn options() -> Options {
         Options {
+            namespace: "wlr-switcher",
             mode: Mode::Windows,
             show_system: false,
             grid: None,

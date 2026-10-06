@@ -244,6 +244,7 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Option<S
         hints: cli.hints.map(Into::into),
         auto_select: false,
         cycle: CycleKeys::default(),
+        namespace: "wlr-chooser",
     };
     preflight(&mut opts, mode)?;
 

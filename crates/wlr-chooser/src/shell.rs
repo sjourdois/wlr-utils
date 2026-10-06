@@ -404,14 +404,11 @@ impl State {
         // the focused output when the layer surface is created, so one built at
         // daemon startup would pin every overlay to whichever screen was in front
         // back then.
+        let namespace = self.app.as_ref().map(App::namespace);
         let surface = self.compositor.create_surface(qh);
-        let layer = self.layer_shell.create_layer_surface(
-            qh,
-            surface,
-            Layer::Overlay,
-            Some(crate::ui::APP_ID),
-            None,
-        );
+        let layer =
+            self.layer_shell
+                .create_layer_surface(qh, surface, Layer::Overlay, namespace, None);
         layer.set_anchor(Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT);
         layer.set_keyboard_interactivity(KeyboardInteractivity::Exclusive);
         layer.set_exclusive_zone(-1); // cover everything, including bars

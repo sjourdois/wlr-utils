@@ -315,6 +315,7 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, Str
         hints: cli.hints.map(Into::into),
         auto_select,
         cycle: cli.cycle_key.into(),
+        namespace: "wlr-switcher",
     };
     if let Some(mode) = cli.scratchpad
         && scratchpad_settled(mode, &mut opts)?

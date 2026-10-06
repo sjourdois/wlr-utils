@@ -13,6 +13,13 @@ All notable changes to this project are documented here. The format is based on
   [@bR3iN](https://github.com/bR3iN)) — brings the picked window onto the current
   workspace, on sway, Hyprland and cosmic-comp.
 
+### Changed
+
+- **Each overlay's layer is named after its command** — a compositor rule can now tell
+  `wlr-switcher` from `wlr-chooser`, which both used `wlr-chooser`. Region selection
+  and the colour picker, until now `wlr-overlay`, use `wlr-shot` or `wlr-peek`. Rules
+  written for the old names need updating; the README lists the namespaces.
+
 ### Fixed
 
 - **`systemctl --user reload wlr-draw` reloads instead of stopping the daemon** — it
@@ -37,6 +44,12 @@ All notable changes to this project are documented here. The format is based on
   the daemon kept an overlay up, keyboard held, after the invocation that asked for
   it was gone, and answered every new one `busy`. It now takes the overlay down as
   soon as its client hangs up.
+
+### Breaking
+
+- `wlr-capture`: the `overlay` functions (`select_region`, `pick_point`, `magnify` and
+  their `_on` forms) take the layer-shell namespace to use. Shipped as a minor version:
+  the crate is published to let the binaries be.
 
 ## 1.10.0 — 2026-09-24
 

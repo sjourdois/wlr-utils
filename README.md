@@ -187,6 +187,19 @@ systemctl --user disable --now wlr-overlayd.service
 rm -f ~/.config/systemd/user/wlr-overlayd.service   # only if you copied it there
 ```
 
+## Compositor rules
+
+Each overlay is a `wlr-layer-shell` surface named after the command that shows it, so a
+layer rule (blur, animation, …) can target one tool:
+
+| Namespace | Overlay |
+| --- | --- |
+| `wlr-chooser` | the source picker, also when `wlr-shot` or `wlr-peek` asks it for a window |
+| `wlr-switcher` | the window switcher and its exposé |
+| `wlr-draw` | the annotation overlay |
+| `wlr-shot` | region selection |
+| `wlr-peek` | the colour picker, the loupe and region selection |
+
 ## Documentation
 
 - **[wlr-chooser README](crates/wlr-chooser/README.md)** — portal setup, options,

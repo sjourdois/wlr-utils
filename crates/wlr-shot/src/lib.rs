@@ -15,6 +15,9 @@ use wlr_capture::{focus, overlay, wl};
 
 mod i18n;
 
+/// The layer-shell namespace of the region overlay, for compositor rules.
+const LAYER_NAMESPACE: &str = "wlr-shot";
+
 #[derive(Parser)]
 #[command(
     name = "wlr-shot",
@@ -179,7 +182,12 @@ fn screenshot(args: ShotArgs) -> Result<()> {
         // Freeze every output, let the user drag a region, then crop from the same
         // frozen pixels (so the shot matches exactly what was on screen).
         let caps = capture::capture_all(&mut client, DEFAULT_BUDGET)?;
-        match overlay::select_region_on(&conn, &caps, &crate::tr!("overlay-region-hint"))? {
+        match overlay::select_region_on(
+            &conn,
+            LAYER_NAMESPACE,
+            &caps,
+            &crate::tr!("overlay-region-hint"),
+        )? {
             Some(region) => capture::composite(&caps, region)?,
             None => std::process::exit(1), // cancelled
         }
@@ -326,7 +334,7 @@ fn write_out(file: &str, bytes: &[u8]) -> Result<()> {
 
 #[cfg(feature = "video")]
 mod record_impl {
-    use super::{active_window_rect, focused_output, pick_window};
+    use super::{LAYER_NAMESPACE, active_window_rect, focused_output, pick_window};
     use anyhow::{Context, Result, bail};
     use clap::{Args, ValueEnum};
     use std::sync::Arc;
@@ -686,6 +694,7 @@ mod record_impl {
             let caps = capture::capture_all(client, capture::DEFAULT_BUDGET)?;
             match wlr_capture::overlay::select_region_on(
                 &conn,
+                LAYER_NAMESPACE,
                 &caps,
                 &crate::tr!("overlay-region-hint"),
             )? {
