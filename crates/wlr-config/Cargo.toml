@@ -20,7 +20,7 @@ default = ["i18n"]
 i18n = ["wlr-i18n/i18n", "dep:rust-embed"]
 
 [dependencies]
-wlr-i18n = { path = "../wlr-i18n", version = "1.10.0", default-features = false }
+wlr-i18n = { path = "../wlr-i18n", version = "1.11.0", default-features = false }
 rust-embed = { workspace = true, optional = true }
 ecolor.workspace = true
 serde.workspace = true
@@ -32,4 +32,4 @@ toml_edit.workspace = true
 tempfile.workspace = true
 
 [build-dependencies]
-wlr-i18n = { path = "../wlr-i18n", version = "1.10.0", default-features = false }
+wlr-i18n = { path = "../wlr-i18n", version = "1.11.0", default-features = false }

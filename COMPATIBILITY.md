@@ -45,7 +45,7 @@ Tested on **Sway** ≥ 1.12 (the development compositor), **Hyprland 0.56.2**,
 advertised protocols, the focus backend and `wlr-switcher`'s focus change were checked in
 a software-rendered virtual machine, where frame capture could not be exercised. The other
 rows are untested: they were checked against each project's latest release and its
-source on 2026-09-24.
+source on 2026-10-06 (cosmic-comp 1.9.0 changed nothing these rows depend on).
 
 Three caveats:
 
