@@ -2,104 +2,41 @@
 
 `wlr-utils` is built on a handful of Wayland protocols. A compositor that
 advertises them works; one that doesn't, doesn't (there is no portal fallback).
-The quickest way to check your own compositor is the `doctor` command, which
-**every tool** exposes — a `doctor` subcommand on `wlr-peek` / `wlr-shot` / `wlr-draw`,
-and a `--doctor` flag on `wlr-chooser` / `wlr-switcher`:
 
-```console
-$ wlr-peek doctor
-```
+## Does it work on my compositor?
 
-It prints your tool version, OS, compositor + version, which of the protocols below
-the running compositor advertises and which capture protocol the engine uses there, then
-one line each for `Screen capture:`, `Window capture:`, `Window focus:`, `GPU capture:`,
-`Focus IPC:` and `Configuration:` — so it doubles as the environment block a bug report
-needs. Any tool prints the same report, so a single-tool install can produce it too —
-except `wlr-draw` on its own, built without the focus backends, which leaves the
-`Focus IPC:` line out and says `GPU capture: not built in`.
+What each column gives you:
 
-## Protocols used
-
-| Protocol | Used for | Needed by |
-| --- | --- | --- |
-| `ext-image-copy-capture-v1` + `ext-image-capture-source-v1` + the output / foreign-toplevel source managers | the **capture engine** (frames of an output or a window) | everything |
-| `wlr-screencopy` (`zwlr_screencopy_manager_v1`, v3) | the capture engine's fallback, **outputs only**, used when `ext-image-copy-capture-v1` is absent | screen capture on a compositor without the `ext` protocols |
-| `ext-foreign-toplevel-list-v1` | enumerating windows | `wlr-chooser`, `-w`, `wlr-peek mirror`, window record/watch |
-| `wlr-foreign-toplevel-management` (`zwlr_foreign_toplevel_manager_v1`) | focusing the picked window, and reading which window is focused (its `activated` state) | `wlr-switcher` |
-| `cosmic-toplevel-management` (`zcosmic_toplevel_manager_v1`) + `cosmic-toplevel-info` v2+ | focusing the picked window on COSMIC, which has no `wlr-foreign-toplevel-management` | `wlr-switcher` on cosmic-comp |
-| `wlr-layer-shell` (`zwlr_layer_shell_v1`) | full-screen overlays | the region selector (`-s`), `wlr-peek loupe`/`color`, `wlr-switcher`, `wlr-chooser`, `wlr-draw` |
-| `wlr-data-control` (`zwlr_data_control_manager_v1`) | clipboard copy | `-c`/`--clipboard` |
-| `keyboard-shortcuts-inhibit` (`zwp_keyboard_shortcuts_inhibit_manager_v1`) | grabbing keys under a layer-shell grab | `wlr-chooser` and `wlr-switcher` (so `Alt+Tab` reaches the switcher) |
-| `linux-dmabuf` (`zwp_linux_dmabuf_v1`) | zero-copy GPU capture (CPU `wl_shm` is the fallback) | live previews: `wlr-chooser`, `wlr-switcher`, `wlr-peek mirror`/`watch`, `wlr-shot record` |
-| `xdg-output` (`zxdg_output_manager_v1`) | accurate logical geometry (fractional scale, positions) | recommended; falls back to `wl_output` |
-| `cursor-shape-v1` (`wp_cursor_shape_manager_v1`) | an overlay setting its own cursor | recommended, every overlay; without it the overlay shows whatever cursor the last client left — none, if that one hid it |
-| `tablet-v2` (`zwp_tablet_manager_v2`) | graphics tablet (stylus) input | optional, `wlr-draw`; without it, mouse only |
-| compositor IPC, or `cosmic-toplevel-info` (`zcosmic_toplevel_info_v1`, v2+) on COSMIC | "the active window" / "the current output" (`-a`, `--current-output`); an IPC also names the process behind a window (`--pid`), moves a window to the current workspace (`--move`; on COSMIC, `cosmic-toplevel-management` v4 with `cosmic-toplevel-info` v3 and `ext-workspace-v1`) and, on sway, names the windows in its scratchpad (`--scratchpad`), which no Wayland protocol does | a per-compositor focus backend |
-
-The engine drives `ext-image-copy-capture-v1` where it is available, and
-`wlr-screencopy` otherwise. `ext-image-capture-source-v1` landed in two steps: the base
-protocol plus the **output** source arrived in **wlroots 0.19** (Sway ≥ 1.11), while the
-**foreign-toplevel** source (`ext_foreign_toplevel_image_capture_source_manager_v1`) —
-which window capture depends on — only arrived in **wlroots 0.20** (Sway ≥ 1.12).
-
-So there are **two floors**:
-
-- **Screen capture** — `ext-image-copy-capture-v1` + the **output** source (**wlroots ≥ 0.19
-  / Sway ≥ 1.11**), or `wlr-screencopy` v3. Screenshots, recording, the loupe/colour
-  picker, region select, and wlr-draw's freeze & save work here.
-- **Window capture** — `ext-image-copy-capture-v1` with the **foreign-toplevel** source +
-  list: **wlroots ≥ 0.20 / Sway ≥ 1.12**. `wlr-screencopy` addresses a `wl_output` and
-  never a window, so it does not lift this floor. The Alt-Tab switcher,
-  `-w`/`--pick-window`, and per-window mirror/record need it.
-
-The tools **degrade gracefully**: where only screen capture is available the screen
-features all work, while window-only paths fail with a clear message (`wlr-switcher` says so
-and exits instead of showing an empty overlay; wlr-draw hides freeze/save when even screen
-capture is missing). Run `wlr-peek doctor` to see which of the two your compositor offers.
-
-On a compositor that advertises both capture protocols, `WLR_FORCE_SCREENCOPY=1` makes
-the engine take the `wlr-screencopy` path.
-
-### GPU capture
-
-Live previews allocate their capture buffer through gbm and import it as a GL
-texture, so no frame is copied through the CPU. Which DRM format modifier the
-driver picks decides the buffer's layout — Intel and AMD hand out compressed
-layouts with extra auxiliary planes, other drivers a single plane.
-
-If a driver refuses to import its own buffer, captures do not fail: the tools drop
-to shared memory and say so once. `--no-gpu` (or `WLR_NO_GPU=1`) forces that path
-from the start, and `doctor` reports the negotiated fourcc, modifier and plane
-count — quote its `GPU capture:` line in a bug report.
-
-Single captures (screenshots, colour picks, OCR) always use shared memory: they end
-up as CPU pixels anyway, so a GPU round trip would only cost an EGL context. An
-output declaring a `wl_output` transform — a rotated or mirrored screen — captures
-through shared memory too, so its frames come out upright.
-
-## Compositors
-
-The matrix below tracks the two capture floors plus `wlr-layer-shell` (needed by every
-overlay: the switcher, region selector, loupe/colour picker and wlr-draw) and the focus IPC
-backend (for `-a` / `--current-output`). Run `wlr-peek doctor` to check your own.
+- **Screen capture** — `wlr-shot` on screens and regions; `wlr-peek color`, `loupe`,
+  `region`, `ocr`, `grep` and screen `mirror`/`watch`; the screens of `wlr-chooser`;
+  `wlr-draw`'s freeze-frame and save.
+- **Window capture** — `wlr-switcher`; the windows of `wlr-chooser`; every window
+  source of `wlr-shot` and `wlr-peek` (`-w`, `--app-id`, `--title`, `--pick-window`).
+- **Overlays** — `wlr-chooser`, `wlr-switcher`, the region selector (`-s`),
+  `wlr-peek color`/`loupe`/`region`, and `wlr-draw`.
+- **Focus IPC** — `-a` and `--current-output`, and for `wlr-switcher` the extras the
+  last column names.
 
 | Compositor | Screen capture | Window capture | Overlays (layer-shell) | Focus IPC |
 | --- | --- | --- | --- | --- |
-| **Sway** | ✅ ≥ 1.11 (wlroots 0.19) | ✅ ≥ 1.12 (wlroots 0.20) | ✅ | ✅ `$SWAYSOCK` (MRU, pid, move, scratchpad) |
-| **Hyprland** | ✅ ≥ v0.54 | ✅ ≥ v0.54 | ✅ | ✅ `hyprctl` (MRU, pid, move) |
-| **labwc** | ✅ ≥ 0.9 (wlroots 0.19) | 🟡 ≥ 0.20 (partial) | ✅ | ❌ |
+| **Sway** | ✅ (`wlr-screencopy`; `ext` ≥ 1.11) | ✅ ≥ 1.12 (wlroots 0.20) | ✅ | ✅ `$SWAYSOCK` (MRU, pid, move, scratchpad) |
+| **Hyprland** | ✅ (`wlr-screencopy`; `ext` ≥ v0.54) | ✅ ≥ v0.54 | ✅ | ✅ `hyprctl` (MRU, pid, move) |
+| **labwc** | ✅ (`wlr-screencopy`; `ext` ≥ 0.9) | 🟡 ≥ 0.20 (partial) | ✅ | ❌ |
 | **cosmic-comp** | ✅ | ✅ | ✅ | ✅ `zcosmic_toplevel_info_v1` (move: `cosmic-toplevel-management`) |
-| **Wayfire** | ✅ ≥ 0.10 (wlroots 0.19) | ❌ (0.11 is on wlroots 0.20 but ships no window source) | ✅ | ❌ |
-| **river** | ✅ ≥ 0.3 (wlroots 0.19) | ✅ ≥ 0.4 | ✅ | ❌ |
+| **Wayfire** | ✅ (`wlr-screencopy`; `ext` ≥ 0.10) | ❌ (0.11 is on wlroots 0.20 but ships no window source) | ✅ | ❌ |
+| **river** | ✅ (`wlr-screencopy`; `ext` ≥ 0.3) | ✅ ≥ 0.4 | ✅ | ❌ |
 | **niri** | ✅ (`wlr-screencopy`) | ❌ | ✅ | 🟡 `niri msg` (MRU, pid, `-a` n/a) |
 | **dwl** | ✅ (`wlr-screencopy`; `ext` ≥ 0.9) | 🟡 ≥ 0.9 (no focusing) | ✅ | ❌ |
 | **Mutter** (GNOME) | ❌ | ❌ | ❌ | ❌ |
 | **KWin** (KDE) | ❌ | ❌ | ✅ | ❌ |
 
 ✅ full · 🟡 partial · ❌ none. "MRU" marks a backend that also reports the window focus
-history, for `--window-order mru`; "pid" one that names the process behind a window, for
-`--pid`; "move" one that moves a window to the current workspace, for `--move`;
-"scratchpad" one that reports the windows kept aside, for `--scratchpad`.
+history, for `--window-order mru` (`wlr-switcher`, `wlr-chooser`); "pid" one that names
+the process behind a window, for their `--pid`; "move" one that moves a window to the
+current workspace, for `wlr-switcher --move`; "scratchpad" one that reports the windows
+kept aside, for `wlr-switcher --scratchpad`. Where the `ext` capture protocols are
+missing, screen capture goes through `wlr-screencopy`, which wlroots has had since 0.11;
+that path is untested below the `ext` versions shown.
 Versions are from each project's release notes / merge requests (the per-interface
 numbers on wayland.app are unreliable snapshots).
 
@@ -165,6 +102,89 @@ Two things vary by compositor:
 > any other compositor, please report how it goes — run `wlr-peek doctor` and
 > open an issue with the output. Validation reports (and focus backends for more
 > compositors) are very welcome.
+
+## Check your own compositor
+
+Every tool but `wlr-overlayd` checks your own compositor: a `doctor` subcommand on
+`wlr-peek` / `wlr-shot` / `wlr-draw`, a `--doctor` flag on `wlr-chooser` /
+`wlr-switcher`:
+
+```console
+$ wlr-peek doctor
+```
+
+It prints your tool version, OS, compositor + version, which of the protocols below
+the running compositor advertises and which capture protocol the engine uses there, then
+one line each for `Screen capture:`, `Window capture:`, `Window focus:`, `GPU capture:`,
+`Focus IPC:` and `Configuration:` — so it doubles as the environment block a bug report
+needs. Any tool prints the same report, so a single-tool install can produce it too —
+except `wlr-draw` on its own, built without the focus backends, which leaves the
+`Focus IPC:` line out and says `GPU capture: not built in`.
+
+`Screen capture:` and `Window capture:` answer the first two columns of the matrix;
+`Window focus:` says whether `wlr-switcher` can focus the window it picks, and
+`Focus IPC:` names the backend behind `-a` and `--current-output`.
+
+## Protocols used
+
+For reference: what the tools ask a compositor for, and why.
+
+| Protocol | Used for | Needed by |
+| --- | --- | --- |
+| `ext-image-copy-capture-v1` + `ext-image-capture-source-v1` + the output / foreign-toplevel source managers | the **capture engine** (frames of an output or a window) | window capture; screen capture where the compositor has it |
+| `wlr-screencopy` (`zwlr_screencopy_manager_v1`, v3) | the capture engine's fallback, **outputs only**, used when `ext-image-copy-capture-v1` is absent | screen capture on a compositor without the `ext` protocols |
+| `ext-foreign-toplevel-list-v1` | enumerating windows | `wlr-chooser`, `-w`, `wlr-peek mirror`, window record/watch |
+| `wlr-foreign-toplevel-management` (`zwlr_foreign_toplevel_manager_v1`) | focusing the picked window, and reading which window is focused (its `activated` state) | `wlr-switcher` |
+| `cosmic-toplevel-management` (`zcosmic_toplevel_manager_v1`) + `cosmic-toplevel-info` v2+ | focusing the picked window on COSMIC, which has no `wlr-foreign-toplevel-management` | `wlr-switcher` on cosmic-comp |
+| `wlr-layer-shell` (`zwlr_layer_shell_v1`) | full-screen overlays | the region selector (`-s`), `wlr-peek loupe`/`color`, `wlr-switcher`, `wlr-chooser`, `wlr-draw` |
+| `wlr-data-control` (`zwlr_data_control_manager_v1`) | clipboard copy | `-c`/`--clipboard` |
+| `keyboard-shortcuts-inhibit` (`zwp_keyboard_shortcuts_inhibit_manager_v1`) | grabbing keys under a layer-shell grab | `wlr-chooser` and `wlr-switcher` (so `Alt+Tab` reaches the switcher) |
+| `linux-dmabuf` (`zwp_linux_dmabuf_v1`) | zero-copy GPU capture (CPU `wl_shm` is the fallback) | live previews: `wlr-chooser`, `wlr-switcher`, `wlr-peek mirror`/`watch`, `wlr-shot record` |
+| `xdg-output` (`zxdg_output_manager_v1`) | accurate logical geometry (fractional scale, positions) | recommended; falls back to `wl_output` |
+| `cursor-shape-v1` (`wp_cursor_shape_manager_v1`) | an overlay setting its own cursor | recommended, every overlay; without it the overlay shows whatever cursor the last client left — none, if that one hid it |
+| `tablet-v2` (`zwp_tablet_manager_v2`) | graphics tablet (stylus) input | optional, `wlr-draw`; without it, mouse only |
+| compositor IPC, or `cosmic-toplevel-info` (`zcosmic_toplevel_info_v1`, v2+) on COSMIC | "the active window" / "the current output" (`-a`, `--current-output`); an IPC also names the process behind a window (`--pid`), moves a window to the current workspace (`--move`; on COSMIC, `cosmic-toplevel-management` v4 with `cosmic-toplevel-info` v3 and `ext-workspace-v1`) and, on sway, names the windows in its scratchpad (`--scratchpad`), which no Wayland protocol does | a per-compositor focus backend |
+
+The engine drives `ext-image-copy-capture-v1` where it is available, and
+`wlr-screencopy` otherwise. `ext-image-capture-source-v1` landed in two steps: the base
+protocol plus the **output** source arrived in **wlroots 0.19** (Sway ≥ 1.11), while the
+**foreign-toplevel** source (`ext_foreign_toplevel_image_capture_source_manager_v1`) —
+which window capture depends on — only arrived in **wlroots 0.20** (Sway ≥ 1.12).
+
+So there are **two floors**:
+
+- **Screen capture** — `ext-image-copy-capture-v1` + the **output** source (**wlroots ≥ 0.19
+  / Sway ≥ 1.11**), or `wlr-screencopy` v3, which wlroots has had since 0.11. Screenshots, recording, the loupe/colour
+  picker, region select, and wlr-draw's freeze & save work here.
+- **Window capture** — `ext-image-copy-capture-v1` with the **foreign-toplevel** source +
+  list: **wlroots ≥ 0.20 / Sway ≥ 1.12**. `wlr-screencopy` addresses a `wl_output` and
+  never a window, so it does not lift this floor. The Alt-Tab switcher,
+  `-w`/`--pick-window`, and per-window mirror/record need it.
+
+The tools **degrade gracefully**: where only screen capture is available the screen
+features all work, while window-only paths fail with a clear message (`wlr-switcher` says so
+and exits instead of showing an empty overlay; wlr-draw hides freeze/save when even screen
+capture is missing). Run `wlr-peek doctor` to see which of the two your compositor offers.
+
+On a compositor that advertises both capture protocols, `WLR_FORCE_SCREENCOPY=1` makes
+the engine take the `wlr-screencopy` path.
+
+### GPU capture
+
+Live previews allocate their capture buffer through gbm and import it as a GL
+texture, so no frame is copied through the CPU. Which DRM format modifier the
+driver picks decides the buffer's layout — Intel and AMD hand out compressed
+layouts with extra auxiliary planes, other drivers a single plane.
+
+If a driver refuses to import its own buffer, captures do not fail: the tools drop
+to shared memory and say so once. `--no-gpu` (or `WLR_NO_GPU=1`) forces that path
+from the start, and `doctor` reports the negotiated fourcc, modifier and plane
+count — quote its `GPU capture:` line in a bug report.
+
+Single captures (screenshots, colour picks, OCR) always use shared memory: they end
+up as CPU pixels anyway, so a GPU round trip would only cost an EGL context. An
+output declaring a `wl_output` transform — a rotated or mirrored screen — captures
+through shared memory too, so its frames come out upright.
 
 ## Adding a compositor
 
