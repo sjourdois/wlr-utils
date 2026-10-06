@@ -51,31 +51,6 @@ instead of ninety — see [Instant overlays](#instant-overlays--wlr-overlayd).
 - **Themeable** (8 ready palettes incl. Catppuccin), **localised** (13 languages,
   with CJK font fallback), and a configurable thumbnail grid.
 
-## Requirements
-
-**Works on** — `wlr-chooser` offers screens on every compositor that captures them (sway,
-Hyprland, niri, labwc, Wayfire, river, dwl, cosmic-comp) and windows where windows can be
-captured (Sway ≥ 1.12, Hyprland ≥ 0.54, river ≥ 0.4, cosmic-comp, and partly labwc ≥ 0.20
-and dwl ≥ 0.9). `wlr-switcher` needs those windows, and dwl cannot focus the one picked;
-it does not run on niri or Wayfire. Neither runs on GNOME or KDE. Details in
-[COMPATIBILITY.md](../../COMPATIBILITY.md).
-
-- A compositor speaking the wlroots protocols, with `wlr-layer-shell` (layers named
-  `wlr-chooser` and `wlr-switcher`, for [compositor rules](../../README.md#compositor-rules))
-  and a capture protocol.
-  Screen sources need `ext-image-copy-capture-v1` with the **output** source
-  (**Sway ≥ 1.11 / wlroots ≥ 0.19**), or `wlr-screencopy`; live **window** thumbnails
-  and **`wlr-switcher`** need the **foreign-toplevel** source +
-  `ext-foreign-toplevel-list-v1` (**Sway ≥ 1.12 / wlroots ≥ 0.20**), which
-  `wlr-screencopy` does not stand in for. Without it, `wlr-switcher` reports the missing
-  window capture and exits. Run `wlr-chooser --doctor` (or `wlr-switcher --doctor`) to
-  check your own; see [COMPATIBILITY.md](../../COMPATIBILITY.md).
-- `xdg-desktop-portal-wlr` ≥ 0.8 (for the screencast chooser use).
-- A working EGL/GLES driver: the overlay renders through it. The zero-copy capture path
-  also needs `libgbm` (ships with Mesa), and falls back to shared memory without it.
-- For **`wlr-switcher`**: `zwlr-foreign-toplevel-management-v1`, or COSMIC's
-  `cosmic-toplevel-management` where that is missing.
-
 ## Install
 
 > **Want the whole suite?** Install the bundle instead — `cargo install wlr-utils` gets
@@ -103,19 +78,38 @@ build to shared memory at runtime, and previews fall back to it on their own if 
 import fails. The whole suite also ships as a single `wlr-utils` `.deb` on every
 [release](https://github.com/sjourdois/wlr-utils/releases/latest).
 
-## Uninstall
+## Requirements
 
-The crate ships three binaries — `wlr-chooser`, `wlr-switcher` and `wlr-overlayd`. Remove
-them the way you installed them:
+**Works on** — `wlr-chooser` offers screens on every compositor that captures them (sway,
+Hyprland, niri, labwc, Wayfire, river, dwl, cosmic-comp) and windows where windows can be
+captured (Sway ≥ 1.12, Hyprland ≥ 0.54, river ≥ 0.4, cosmic-comp, and partly labwc ≥ 0.20
+and dwl ≥ 0.9). `wlr-switcher` needs those windows, and dwl cannot focus the one picked;
+it does not run on niri or Wayfire. Neither runs on GNOME or KDE. Details in
+[COMPATIBILITY.md](../../COMPATIBILITY.md).
 
-```sh
-cargo uninstall wlr-chooser                       # crates.io install (~/.cargo/bin)
-sudo apt remove wlr-utils                          # the suite's .deb
-```
+- A compositor speaking the wlroots protocols, with `wlr-layer-shell` (layers named
+  `wlr-chooser` and `wlr-switcher`, for [compositor rules](../../README.md#compositor-rules))
+  and a capture protocol.
+  Screen sources need `ext-image-copy-capture-v1` with the **output** source
+  (**Sway ≥ 1.11 / wlroots ≥ 0.19**), or `wlr-screencopy`; live **window** thumbnails
+  and **`wlr-switcher`** need the **foreign-toplevel** source +
+  `ext-foreign-toplevel-list-v1` (**Sway ≥ 1.12 / wlroots ≥ 0.20**), which
+  `wlr-screencopy` does not stand in for. Without it, `wlr-switcher` reports the missing
+  window capture and exits. Run `wlr-chooser --doctor` (or `wlr-switcher --doctor`) to
+  check your own; see [COMPATIBILITY.md](../../COMPATIBILITY.md).
+- `xdg-desktop-portal-wlr` ≥ 0.8 (for the screencast chooser use).
+- A working EGL/GLES driver: the overlay renders through it. The zero-copy capture path
+  also needs `libgbm` (ships with Mesa), and falls back to shared memory without it.
+- For **`wlr-switcher`**: `zwlr-foreign-toplevel-management-v1`, or COSMIC's
+  `cosmic-toplevel-management` where that is missing.
 
-## Set up the portal
+## Quick start
 
-Point the screencast chooser at the binary:
+### Set up the portal
+
+When an application asks to share the screen, `xdg-desktop-portal-wlr` — the portal
+of sway, river, labwc, Wayfire and dwl — asks a chooser which source to share. Point
+it at this one:
 
 ```ini
 # ~/.config/xdg-desktop-portal-wlr/config
@@ -130,7 +124,31 @@ Now any screen-share prompt opens `wlr-chooser` as a dimmed modal overlay on the
 focused output. You can pass options in `chooser_cmd`, e.g.
 `chooser_cmd=wlr-chooser --windows --grid 4x3`.
 
-## Options
+A file named after your desktop, `~/.config/xdg-desktop-portal-wlr/$XDG_CURRENT_DESKTOP`
+(`sway`, for instance), is read instead of `config` when there is one: put the lines
+there if you have it. The portal runs the command with its own environment; if it
+cannot find `wlr-chooser` after a `cargo install`, give the full path
+(`chooser_cmd=/home/you/.cargo/bin/wlr-chooser`). Hyprland, niri and COSMIC ship
+their own portals, configured their own way.
+
+### Alt-Tab
+
+```
+# hold Alt, Tab cycles, release switches
+bindsym Mod1+Tab exec wlr-switcher
+```
+
+[True Alt-Tab](#true-alt-tab-hold-to-switch) has the details, and the
+[main README](../../README.md#key-bindings-on-other-compositors) the same binding in
+Hyprland and niri.
+
+### Instant overlays
+
+Start `wlr-overlayd` with your session — `exec wlr-overlayd` in sway's config — and
+both tools show their overlay in about ten milliseconds instead of ninety; nothing
+else changes. See [Instant overlays](#instant-overlays--wlr-overlayd).
+
+## wlr-chooser options
 
 ```
 -w, --windows          Show only windows
@@ -229,13 +247,43 @@ compositor names one (Sway, Hyprland, niri); elsewhere the key is absent. A scre
 carries the output `name` that addresses it everywhere else. The field names are a
 contract: they may gain company, never change meaning.
 
-Either way, cancelling writes nothing and exits non-zero, so a script tells a pick
-from a cancel by the exit code.
+Either way, a pick exits `0`, a cancel writes nothing and exits `1`, and a failure
+exits `2`, so a script tells them apart by the exit code.
 
 > **Looking for an Alt-Tab / window switcher?** That is a separate binary,
 > **`wlr-switcher`** (shipped alongside this one) — see [its section](#window-switcher--wlr-switcher) below.
 
 ## Window switcher — `wlr-switcher`
+
+```
+    --layout strip|grid|card
+                       Presentation: macOS-style row (default), full-screen exposé
+                       or centred card
+    --live none|current|all
+                       Live previews: icons only, the highlighted window, or all
+                       (default)
+    --window-order mru|by-name
+                       Most recently focused first (default, where the compositor
+                       reports it) or by name
+    --hold, --no-hold  Hold-to-switch on or off (on by default for strip)
+    --auto-select, --no-auto-select
+                       Switch outright, or not, when one window is left to offer
+    --cycle-key KEY[:KEY]
+                       Keys that move the highlight (default: Tab)
+    --scratchpad only|exclude|toggle
+                       Switch among sway's scratchpad windows
+    --move             Bring the picked window onto the current workspace
+    --hints [home|top] Label each tile with the key that picks it
+    --include-system   Include windows with no app-id
+    --app-id APP_ID    Only windows with that app-id (repeatable)
+    --title TEXT       Only windows whose title contains TEXT (repeatable)
+    --pid PID          Only windows of that process (repeatable)
+    --no-gpu           Capture through shared memory instead of dma-buf
+    --no-daemon        Show the overlay in this process, even with wlr-overlayd running
+    --doctor           Report the compositor's capture protocols, then exit
+    --migrate-config [-]
+                       Move the old theme.toml into config.toml; with -, print it
+```
 
 The same crate ships a second binary, **`wlr-switcher`**: a live Alt-Tab / exposé
 that **focuses** the picked window (via `zwlr-foreign-toplevel-management-v1`, or
@@ -387,6 +435,12 @@ NVIDIA driver at 2560×1440 that is 93 to 109 ms, of which the EGL setup alone i
 **`wlr-overlayd`** pays it once, at login, and keeps it. With one running, `wlr-switcher`
 and `wlr-chooser` hand it the run and the overlay is up in roughly ten milliseconds.
 
+It captures nothing while it waits: between two overlays it holds a Wayland
+connection and a GPU context, reads no window, and costs no CPU — about 40 MB of
+its memory is that warm context, the rest library pages shared with everything
+else on screen. It shows one overlay at a time. How it works is in
+[CONTRIBUTING.md](../../CONTRIBUTING.md#the-overlay-daemon).
+
 ### What you have to do
 
 Start it with your session. That is the whole setup: **your keybindings do not change**,
@@ -438,28 +492,6 @@ journalctl --user -t wlr-overlayd -f         # its output
 compositor, its output goes wherever the compositor's does. Set `WLR_CHOOSER_TIMING=1` in its environment and it prints, for every overlay
 it shows, where the milliseconds went.
 
-### What it does and does not hold
-
-One daemon serves both front-ends because they *are* one overlay: the same egui app on the
-same engine, differing only in what they do with the pick. Two would warm two GPU contexts
-for it.
-
-**It captures nothing while it idles.** The capture thread is spawned for each overlay and
-dies with it — between two, the daemon holds a Wayland connection and a GPU context, and
-reads no window contents. What an overlay put on the GPU is freed when it closes, the
-imported window buffers included, so the daemon holds on to no window it is no longer
-showing. Idle it sits on a `poll()` and costs no CPU; of its resident memory, most is
-library pages shared with everything else drawing on screen, and about 40 MB is the warm
-GPU context itself — which is the whole point of it.
-
-Each overlay still builds its own layer surface, so it opens on the screen you are working
-on, and screens can be plugged or unplugged under an idle daemon.
-
-It shows **one overlay at a time**, and tells a second caller so at once. For
-`wlr-switcher` that is the no-op pressing the keybinding twice has always been;
-`wlr-chooser` shows its own overlay instead, so a portal waiting for a screen-share picker
-is never left with no answer.
-
 ### Running without it
 
 Nothing starts a daemon for you, and nothing depends on one: with none listening, both
@@ -483,32 +515,6 @@ A run that asks for `--no-gpu`, or that has `WLR_NO_GPU` set, never goes through
 daemon: it changes what the whole process does, and a daemon started without it cannot
 honour it. Such a run shows its own overlay, at the usual cold-start cost — start the
 daemon itself with `--no-gpu` if that is what your driver needs.
-
-### The protocol
-
-The daemon listens on `$XDG_RUNTIME_DIR/wlr-overlayd.sock`, one line of text per request,
-like `wlr-draw`'s control socket — `switch` or `choose` (with the invocation's arguments
-after it, separated by `\x1f`), `ping` or `quit`. It answers `ok`, `ok <stdout line>`,
-`cancel`, `busy` or `err <reason>`, which the client turns back into its own output and
-exit status. Exit statuses are unchanged: `0` for a run that did what it was asked, `1`
-for a cancel, `2` for a failure — and `wlr-chooser` writes the same stdout line wherever
-the overlay was shown.
-
-Messages an overlay writes to stderr — a compositor that cannot focus a window, a `--pid`
-filter it cannot apply — reach the client that asked for it. Anything the capture thread
-has to say goes to the daemon's own output.
-
-## Output contract
-
-`wlr-chooser` writes the selected source to stdout and exits `0`:
-
-```text
-Window: <foreign-toplevel-identifier>
-Monitor: <output-name>
-```
-
-On cancel it writes nothing and exits `1`, and `2` on a failure. `--format json` writes
-one JSON object instead of the line (see [`--format`](#output----format)).
 
 ## Theming
 
@@ -573,6 +579,32 @@ instead, or pass `--no-daemon`.
 Rendering CJK text needs a CJK font installed (e.g. Noto Sans CJK); one is
 auto-detected. New locales are welcome — copy
 `crates/wlr-chooser/i18n/en/wlr_chooser.ftl`.
+
+## Troubleshooting
+
+- **A screen-share prompt does not show `wlr-chooser`** — check that your compositor
+  uses `xdg-desktop-portal-wlr`, that no `~/.config/xdg-desktop-portal-wlr/$XDG_CURRENT_DESKTOP`
+  file hides `config`, and that the portal was restarted; give `chooser_cmd` the full
+  path if the portal cannot find the binary.
+- **`wlr-switcher` says the compositor cannot capture windows** — it needs window
+  capture (see [Requirements](#requirements)); `wlr-chooser` still offers the screens.
+- **What does my compositor support?** `wlr-chooser --doctor` (or `wlr-switcher
+  --doctor`) says, and its output is what a bug report needs.
+- **Previews come out broken** — `--no-gpu` (or `WLR_NO_GPU=1`) captures through shared
+  memory instead; with `wlr-overlayd`, start the daemon itself with `--no-gpu`.
+
+## Uninstall
+
+The crate ships three binaries — `wlr-chooser`, `wlr-switcher` and `wlr-overlayd`. Remove
+them the way you installed them:
+
+```sh
+cargo uninstall wlr-chooser                       # crates.io install (~/.cargo/bin)
+sudo apt remove wlr-utils                          # the suite's .deb
+```
+
+If you enabled `wlr-overlayd`'s systemd unit, disable it first:
+`systemctl --user disable --now wlr-overlayd.service`.
 
 ## Contributing
 

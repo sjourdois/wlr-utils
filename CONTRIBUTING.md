@@ -64,6 +64,46 @@ cd tools/screenshots
 
 See `tools/screenshots/README.md` for how it works.
 
+## The overlay daemon
+
+How `wlr-overlayd` serves `wlr-switcher` and `wlr-chooser`.
+
+### What it holds
+
+One daemon serves both front-ends because they *are* one overlay: the same egui app on the
+same engine, differing only in what they do with the pick. Two would warm two GPU contexts
+for it.
+
+**It captures nothing while it idles.** The capture thread is spawned for each overlay and
+dies with it — between two, the daemon holds a Wayland connection and a GPU context, and
+reads no window contents. What an overlay put on the GPU is freed when it closes, the
+imported window buffers included, so the daemon holds on to no window it is no longer
+showing. Idle it sits on a `poll()` and costs no CPU; of its resident memory, most is
+library pages shared with everything else drawing on screen, and about 40 MB is the warm
+GPU context itself — which is the whole point of it.
+
+Each overlay still builds its own layer surface, so it opens on the screen you are working
+on, and screens can be plugged or unplugged under an idle daemon.
+
+It shows **one overlay at a time**, and tells a second caller so at once. For
+`wlr-switcher` that is the no-op pressing the keybinding twice has always been;
+`wlr-chooser` shows its own overlay instead, so a portal waiting for a screen-share picker
+is never left with no answer.
+
+### The protocol
+
+The daemon listens on `$XDG_RUNTIME_DIR/wlr-overlayd.sock`, one line of text per request,
+like `wlr-draw`'s control socket — `switch` or `choose` (with the invocation's arguments
+after it, separated by `\x1f`), `ping` or `quit`. It answers `ok`, `ok <stdout line>`,
+`cancel`, `busy` or `err <reason>`, which the client turns back into its own output and
+exit status. Exit statuses are unchanged: `0` for a run that did what it was asked, `1`
+for a cancel, `2` for a failure — and `wlr-chooser` writes the same stdout line wherever
+the overlay was shown.
+
+Messages an overlay writes to stderr — a compositor that cannot focus a window, a `--pid`
+filter it cannot apply — reach the client that asked for it. Anything the capture thread
+has to say goes to the daemon's own output.
+
 ## Translations
 
 Each tool crate owns **its own** Fluent catalog under
