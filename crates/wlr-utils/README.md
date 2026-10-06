@@ -24,6 +24,9 @@ every binary at once:
 | `wlr-shot` | Screenshots (PNG/JPEG/PPM/PAM) and recording (MP4/MKV in H.264, GIF/WebP) with system audio. |
 | `wlr-draw` | Draw on screen — annotation overlay with shapes, text, spotlight, freeze-frame. |
 
+Then the [first steps](https://github.com/sjourdois/wlr-utils#first-steps): five commands
+to try, and the key bindings.
+
 This crate is just a **bundle**: it ships no library and no logic of its own, only thin
 binaries that re-export each tool. It is the full-featured build — GPU capture, OCR,
 video and audio recording, tray — so it needs all of their system dependencies
@@ -35,19 +38,27 @@ README for its exact requirements.
 ## Prebuilt bundle
 
 Every [release](https://github.com/sjourdois/wlr-utils/releases/latest) ships one archive
-containing all the binaries, plus a one-line installer. The archive is built on Ubuntu 24.04 and linked to its FFmpeg, PipeWire and Leptonica, so elsewhere it
-needs those same versions — a package or a source build is the safer route:
+containing all the binaries, plus a one-line installer. The archive is built on Ubuntu
+24.04 and linked to its FFmpeg, PipeWire and Leptonica, so elsewhere it needs those same
+versions — a package or a source build is the safer route.
+
+The installer puts the binaries in `$CARGO_HOME/bin` (`~/.cargo/bin`) and adds that
+folder to your `PATH` in your shell's profile, unless `WLR_UTILS_NO_MODIFY_PATH=1` is set;
+it installs no theme and no systemd unit:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf \
   https://github.com/sjourdois/wlr-utils/releases/latest/download/wlr-utils-installer.sh | sh
 ```
 
-The installer copies the binaries alone. Unpacked by hand, the archive installs itself
-with its systemd units and themes, into `/usr/local` unless `PREFIX` says otherwise:
+The archive, unpacked by hand, installs itself with its systemd units, themes and example
+configuration, into `/usr/local`:
 
 ```sh
-sudo sh install.sh
+curl -LO https://github.com/sjourdois/wlr-utils/releases/latest/download/wlr-utils-x86_64-unknown-linux-gnu.tar.xz
+tar xf wlr-utils-x86_64-unknown-linux-gnu.tar.xz
+cd wlr-utils-x86_64-unknown-linux-gnu
+sudo sh install.sh                 # or elsewhere: sudo env PREFIX=/usr sh install.sh
 ```
 
 ## Uninstall
@@ -58,6 +69,8 @@ cargo uninstall wlr-utils
 
 The prebuilt installer's binaries are not cargo's to remove: delete them from
 `~/.cargo/bin`, with the receipt it leaves, `~/.config/wlr-utils/wlr-utils-receipt.json`.
+What `install.sh` installed comes off by hand, from the same `PREFIX` — the main README
+[lists the paths](https://github.com/sjourdois/wlr-utils#uninstall).
 
 `wlr-draw` registers an XDG autostart entry on first run — see the
 [main README](https://github.com/sjourdois/wlr-utils#uninstall) for the leftover files to
