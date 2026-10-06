@@ -293,15 +293,27 @@ fn the_example_holds_the_defaults() {
     assert!(config.warnings().is_empty(), "{:?}", config.warnings());
     assert_eq!(config.theme(), &Theme::default());
 
-    let uncommented: String = example
-        .lines()
-        .map(|line| {
-            line.strip_prefix("# ")
-                .filter(|l| l.contains(" = "))
-                .unwrap_or(line)
-        })
-        .map(|line| format!("{line}\n"))
-        .collect();
+    // Every setting is commented out; uncommenting those that have a default changes
+    // nothing either.
+    let uncomment = |keep: &dyn Fn(&str) -> bool| -> String {
+        example
+            .lines()
+            .map(|line| {
+                line.strip_prefix("# ")
+                    .filter(|l| l.contains(" = ") && keep(l))
+                    .unwrap_or(line)
+            })
+            .map(|line| format!("{line}\n"))
+            .collect()
+    };
+    const NO_DEFAULT: [&str; 5] = ["name", "font", "font-path", "cjk-font", "font-size"];
+    let defaults = uncomment(&|l| !NO_DEFAULT.iter().any(|k| l.starts_with(&format!("{k} = "))));
+    home.write("home/.config/wlr-utils/config.toml", &defaults);
+    let config = home.load();
+    assert!(config.warnings().is_empty(), "{:?}", config.warnings());
+    assert_eq!(config.theme(), &Theme::default());
+
+    let uncommented = uncomment(&|_| true);
     home.write("home/.config/wlr-utils/config.toml", &uncommented);
     let config = home.load();
     assert!(config.warnings().is_empty(), "{:?}", config.warnings());

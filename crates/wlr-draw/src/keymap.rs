@@ -926,11 +926,24 @@ mod tests {
         );
     }
 
-    /// The example `config.toml` binds every action and held control, each to its
-    /// default.
+    /// The example `config.toml`, its `[draw]` settings uncommented, binds every action and
+    /// held control, each to its default.
     #[test]
     fn the_example_holds_the_defaults() {
-        let example = include_str!("../../../docs/config.toml");
+        let mut current = "";
+        let example: String = include_str!("../../../docs/config.toml")
+            .lines()
+            .map(|line| {
+                if line.starts_with('[') {
+                    current = line;
+                }
+                let setting = line
+                    .strip_prefix("# ")
+                    .filter(|l| l.contains(" = ") && current.starts_with("[draw"));
+                format!("{}\n", setting.unwrap_or(line))
+            })
+            .collect();
+        let example = example.as_str();
         let section: toml::Table = example.parse::<toml::Table>().unwrap()["draw"]
             .as_table()
             .unwrap()

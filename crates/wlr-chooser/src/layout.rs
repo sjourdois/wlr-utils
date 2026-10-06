@@ -133,10 +133,24 @@ mod tests {
         );
     }
 
-    /// The example `config.toml` sets every size, each to its default.
+    /// The example `config.toml`, its `[chooser]` settings uncommented, sets every size,
+    /// each to its default.
     #[test]
     fn the_example_holds_the_defaults() {
-        let example = include_str!("../../../docs/config.toml");
+        let mut current = "";
+        let example: String = include_str!("../../../docs/config.toml")
+            .lines()
+            .map(|line| {
+                if line.starts_with('[') {
+                    current = line;
+                }
+                let setting = line
+                    .strip_prefix("# ")
+                    .filter(|l| l.contains(" = ") && current == "[chooser]");
+                format!("{}\n", setting.unwrap_or(line))
+            })
+            .collect();
+        let example = example.as_str();
         let table: toml::Table = example.parse().unwrap();
         let section: Section = table["chooser"].clone().try_into().unwrap();
         assert!(

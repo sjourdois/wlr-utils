@@ -1,28 +1,29 @@
-# wlr-utils configuration, every setting at its default.
+# wlr-utils configuration: every setting, commented out, at its default.
 #
-# Copy it to ~/.config/wlr-utils/config.toml and keep only what you change. The settings
-# without a default are commented out.
+# Copy it to ~/.config/wlr-utils/config.toml and uncomment what you change; the rest
+# follows the defaults, including those of later versions. The settings without a
+# default show an example value.
 
 [theme]
 # A theme file, by name or by path. The installed themes are in
-# /usr/share/wlr-utils/themes, and yours go in ~/.config/wlr-utils/themes. The keys
-# below set over it.
+# /usr/share/wlr-utils/themes, and yours go in ~/.config/wlr-utils/themes. A key below
+# that you uncomment sets over it.
 # name = "nord"
 
 # Colours: #rgb, #rrggbb or #rrggbbaa. What the overlays draw over the screen takes them
 # too: labels and panels on card, in text and text-dim, dimmed areas in backdrop.
-backdrop = "#0000008c"
-bg = "#1e2127"
-card = "#21252d"
-tile = "#181b22"
-tile-hover = "#262b33"
-tile-selected = "#3b4252"
-thumb = "#12141a"
-text = "#d8dee9"
-text-dim = "#7a8290"
-accent = "#88c0d0"
-screen-accent = "#81a1c1"
-window-accent = "#b48ead"
+# backdrop = "#0000008c"
+# bg = "#1e2127"
+# card = "#21252d"
+# tile = "#181b22"
+# tile-hover = "#262b33"
+# tile-selected = "#3b4252"
+# thumb = "#12141a"
+# text = "#d8dee9"
+# text-dim = "#7a8290"
+# accent = "#88c0d0"
+# screen-accent = "#81a1c1"
+# window-accent = "#b48ead"
 
 # The UI font: a family name, or a font file. Japanese, Chinese and Korean text use the
 # CJK font, found on its own when unset. Every text of the overlays keeps its proportion
@@ -34,52 +35,52 @@ window-accent = "#b48ead"
 
 # How round the corners are, in pixels: the card's radius, every other corner keeping
 # its proportion to it. 0 squares them all.
-corner-radius = 12
+# corner-radius = 12
 
 [chooser]
 # Sizes in pixels, for wlr-chooser and wlr-switcher. The card, when --grid does not size
 # it to its tiles.
-card-width = 1000
-card-height = 760
+# card-width = 1000
+# card-height = 760
 # The narrowest a card tile gets: a row holds as many as fit, widened to fill it.
-tile-width = 280
+# tile-width = 280
 # The space between tiles; the exposé and the Alt-Tab row scale theirs from it.
-spacing = 10
+# spacing = 10
 # The largest preview or icon in the Alt-Tab row, which shrinks them to fit the screen.
-switcher-size = 96
+# switcher-size = 96
 
 [draw]
 # Whether a pen stroke held still snaps to a clean line or ellipse, and after how long.
-dwell = true
-dwell-ms = 650
+# dwell = true
+# dwell-ms = 650
 
 [draw.keys]
 # Key names are XKB keysym names, as in sway's bindsym: a, space, plus, F5. A binding
 # takes one name or a list. Mouse buttons are named as sway names them too: button2 (the
 # middle one), button8 and button9 (the side ones), or BTN_SIDE and the like. The left
 # and right buttons stay for drawing and moving.
-pen = "p"
-rect = "r"
-mask = "m"
-arrow = "a"
-text = "t"
-move = "s"
-eraser = "e"
-palette = "c"
-undo = "u"
-redo = "y"
-visibility = "v"
-save = "w"
-help = "h"
-clear = "Delete"
-width-inc = ["plus", "equal", "KP_Add"]
-width-dec = ["minus", "KP_Subtract"]
-freeze = ["space", "KP_Space"]
-snap = "d"
+# pen = "p"
+# rect = "r"
+# mask = "m"
+# arrow = "a"
+# text = "t"
+# move = "s"
+# eraser = "e"
+# palette = "c"
+# undo = "u"
+# redo = "y"
+# visibility = "v"
+# save = "w"
+# help = "h"
+# clear = "Delete"
+# width-inc = ["plus", "equal", "KP_Add"]
+# width-dec = ["minus", "KP_Subtract"]
+# freeze = ["space", "KP_Space"]
+# snap = "d"
 
 # Held controls: a modifier (caps, ctrl, shift, alt, super), a key, a mouse button (but
 # not for passthrough, whose overlay gets no clicks), or a list.
-passthrough = "caps"
-constrain = "ctrl"
-spotlight = "shift"
-snap-invert = "alt"
+# passthrough = "caps"
+# constrain = "ctrl"
+# spotlight = "shift"
+# snap-invert = "alt"

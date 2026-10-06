@@ -254,8 +254,9 @@ dwell-ms = 400
 undo = ["u", "z"]
 ```
 
-[`docs/config.toml`](docs/config.toml) lists every setting at its default; packages
-install it in `/usr/share/doc/wlr-utils`. They install the themes in
+[`docs/config.toml`](docs/config.toml) lists every setting, commented out at its default:
+copy it and uncomment what you change. Packages install it in `/usr/share/doc/wlr-utils`.
+They install the themes in
 `/usr/share/wlr-utils/themes`, named for `name` as `catppuccin-mocha`,
 `catppuccin-macchiato`, `catppuccin-frappe`, `catppuccin-latte`, `nord`, `gruvbox-dark`,
 `dracula` and `tokyo-night`. Yours go in `~/.config/wlr-utils/themes`, and that is also
