@@ -19,6 +19,72 @@ timelapse, or an animated GIF/WebP.
 
 <p align="center"><sub>📖 See every tool in action on the <a href="https://sjourdois.github.io/wlr-utils/">showcase</a>.</sub></p>
 
+## Install
+
+> **Want the whole suite?** Install the bundle instead — `cargo install wlr-utils` gets
+> every tool (`wlr-chooser`, `wlr-switcher`, `wlr-overlayd`, `wlr-peek`, `wlr-shot`,
+> `wlr-draw`) in one go. The single-tool install below is the lighter, à-la-carte option.
+
+Building needs the Rust the [main README](../../README.md#from-source) names, and on
+Debian/Ubuntu `build-essential pkg-config clang libwayland-dev libxkbcommon-dev
+libgbm-dev libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libavdevice-dev
+libswscale-dev libswresample-dev libva-dev libpipewire-0.3-dev` (Arch: `base-devel clang
+wayland libxkbcommon mesa ffmpeg libva libpipewire`).
+
+```sh
+cargo install wlr-shot
+```
+
+Or build just this binary from the [wlr-utils](../../README.md) workspace:
+
+```sh
+cargo build --release -p wlr-shot
+```
+
+The FFmpeg and PipeWire packages are for `record`. A screenshots-only binary needs none of
+them: `cargo build -p wlr-shot --no-default-features --features i18n`. Recording without
+sound drops PipeWire alone: `--no-default-features --features i18n,video,gpu`.
+
+## Requirements
+
+**Works on** — screens and regions on every compositor that captures screens (sway,
+Hyprland, niri, labwc, Wayfire, river, dwl, cosmic-comp); windows (`-w`, `--app-id`,
+`--title`, `--pick-window`) where windows can be captured (Sway ≥ 1.12, Hyprland ≥ 0.54,
+river ≥ 0.4, cosmic-comp, and partly labwc ≥ 0.20 and dwl ≥ 0.9). Not on GNOME or KDE.
+Details in [COMPATIBILITY.md](../../COMPATIBILITY.md).
+
+- **Screens and regions** — `ext-image-copy-capture-v1` with the output source (**Sway ≥
+  1.11 / wlroots ≥ 0.19**), or `zwlr_screencopy_manager_v1`.
+- **Windows** — `ext-foreign-toplevel-list-v1` and the foreign-toplevel capture source
+  (**Sway ≥ 1.12 / wlroots ≥ 0.20**), which `wlr-screencopy` does not stand in for.
+- **The clipboard** (`-c`) — `zwlr_data_control_manager_v1`. `xdg-output` gives exact
+  logical geometry where the compositor has it.
+- **At run time** — a working GL stack (`libegl1`): the region selector (`-s`) renders a
+  frozen overlay through EGL/GLES, on a layer named `wlr-shot` for
+  [compositor rules](../../README.md#compositor-rules). `libfontconfig1` looks up the UI
+  font when it is there (the embedded fonts otherwise), and `libgbm` serves the zero-copy
+  dma-buf path `record` uses; screenshots go through shared memory. `--no-gpu` (or
+  `WLR_NO_GPU=1`) forces shared memory everywhere.
+- **Hardware encoding** — NVIDIA's `libnvidia-encode` for NVENC, or a VAAPI driver for
+  your GPU; without either, `record` encodes in software.
+
+`wlr-shot doctor` says what your compositor exposes, and whether the dma-buf path works
+here.
+
+## Quick start
+
+```sh
+wlr-shot screenshot -s shot.png                # drag a region on a frozen screen
+wlr-shot screenshot --all shot.png             # every screen, in one image
+wlr-shot screenshot -s -c                      # a region, to the clipboard
+wlr-shot screenshot --app-id firefox ff.png    # a window by name, even hidden
+wlr-shot record -s clip.mp4                    # record a region; Ctrl-C stops
+```
+
+With a single screen, a command with no source captures it. With several, name one with
+`-o` (`wlr-shot screenshot --list-outputs` lists them), or use `--all`, `-s` or
+`--current-output`.
+
 ## Usage
 
 ```sh
@@ -36,7 +102,7 @@ wlr-shot doctor
 wlr-shot migrate-config [-]
 ```
 
-Source (pick one; defaults to the sole output):
+Source (pick one; with a single screen, that screen by default):
 
 - `-s, --select` — **interactively** drag a region on a frozen overlay (spans all
   outputs; releasing the button takes it, `Esc` or `Ctrl+[` cancels). No external tool
@@ -124,10 +190,10 @@ opened later can't steal the recording.
 ```sh
 wlr-shot record -o DP-4 out.mp4                 # an output, until Ctrl-C
 wlr-shot record --pick-window -d 30 clip.mp4    # a window, 30 seconds
-wlr-shot record -g "$(slurp)" region.mp4        # a region (single output)
-wlr-shot record -g "$(slurp)" --fps 15 demo.gif # a region as an animated GIF
-wlr-shot record -g "$(slurp)" demo.webp         # …or animated WebP (smaller)
-wlr-shot record -o DP-4 --crf 18 sharp.mp4       # visually lossless, a bigger file
+wlr-shot record -s region.mp4                   # a region (single output)
+wlr-shot record -s --fps 15 demo.gif            # a region as an animated GIF
+wlr-shot record -s demo.webp                    # …or animated WebP (smaller)
+wlr-shot record -o DP-4 --crf 18 sharp.mp4      # visually lossless, a bigger file
 wlr-shot record -o DP-4 --timelapse 2s day.mp4  # a frame every 2s, played at --fps
 wlr-shot record -o DP-4 --no-audio clip.mp4     # video only (audio is on by default)
 ```
@@ -138,14 +204,10 @@ wlr-shot record -o DP-4 --no-audio clip.mp4     # video only (audio is on by def
   `libx264`, keeps the first that works on this machine and says which. Force one with
   `nvenc`/`vaapi`/`software`.
 - `--device PATH` — DRM render node for VAAPI (default `/dev/dri/renderD128`).
-- `--crf N` — constant quality, `0`–`51`: **lower is better and bigger**, `0` is
-  lossless. Left out, each encoder keeps its own default, which is what you get
-  today. The three encoders spell this differently and ignore each other's
-  spelling, so the level is translated: libx264 takes it as `crf`, NVENC as `cq`
-  (under VBR), VAAPI as a fixed `qp`. Lossless therefore means `tune=lossless` on
-  NVENC, and VAAPI — which has no lossless H.264 mode — refuses `--crf 0` and says
-  so. Mind the direction: `screenshot --quality` is a JPEG scale that runs the
-  other way.
+- `--crf N` — constant quality, `0`–`51`: **lower is better and bigger**. `0` is
+  lossless, about `18` looks lossless; left out, each encoder keeps its own default.
+  VAAPI has no lossless mode and refuses `0`: use `--crf 1`, or `--encoder software`.
+  Mind the direction: `screenshot --quality` is a JPEG scale that runs the other way.
 - `--fps N` — frame rate (default 30). Capture is damage-driven (a frame only arrives
   when the screen changes), so a normal recording emits a **constant** `--fps`,
   repeating the last frame through static stretches; `--timelapse` instead samples one
@@ -155,71 +217,26 @@ wlr-shot record -o DP-4 --no-audio clip.mp4     # video only (audio is on by def
   the file. (Recording a window also ends when the window closes.)
 - **Audio** — a video recording captures **system audio** (the default sink's monitor)
   as an AAC track by default, via **native PipeWire**. `--no-audio` records silently;
-  `--audio-source NODE` captures a specific node instead (e.g. a microphone). Needs the
-  `audio` build feature (on by default; links libpipewire). Timelapses and GIF/WebP
-  carry no audio.
+  `--audio-source NODE` captures another node instead, by its name or serial — a
+  microphone, for instance (`pactl list short sources` lists the names). If PipeWire
+  cannot be reached, the recording goes on without sound and says so. Timelapses and
+  GIF/WebP carry no audio.
   For a host with no PipeWire server running, build with `--features audio-fallback`
   to add a **Pulse/ALSA** path (via FFmpeg's libavdevice, no extra system dep), tried
   after PipeWire.
 
-Recording needs the `video` build feature (on by default), which links the system
-FFmpeg libraries. A screenshots-only build drops it: `cargo build -p wlr-shot
---no-default-features --features i18n`.
+## Troubleshooting
 
-## Install
-
-> **Want the whole suite?** Install the bundle instead — `cargo install wlr-utils` gets
-> every tool (`wlr-chooser`, `wlr-switcher`, `wlr-overlayd`, `wlr-peek`, `wlr-shot`,
-> `wlr-draw`) in one go. The single-tool install below is the lighter, à-la-carte option.
-
-```sh
-cargo install wlr-shot
-```
-
-Or build just this binary from the [wlr-utils](../../README.md) workspace:
-
-```sh
-cargo build --release -p wlr-shot
-```
-
-The default build records video and links the system FFmpeg libraries (see
-**Requirements** below). For a screenshots-only binary with no FFmpeg dependency:
-`cargo build -p wlr-shot --no-default-features --features i18n`.
-
-## Requirements
-
-**Works on** — screens and regions on every compositor that captures screens (sway,
-Hyprland, niri, labwc, Wayfire, river, dwl, cosmic-comp); windows (`-w`, `--app-id`,
-`--title`, `--pick-window`) where windows can be captured (Sway ≥ 1.12, Hyprland ≥ 0.54,
-river ≥ 0.4, cosmic-comp, and partly labwc ≥ 0.20 and dwl ≥ 0.9). Not on GNOME or KDE.
-Details in [COMPATIBILITY.md](../../COMPATIBILITY.md).
-
-A wlroots compositor exposing a capture protocol. Output/region screenshots and
-recording need `ext-image-copy-capture-v1` with the
-`ext-output-image-capture-source-manager-v1` source — **Sway ≥ 1.11 / wlroots ≥ 0.19** —
-or `zwlr_screencopy_manager_v1`; capturing a **window** (`-w`/`--pick-window`) needs
-`ext-foreign-toplevel-list-v1` and `ext-foreign-toplevel-image-capture-source-manager-v1` —
-**Sway ≥ 1.12 / wlroots ≥ 0.20**, which `zwlr_screencopy_manager_v1` does not stand in
-for.
-`xdg-output` is used for accurate logical geometry when present, and the clipboard (`-c`)
-needs `zwlr_data_control_manager_v1`. Run `wlr-shot doctor` to see what your compositor
-exposes; see [COMPATIBILITY.md](../../COMPATIBILITY.md) for the full matrix.
-
-The interactive region selector (`-s`) renders a frozen overlay through EGL/GLES — its
-layer is named `wlr-shot`, for [compositor rules](../../README.md#compositor-rules) — so
-**every build** needs a working GL stack (`libegl1`) at runtime, and looks up the UI font
-with `libfontconfig1` when it is there (the embedded fonts otherwise).
-The default build also links `libgbm` for the zero-copy dma-buf path used by `record`; screenshots themselves are
-captured through shared memory. `--no-gpu` (or `WLR_NO_GPU=1`) forces the shm path
-everywhere, and `wlr-shot doctor` reports whether the dma-buf path actually works here.
-
-The default build (with `record`) additionally links the system **FFmpeg** libraries,
-and its `audio` feature **PipeWire**, so it needs their development packages and `clang`
-at build time ([the full list](../../README.md#from-source)). Hardware encoding needs
-the matching runtime: NVIDIA's `libnvidia-encode` for NVENC, or a VAAPI driver for
-your GPU. Drop the sound with `--no-default-features --features i18n,video,gpu` (video
-only), or build screenshots-only (`--no-default-features --features i18n`) to need none
-of this.
+- **`multiple outputs; specify -o NAME among: …`** — with several screens, name one with
+  `-o`, or use `--all`, `-s` or `--current-output`.
+- **Several windows match `--app-id`/`--title`** — the error lists them; narrow the match,
+  or pass the `-w ID` it prints.
+- **`-a` or `--current-output` is unavailable** — they need a focus backend (sway,
+  Hyprland, niri for `--current-output`, cosmic-comp); use `-s`, `-g` or `-o` elsewhere.
+- **`recording without audio (…)`** — PipeWire could not be reached; the video is still
+  recorded. Pass `--no-audio` to record silently on purpose.
+- **What does my compositor support?** `wlr-shot doctor` says, and its output is what a
+  bug report needs.
 
 ## Uninstall
 
