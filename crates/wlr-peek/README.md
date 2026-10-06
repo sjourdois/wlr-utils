@@ -155,8 +155,8 @@ $ wlr-peek watch -o DP-4 --on change --threshold 2 --repeat --exec 'mpc next'
   also decides what counts as stable for `--on idle`.
 - By default it prints one line and exits 0 on the first trigger (composes with
   `&&`); `--repeat` keeps watching and fires every time (with `--on idle`, again
-  after each further `--for` of stillness). `--exec CMD` runs a shell
-  command on each trigger. `--timeout DUR` gives up (exit 2) if nothing fires. If the
+  after each further `--for` of stillness). `--exec CMD` runs a shell command on each
+  trigger. `--timeout DUR` gives up (exit 2) after `DUR` without a trigger. If the
   watched window closes or the output goes away, it exits 3.
 
 Capture is damage-driven, so `watch` is cheap: a static source delivers no frames.

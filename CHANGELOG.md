@@ -30,6 +30,9 @@ All notable changes to this project are documented here. The format is based on
 - **The systemd units start a `cargo install`ed daemon** — systemd looked `wlr-draw` and
   `wlr-overlayd` up in `/usr/bin` and `/usr/local/bin` only; the units now go through the
   user manager's `PATH`.
+- **`wlr-peek watch --repeat --timeout` waits for a quiet stretch** — the timeout ran
+  from the start and exited 2, "no trigger", however often it had fired; it now restarts
+  at each trigger, as its help says.
 - **`wlr-peek watch` exits 3 when its window or output goes away** — it exited 0, so
   `watch … && notify-send` fired when the watched window closed.
 - **`wlr-shot record --timelapse` no longer captures sound it cannot use** — it ran a

@@ -1089,7 +1089,8 @@ mod watch_impl {
             if args.repeat { ", Ctrl-C to stop" } else { "" }
         );
 
-        let start = Instant::now();
+        // `--timeout` is a stretch with no trigger: with `--repeat`, each one restarts it.
+        let mut last_trigger = Instant::now();
         let mut s = stream::Stream::new(source, stream::DEFAULT_GRACE);
         let mut rb: Option<GpuReadback> = None;
         let mut prev: Option<CapturedImage> = None;
@@ -1097,7 +1098,7 @@ mod watch_impl {
 
         loop {
             if let Some(t) = timeout
-                && start.elapsed() >= t
+                && last_trigger.elapsed() >= t
             {
                 eprintln!("wlr-peek: no trigger within {}s", t.as_secs());
                 std::process::exit(2);
@@ -1132,10 +1133,11 @@ mod watch_impl {
 
             match args.on {
                 Trigger::Change => {
-                    if let Some(pct) = changed_pct
-                        && fire(&args, &format!("change {pct:.1}%"))?
-                    {
-                        return Ok(());
+                    if let Some(pct) = changed_pct {
+                        if fire(&args, &format!("change {pct:.1}%"))? {
+                            return Ok(());
+                        }
+                        last_trigger = Instant::now();
                     }
                 }
                 Trigger::Idle => {
@@ -1145,6 +1147,7 @@ mod watch_impl {
                         if fire(&args, "idle")? {
                             return Ok(());
                         }
+                        last_trigger = Instant::now();
                         last_change = Some(Instant::now()); // await the next idle period
                     }
                 }
