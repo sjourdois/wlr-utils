@@ -9,7 +9,8 @@
 # below set over it.
 # name = "nord"
 
-# Colours: #rgb, #rrggbb or #rrggbbaa.
+# Colours: #rgb, #rrggbb or #rrggbbaa. What the overlays draw over the screen takes them
+# too: labels and panels on card, in text and text-dim, dimmed areas in backdrop.
 backdrop = "#0000008c"
 bg = "#1e2127"
 card = "#21252d"
@@ -24,11 +25,12 @@ screen-accent = "#81a1c1"
 window-accent = "#b48ead"
 
 # The UI font: a family name, or a font file. Japanese, Chinese and Korean text use the
-# CJK font, found on its own when unset.
+# CJK font, found on its own when unset. Every text of the overlays keeps its proportion
+# to font-size, 13 when unset.
 # font = "Inter"
 # font-path = "/usr/share/fonts/TTF/Inter.ttf"
 # cjk-font = "Noto Sans CJK JP"
-# font-size = 14.0
+# font-size = 13.0
 
 # How round the corners are, in pixels: the card's radius, every other corner keeping
 # its proportion to it. 0 squares them all.

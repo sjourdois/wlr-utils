@@ -60,6 +60,9 @@ pub struct Theme {
 
 /// The card's corner radius by default, which every other corner is drawn in proportion to.
 const DEFAULT_CORNER_RADIUS: f32 = 12.0;
+/// egui's body text size, which `font-size` replaces: every text the overlays paint is
+/// drawn in proportion to it.
+const DEFAULT_FONT_SIZE: f32 = 13.0;
 
 impl Default for Theme {
     fn default() -> Self {
@@ -181,6 +184,19 @@ impl Theme {
     /// keeps its proportion to the card's.
     pub fn radius(&self, at_default: f32) -> f32 {
         at_default * self.corner_radius / DEFAULT_CORNER_RADIUS
+    }
+
+    /// The size of a text drawn `at_default` with the default font size: every text
+    /// keeps its proportion to the body text, which `font-size` sets.
+    pub fn text_size(&self, at_default: f32) -> f32 {
+        at_default * self.font_size.unwrap_or(DEFAULT_FONT_SIZE) / DEFAULT_FONT_SIZE
+    }
+
+    /// `colour` at the opacity `alpha`, whatever its own: a theme colour on the
+    /// translucent shapes the overlays draw over any screen content.
+    pub fn with_alpha(colour: Color32, alpha: u8) -> Color32 {
+        let [r, g, b, _] = colour.to_srgba_unmultiplied();
+        Color32::from_rgba_unmultiplied(r, g, b, alpha)
     }
 }
 
@@ -366,6 +382,30 @@ mod tests {
         let problems = theme.merge(table("corner-radius = -4"));
         assert_eq!(problems, [Problem::Negative("corner-radius".into())]);
         assert_eq!(theme.corner_radius, 18.0);
+    }
+
+    /// Painted texts keep their proportion to the body text: unchanged without
+    /// `font-size`, scaled with it.
+    #[test]
+    fn text_sizes_follow_the_font_size() {
+        let mut theme = Theme::default();
+        assert_eq!(theme.text_size(16.0), 16.0);
+        theme.merge(table("font-size = 19.5"));
+        assert_eq!(theme.text_size(16.0), 24.0);
+    }
+
+    /// A theme colour drawn translucent keeps its hue and takes the shape's opacity,
+    /// whatever opacity it had.
+    #[test]
+    fn with_alpha_replaces_the_opacity() {
+        let c = Theme::with_alpha(Color32::from_rgb(0x21, 0x25, 0x2d), 200);
+        assert_eq!(c.to_srgba_unmultiplied(), [0x21, 0x25, 0x2d, 200]);
+        let backdrop = Color32::from_rgba_unmultiplied(0x24, 0x29, 0x33, 0xcc);
+        let dim = Theme::with_alpha(backdrop, 48);
+        assert_eq!(dim.to_srgba_unmultiplied()[3], 48);
+        let [r, g, b, _] = dim.to_srgba_unmultiplied();
+        // Premultiplied storage rounds the components a little at low opacity.
+        assert!(r.abs_diff(0x24) <= 3 && g.abs_diff(0x29) <= 3 && b.abs_diff(0x33) <= 3);
     }
 
     #[test]

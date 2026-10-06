@@ -35,6 +35,10 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- **Every overlay follows the theme** — the region selection, the colour picker, the
+  loupe, `wlr-draw`'s status, palette and help, and the `wlr-peek` mirror take the
+  theme's colours, font and corners, and every text scales with `font-size`. They were
+  black and white, in fixed sizes. `wlr-draw`'s help shrinks to fit a short screen.
 - **Each overlay's layer is named after its command** — a compositor rule can now tell
   `wlr-switcher` from `wlr-chooser`, which both used `wlr-chooser`. Region selection,
   the colour picker and the loupe, until now `wlr-overlay`, use `wlr-shot` or

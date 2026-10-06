@@ -498,8 +498,9 @@ one JSON object instead of the line (see [`--format`](#output----format)).
 
 Colours and fonts come from the `[theme]` section of
 [`config.toml`](../../README.md#configuration), with sensible dark defaults. The same
-section themes `wlr-switcher`, `wlr-draw` and the `wlr-peek` mirror. Colours are `#rgb`,
-`#rrggbb` or `#rrggbbaa`:
+section themes every overlay: `wlr-switcher`, `wlr-draw`, the region selection, the
+colour picker and the loupe, and the `wlr-peek` mirror. Every text keeps its proportion
+to `font-size`. Colours are `#rgb`, `#rrggbb` or `#rrggbbaa`:
 
 ```toml
 [theme]

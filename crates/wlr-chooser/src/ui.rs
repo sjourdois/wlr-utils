@@ -1514,7 +1514,7 @@ impl App {
             Some((cols, rows)) => {
                 let (cols, rows) = (cols as f32, rows as f32);
                 let bar = 14.0; // scrollbar gutter
-                let tile_h = tile_min * (TILE_H / TILE_W) + 26.0;
+                let tile_h = tile_min * (TILE_H / TILE_W) + self.label_row();
                 let inner_w = cols * tile_min + (cols - 1.0) * gap + bar;
                 let inner_h = self.card_header + rows * tile_h + (rows - 1.0) * gap;
                 (inner_w + 24.0, inner_h + 24.0) // + card inner margin (12 each side)
@@ -1621,10 +1621,16 @@ impl App {
 }
 
 impl App {
+    /// The height of a card tile's label row: the name, which follows `font-size`, and
+    /// some air around it.
+    fn label_row(&self) -> f32 {
+        self.theme.text_size(13.0) + 13.0
+    }
+
     /// Draw one tile of width `w`; returns true if it was clicked.
     fn tile(&self, ui: &mut egui::Ui, s: &Source, selected: bool, w: f32) -> bool {
         let thumb_h = w * (TILE_H / TILE_W); // keep the 300:180 thumbnail aspect
-        let desired = egui::vec2(w, thumb_h + 26.0);
+        let desired = egui::vec2(w, thumb_h + self.label_row());
         let (rect, resp) = ui.allocate_exact_size(desired, egui::Sense::click());
         if !ui.is_rect_visible(rect) {
             return resp.clicked();
@@ -1685,15 +1691,16 @@ impl App {
                 img_rect.center(),
                 egui::Align2::CENTER_CENTER,
                 placeholder,
-                egui::FontId::proportional(20.0),
+                egui::FontId::proportional(t.text_size(20.0)),
                 t.text_dim,
             );
         }
 
-        // Label row: a type-distinguishing icon, then the name.
-        let icon_sz = 16.0;
-        let icon_rect = egui::Rect::from_min_size(
-            egui::pos2(rect.min.x + 8.0, rect.max.y - 21.0),
+        // Label row: a type-distinguishing icon, then the name, centred in the row.
+        let row_mid = rect.max.y - self.label_row() / 2.0;
+        let icon_sz = t.text_size(16.0);
+        let icon_rect = egui::Rect::from_center_size(
+            egui::pos2(rect.min.x + 8.0 + icon_sz / 2.0, row_mid),
             egui::vec2(icon_sz, icon_sz),
         );
         self.paint_label_icon(p, s, icon_rect, 1.0);
@@ -1706,13 +1713,13 @@ impl App {
         };
         let mut job = egui::text::LayoutJob::simple_singleline(
             label,
-            egui::FontId::proportional(13.0),
+            egui::FontId::proportional(t.text_size(13.0)),
             t.text,
         );
         job.wrap = egui::text::TextWrapping::truncate_at_width(rect.max.x - 6.0 - text_x);
         let galley = ui.painter().layout_job(job);
         p.galley(
-            egui::pos2(text_x, rect.max.y - 20.0),
+            egui::pos2(text_x, row_mid - galley.size().y / 2.0),
             galley,
             egui::Color32::PLACEHOLDER,
         );
@@ -1831,13 +1838,13 @@ impl App {
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
                 placeholder,
-                egui::FontId::proportional(18.0),
+                egui::FontId::proportional(t.text_size(18.0)),
                 fade(t.text_dim),
             );
         }
 
         // Translucent label strip at the bottom: icon + name.
-        let strip_h = 24.0_f32.min(rect.height() * 0.3);
+        let strip_h = t.text_size(24.0).min(rect.height() * 0.3);
         let strip =
             egui::Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - strip_h), rect.max);
         // Rounded like the tile's bottom corners, so it does not stick out of them.
@@ -1846,7 +1853,7 @@ impl App {
         p.rect_filled(
             strip,
             strip_corners,
-            egui::Color32::from_black_alpha(160).gamma_multiply(a),
+            Theme::with_alpha(t.card, 160).gamma_multiply(a),
         );
         let icon_sz = (strip_h - 8.0).max(10.0);
         let icon_rect = egui::Rect::from_min_size(
@@ -1862,7 +1869,7 @@ impl App {
         let tx = icon_rect.max.x + 6.0;
         let mut job = egui::text::LayoutJob::simple_singleline(
             label,
-            egui::FontId::proportional(13.0),
+            egui::FontId::proportional(t.text_size(13.0)),
             fade(t.text),
         );
         job.wrap = egui::text::TextWrapping::truncate_at_width((strip.right() - 6.0 - tx).max(0.0));
@@ -1917,7 +1924,7 @@ impl App {
         let gap = self.layout.spacing * 1.4;
         let pad = 12.0; // inside each cell, around the icon
         let margin = 22.0; // panel padding
-        let label_h = 30.0;
+        let label_h = self.theme.text_size(30.0);
         let max_panel_w = screen.width() * 0.92;
         let cell = |ic: f32| ic + 2.0 * pad;
         let largest = self.layout.switcher_size;
@@ -1955,7 +1962,7 @@ impl App {
                     egui::pos2(panel.center().x, panel.top() + margin + label_h / 2.0),
                     egui::Align2::CENTER_CENTER,
                     label,
-                    egui::FontId::proportional(16.0),
+                    egui::FontId::proportional(self.theme.text_size(16.0)),
                     self.theme.text,
                 );
 
@@ -2058,7 +2065,7 @@ impl App {
         p.rect_filled(
             badge,
             self.theme.radius(5.0),
-            egui::Color32::from_black_alpha(190).gamma_multiply(a),
+            Theme::with_alpha(self.theme.card, 190).gamma_multiply(a),
         );
         p.text(
             badge.center(),

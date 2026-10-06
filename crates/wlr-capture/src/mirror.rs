@@ -170,18 +170,18 @@ impl Content {
                         full.center(),
                         egui::Align2::CENTER_CENTER,
                         &self.loading,
-                        egui::FontId::proportional(16.0),
+                        egui::FontId::proportional(t.text_size(16.0)),
                         t.text_dim,
                     );
                 }
 
                 if self.gone {
-                    p.rect_filled(full, 0.0, egui::Color32::from_black_alpha(180));
+                    p.rect_filled(full, 0.0, Theme::with_alpha(t.backdrop, 180));
                     p.text(
                         full.center(),
                         egui::Align2::CENTER_CENTER,
                         &self.source_gone,
-                        egui::FontId::proportional(16.0),
+                        egui::FontId::proportional(t.text_size(16.0)),
                         t.text,
                     );
                     return;
@@ -199,7 +199,7 @@ impl Content {
 
                 // Freeze indicator: a pause glyph in the top-left corner.
                 if frozen {
-                    let bar = egui::Stroke::new(3.0, egui::Color32::from_white_alpha(220));
+                    let bar = egui::Stroke::new(3.0, Theme::with_alpha(t.text, 220));
                     let (x, y) = (8.0, 8.0);
                     p.line_segment([egui::pos2(x, y), egui::pos2(x, y + 12.0)], bar);
                     p.line_segment([egui::pos2(x + 6.0, y), egui::pos2(x + 6.0, y + 12.0)], bar);
@@ -215,12 +215,12 @@ impl Content {
                         egui::pos2(0.0, 0.0),
                         egui::pos2(w, close.bottom() + 6.0),
                     );
-                    p.rect_filled(strip, 0.0, egui::Color32::from_black_alpha(150));
+                    p.rect_filled(strip, 0.0, Theme::with_alpha(t.card, 150));
                     // Title at the left.
                     let mut job = egui::text::LayoutJob::simple_singleline(
                         self.label.clone(),
-                        egui::FontId::proportional(12.0),
-                        egui::Color32::WHITE,
+                        egui::FontId::proportional(t.text_size(12.0)),
+                        t.text,
                     );
                     job.wrap = egui::text::TextWrapping::truncate_at_width(
                         (collapse.left() - 12.0).max(0.0),
@@ -229,13 +229,13 @@ impl Content {
                     p.galley(
                         egui::pos2(8.0, strip.center().y - galley.size().y / 2.0),
                         galley,
-                        egui::Color32::WHITE,
+                        t.text,
                     );
                     // Collapse glyph (a downward chevron) and close glyph (an X).
-                    draw_collapse(p, collapse, egui::Color32::WHITE);
-                    draw_close(p, close, egui::Color32::WHITE);
+                    draw_collapse(p, collapse, t.text);
+                    draw_close(p, close, t.text);
                     // Resize grip in the bottom-right corner.
-                    draw_grip(p, grip_rect(w, h), egui::Color32::from_white_alpha(160));
+                    draw_grip(p, grip_rect(w, h), Theme::with_alpha(t.text, 160));
                 }
             });
     }

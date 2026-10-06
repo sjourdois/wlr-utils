@@ -72,7 +72,7 @@ use wlr_capture::keys::is_cancel;
 // Imported as a module: this file's own `Shape` is a drawn shape, not a cursor.
 use wlr_capture::pointer::{self, Pointer};
 use wlr_capture::render::Gpu;
-use wlr_capture::theme::Theme;
+use wlr_capture::theme::{ApplyTheme, Theme};
 use wlr_capture::{capture, wl};
 
 /// Default stroke colour and width before the user changes them.
@@ -525,12 +525,14 @@ impl State {
         }
         layer.commit();
 
+        let egui_ctx = egui::Context::default();
+        self.theme.apply(&egui_ctx);
         self.surfaces.push(Surface {
             layer,
             output: wl_out.clone(),
             logical_x: lx,
             logical_y: ly,
-            egui_ctx: egui::Context::default(),
+            egui_ctx,
             gpu: None,
             width: 0,
             height: 0,
@@ -821,6 +823,9 @@ impl State {
     fn reload_config(&mut self) -> Vec<String> {
         let mut config = wlr_config::load();
         self.theme = config.theme().clone();
+        for s in &self.surfaces {
+            self.theme.apply(&s.egui_ctx);
+        }
         let previous = std::mem::replace(&mut self.keymap, Keymap::from_config(&mut config));
         config.report();
         if self.keymap.snap_on_dwell != previous.snap_on_dwell {
@@ -1412,7 +1417,7 @@ impl State {
     fn palette_click(&mut self, surface: &wl_surface::WlSurface, pos: (f64, f64)) {
         let p = egui::pos2(pos.0 as f32, pos.1 as f32);
         if let Some((w, h)) = self.surface_dims(surface) {
-            let (panel, cells) = palette_cells(w, h);
+            let (panel, cells) = palette_cells(w, h, &self.theme);
             if let Some((_, c)) = cells.iter().find(|(r, _)| r.contains(p)) {
                 self.color = *c;
                 self.show_palette = false;
@@ -1668,7 +1673,7 @@ fn paint(
                     .collect();
                 holes.extend(live_spotlight_hole(frame, off));
                 if !holes.is_empty() {
-                    paint_veil(p, ui.max_rect(), &holes, frame.spotlight_dim);
+                    paint_veil(p, ui.max_rect(), &holes, frame.spotlight_dim, frame.theme);
                 }
                 // Annotations on top of the veil; spotlight shapes are the veil, not drawn.
                 for el in frame.elements {
@@ -1968,8 +1973,8 @@ impl Hole {
 /// A faint rim along the *union* boundary of all holes: each hole's outline is drawn only
 /// where it isn't inside another hole, so overlapping spotlights merge into one bright
 /// zone with no seam between them.
-fn paint_union_rim(p: &egui::Painter, holes: &[Hole]) {
-    let stroke = egui::Stroke::new(1.0, egui::Color32::from_white_alpha(45));
+fn paint_union_rim(p: &egui::Painter, holes: &[Hole], t: &Theme) {
+    let stroke = egui::Stroke::new(1.0, Theme::with_alpha(t.text, 45));
     for (i, h) in holes.iter().enumerate() {
         let pts = h.outline_points();
         for seg in pts.windows(2) {
@@ -2080,8 +2085,8 @@ fn live_spotlight_hole(frame: &Frame, off: egui::Vec2) -> Option<Hole> {
 /// rectangles leave a faint seam — visible as a flickering horizontal line where the
 /// scanlines meet the full-width band. Raw mesh quads aren't feathered, so they tile
 /// seamlessly (and it's a single draw call).
-fn paint_veil(p: &egui::Painter, screen: egui::Rect, holes: &[Hole], dim_alpha: u8) {
-    let dim = egui::Color32::from_black_alpha(dim_alpha);
+fn paint_veil(p: &egui::Painter, screen: egui::Rect, holes: &[Hole], dim_alpha: u8, t: &Theme) {
+    let dim = Theme::with_alpha(t.backdrop, dim_alpha);
     let mut mesh = egui::Mesh::default();
     {
         let mut quad = |x0: f32, y0: f32, x1: f32, y1: f32| {
@@ -2131,7 +2136,7 @@ fn paint_veil(p: &egui::Painter, screen: egui::Rect, holes: &[Hole], dim_alpha: 
         p.add(egui::Shape::mesh(mesh));
     }
 
-    paint_union_rim(p, holes);
+    paint_union_rim(p, holes, t);
 }
 
 /// Outline the selected element with a handled box, so it's clear what the arrow keys
@@ -2222,7 +2227,7 @@ fn paint_hud(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
             None => tr!("draw-hint-no-help"),
         }
     };
-    let font = egui::FontId::proportional(13.0);
+    let font = egui::FontId::proportional(t.text_size(13.0));
     let tool = p.layout_no_wrap(
         format!("{}  ·", tool_label(frame.tool)),
         font.clone(),
@@ -2254,7 +2259,7 @@ fn paint_hud(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
     );
     let bg = egui::Rect::from_min_size(origin, box_size);
     let radius = frame.theme.radius(8.0);
-    p.rect_filled(bg, radius, egui::Color32::from_black_alpha(190));
+    p.rect_filled(bg, radius, Theme::with_alpha(t.card, 190));
     // Attention pulse on draw-mode entry: a glowing accent halo + border that blinks a
     // few times, so the chip catches the eye on an otherwise empty screen.
     if frame.flash > 0.0 {
@@ -2281,7 +2286,7 @@ fn paint_hud(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
     p.rect_stroke(
         swatch,
         swatch_radius,
-        egui::Stroke::new(1.0, egui::Color32::from_white_alpha(120)),
+        egui::Stroke::new(1.0, Theme::with_alpha(t.text, 120)),
         egui::StrokeKind::Inside,
     );
     x += SW + gap;
@@ -2305,21 +2310,22 @@ fn paint_hud(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
 /// Layout for the colour-picker popup: the panel rect plus each swatch rect and its
 /// colour, in surface-local coordinates. Shared by [`paint_palette`] and the click
 /// hit-test ([`State::palette_click`]) so they always agree.
-fn palette_cells(w: f32, h: f32) -> (egui::Rect, Vec<(egui::Rect, Color)>) {
+fn palette_cells(w: f32, h: f32, t: &Theme) -> (egui::Rect, Vec<(egui::Rect, Color)>) {
     let colors = model::palette();
     let cols = model::PALETTE_COLS;
     let rows = colors.len() / cols;
     const CELL: f32 = 30.0;
     const GAP: f32 = 3.0;
     const PAD: f32 = 12.0;
-    const TITLE: f32 = 22.0;
+    // The title follows the font size; the swatches are colour, not text.
+    let title = t.text_size(22.0);
     let grid_w = cols as f32 * CELL + (cols - 1) as f32 * GAP;
     let grid_h = rows as f32 * CELL + (rows - 1) as f32 * GAP;
     let panel = egui::Rect::from_center_size(
         egui::pos2(w * 0.5, h * 0.5),
-        egui::vec2(grid_w + 2.0 * PAD, grid_h + TITLE + 2.0 * PAD),
+        egui::vec2(grid_w + 2.0 * PAD, grid_h + title + 2.0 * PAD),
     );
-    let origin = egui::pos2(panel.min.x + PAD, panel.min.y + PAD + TITLE);
+    let origin = egui::pos2(panel.min.x + PAD, panel.min.y + PAD + title);
     let cells = colors
         .iter()
         .enumerate()
@@ -2341,18 +2347,15 @@ fn palette_cells(w: f32, h: f32) -> (egui::Rect, Vec<(egui::Rect, Color)>) {
 /// Paint the colour-picker popup: a grid of swatches with the current colour outlined.
 fn paint_palette(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
     let screen = ui.max_rect();
-    let (panel, cells) = palette_cells(screen.width(), screen.height());
-    p.rect_filled(
-        panel,
-        frame.theme.radius(10.0),
-        egui::Color32::from_black_alpha(225),
-    );
+    let t = frame.theme;
+    let (panel, cells) = palette_cells(screen.width(), screen.height(), t);
+    p.rect_filled(panel, t.radius(10.0), Theme::with_alpha(t.card, 225));
     p.text(
         egui::pos2(panel.min.x + 12.0, panel.min.y + 8.0),
         egui::Align2::LEFT_TOP,
         tr!("draw-palette-title"),
-        egui::FontId::proportional(14.0),
-        frame.theme.text,
+        egui::FontId::proportional(t.text_size(14.0)),
+        t.text,
     );
     for (rect, c) in &cells {
         p.rect_filled(*rect, frame.theme.radius(3.0), col(*c));
@@ -2360,7 +2363,7 @@ fn paint_palette(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
             p.rect_stroke(
                 rect.expand(1.5),
                 frame.theme.radius(3.0),
-                egui::Stroke::new(2.5, egui::Color32::WHITE),
+                egui::Stroke::new(2.5, t.text),
                 egui::StrokeKind::Outside,
             );
         }
@@ -2477,15 +2480,28 @@ pub(crate) fn shortcut_rows(km: &Keymap, capture_available: bool) -> Vec<HelpRow
 
 /// Paint the top-left key legend (the `h` shortcut): grouped sections with an accent header,
 /// a monospace key column and localised descriptions.
-fn paint_help(p: &egui::Painter, _ui: &egui::Ui, frame: &Frame) {
+fn paint_help(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
     let t = frame.theme;
     let rows = shortcut_rows(frame.keymap, frame.capture_available);
-    let key_font = egui::FontId::monospace(13.0);
-    let desc_font = egui::FontId::proportional(13.0);
-    let group_font = egui::FontId::proportional(12.0);
-    let key_color = egui::Color32::from_white_alpha(230);
-    let line_h = 19.0;
-    let group_gap = 8.0; // extra space above each section header
+    // The legend follows the font size, shrunk to fit above the status chip: a large
+    // font on a short screen would push its last sections off the bottom.
+    let (groups, entries) = rows.iter().fold((0.0, 0.0), |(g, e), row| match row {
+        HelpRow::Group(_) => (g + 1.0, e),
+        HelpRow::Entry(..) => (g, e + 1.0),
+    });
+    let natural =
+        (groups + entries) * t.text_size(19.0) + groups * t.text_size(8.0) + t.text_size(26.0);
+    let room = ui.max_rect().height() - 30.0 - (t.text_size(13.0) + 50.0);
+    let fit = (room / natural).clamp(0.5, 1.0);
+    let size = |at_default: f32| t.text_size(at_default) * fit;
+    let key_font = egui::FontId::monospace(size(13.0));
+    let desc_font = egui::FontId::proportional(size(13.0));
+    let group_font = egui::FontId::proportional(size(12.0));
+    let key_color = Theme::with_alpha(t.text, 230);
+    // Line heights follow the text; the margins around it do not.
+    let line_h = size(19.0);
+    let group_gap = size(8.0); // extra space above each section header
+    let title_h = size(26.0);
     let key_indent = 10.0; // keys sit a little right of their section header
     let col_gap = 14.0; // between the widest key and the descriptions
     let pad = 12.0;
@@ -2499,7 +2515,7 @@ fn paint_help(p: &egui::Painter, _ui: &egui::Ui, frame: &Frame) {
     }
     let title = p.layout_no_wrap(
         tr!("draw-help-title"),
-        egui::FontId::proportional(15.0),
+        egui::FontId::proportional(size(15.0)),
         t.accent,
     );
     let lines: Vec<Line> = rows
@@ -2538,11 +2554,11 @@ fn paint_help(p: &egui::Painter, _ui: &egui::Ui, frame: &Frame) {
         .sum();
     let panel = egui::Rect::from_min_size(
         origin - egui::vec2(pad, pad),
-        egui::vec2(content_w + 2.0 * pad, content_h + 40.0),
+        egui::vec2(content_w + 2.0 * pad, content_h + title_h + 14.0),
     );
-    p.rect_filled(panel, t.radius(10.0), egui::Color32::from_black_alpha(220));
+    p.rect_filled(panel, t.radius(10.0), Theme::with_alpha(t.card, 220));
     p.galley(origin, title, t.accent);
-    let mut y = origin.y + 26.0;
+    let mut y = origin.y + title_h;
     for line in lines {
         match line {
             Line::Group(name) => {

@@ -11,6 +11,7 @@ use crate::error::{CaptureError, Context, Result};
 use crate::keys::is_cancel;
 use crate::pointer::{Pointer, Shape};
 use crate::render::Gpu;
+use crate::theme::{ApplyTheme, Theme};
 use crate::wl::Region;
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
@@ -36,8 +37,6 @@ use wayland_client::{
     globals::registry_queue_init,
     protocol::{wl_keyboard, wl_output, wl_pointer, wl_seat, wl_surface},
 };
-
-const ACCENT: egui::Color32 = egui::Color32::from_rgb(0x4d, 0x9a, 0xff);
 
 /// What the frozen overlay collects from the user.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -93,9 +92,11 @@ impl Surface {
 
     /// Render the frozen backdrop plus the mode-specific overlay (selection
     /// rectangle, or crosshair + loupe), in global logical coordinates.
+    #[allow(clippy::too_many_arguments)]
     fn render(
         &mut self,
         conn: &Connection,
+        theme: &Theme,
         mode: Mode,
         hint: &str,
         selection: Option<Region>,
@@ -138,11 +139,21 @@ impl Surface {
             (pw, ph),
             [0.0, 0.0, 0.0, 1.0],
             |ui, _importer| match mode {
-                Mode::Region => {
-                    draw_region_overlay(ui, tex.as_ref(), w, h, lx, ly, selection, pointer, hint)
-                }
+                Mode::Region => draw_region_overlay(
+                    ui,
+                    theme,
+                    tex.as_ref(),
+                    w,
+                    h,
+                    lx,
+                    ly,
+                    selection,
+                    pointer,
+                    hint,
+                ),
                 Mode::Point => draw_point_overlay(
                     ui,
+                    theme,
                     tex.as_ref(),
                     w,
                     h,
@@ -155,7 +166,7 @@ impl Surface {
                     hint,
                 ),
                 Mode::Magnify => {
-                    draw_magnify_overlay(ui, tex.as_ref(), w, h, lx, ly, pointer, zoom, hint)
+                    draw_magnify_overlay(ui, theme, tex.as_ref(), w, h, lx, ly, pointer, zoom, hint)
                 }
             },
         );
@@ -168,6 +179,7 @@ impl Surface {
 #[allow(clippy::too_many_arguments)]
 fn draw_region_overlay(
     ui: &mut egui::Ui,
+    t: &Theme,
     tex: Option<&egui::TextureHandle>,
     w: f32,
     h: f32,
@@ -183,15 +195,15 @@ fn draw_region_overlay(
         .show(ui, |ui| {
             let p = ui.painter();
             let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
-            if let Some(t) = tex {
-                p.image(t.id(), screen, full_uv, egui::Color32::WHITE);
+            if let Some(img) = tex {
+                p.image(img.id(), screen, full_uv, egui::Color32::WHITE);
             }
 
             match selection {
                 None => {
                     // Idle: a light veil makes it obvious the screen is frozen and
                     // waiting for a selection.
-                    p.rect_filled(screen, 0.0, egui::Color32::from_black_alpha(48));
+                    p.rect_filled(screen, 0.0, Theme::with_alpha(t.backdrop, 48));
                 }
                 Some(sel) => {
                     // Selection in this surface's local (point) coordinates.
@@ -200,33 +212,39 @@ fn draw_region_overlay(
                         egui::vec2(sel.w as f32, sel.h as f32),
                     );
                     // Dim everything, then restore the selected area at full brightness.
-                    p.rect_filled(screen, 0.0, egui::Color32::from_black_alpha(120));
+                    p.rect_filled(screen, 0.0, Theme::with_alpha(t.backdrop, 120));
                     let vis = local.intersect(screen);
                     if vis.width() > 0.5
                         && vis.height() > 0.5
-                        && let Some(t) = tex
+                        && let Some(img) = tex
                     {
                         let uv = egui::Rect::from_min_max(
                             egui::pos2(vis.min.x / w, vis.min.y / h),
                             egui::pos2(vis.max.x / w, vis.max.y / h),
                         );
-                        p.image(t.id(), vis, uv, egui::Color32::WHITE);
+                        p.image(img.id(), vis, uv, egui::Color32::WHITE);
                     }
                     p.rect_stroke(
                         local,
                         0.0,
-                        egui::Stroke::new(2.0, ACCENT),
+                        egui::Stroke::new(2.0, t.accent),
                         egui::StrokeKind::Inside,
                     );
-                    // Size label, once, on the surface holding the selection's top-left.
+                    // Size label, once, on the surface holding the selection's top-left,
+                    // on a pill so it reads over whatever the selection holds.
                     if screen.contains(local.min) {
-                        p.text(
-                            local.min + egui::vec2(6.0, 6.0),
-                            egui::Align2::LEFT_TOP,
+                        let galley = p.layout_no_wrap(
                             format!("{} × {}", sel.w, sel.h),
-                            egui::FontId::monospace(13.0),
-                            egui::Color32::WHITE,
+                            egui::FontId::monospace(t.text_size(13.0)),
+                            t.text,
                         );
+                        let at = local.min + egui::vec2(10.0, 8.0);
+                        let bg = egui::Rect::from_min_size(
+                            at - egui::vec2(4.0, 2.0),
+                            galley.size() + egui::vec2(8.0, 4.0),
+                        );
+                        p.rect_filled(bg, t.radius(4.0), Theme::with_alpha(t.card, 200));
+                        p.galley(at, galley, t.text);
                     }
                 }
             }
@@ -236,7 +254,7 @@ fn draw_region_overlay(
             if let Some((gx, gy)) = pointer {
                 let (cx, cy) = (gx as f32 - lx as f32, gy as f32 - ly as f32);
                 if (0.0..=w).contains(&cx) && (0.0..=h).contains(&cy) {
-                    let col = egui::Color32::from_white_alpha(150);
+                    let col = Theme::with_alpha(t.text, 150);
                     p.line_segment(
                         [egui::pos2(0.0, cy), egui::pos2(w, cy)],
                         egui::Stroke::new(1.0, col),
@@ -248,16 +266,16 @@ fn draw_region_overlay(
                     if selection.is_none() {
                         let galley = p.layout_no_wrap(
                             hint.to_owned(),
-                            egui::FontId::proportional(14.0),
-                            egui::Color32::WHITE,
+                            egui::FontId::proportional(t.text_size(14.0)),
+                            t.text,
                         );
                         let at = egui::pos2(cx + 16.0, cy + 16.0);
                         let bg = egui::Rect::from_min_size(
                             at - egui::vec2(8.0, 5.0),
                             galley.size() + egui::vec2(16.0, 10.0),
                         );
-                        p.rect_filled(bg, 6.0, egui::Color32::from_black_alpha(200));
-                        p.galley(at, galley, egui::Color32::WHITE);
+                        p.rect_filled(bg, t.radius(6.0), Theme::with_alpha(t.card, 200));
+                        p.galley(at, galley, t.text);
                     }
                 }
             }
@@ -271,6 +289,7 @@ fn draw_region_overlay(
 #[allow(clippy::too_many_arguments)]
 fn draw_point_overlay(
     ui: &mut egui::Ui,
+    t: &Theme,
     tex: Option<&egui::TextureHandle>,
     w: f32,
     h: f32,
@@ -288,8 +307,8 @@ fn draw_point_overlay(
         .show(ui, |ui| {
             let p = ui.painter();
             let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
-            if let Some(t) = tex {
-                p.image(t.id(), screen, full_uv, egui::Color32::WHITE);
+            if let Some(img) = tex {
+                p.image(img.id(), screen, full_uv, egui::Color32::WHITE);
             }
             let Some((gx, gy)) = pointer else { return };
             let (cx, cy) = (gx as f32 - lx as f32, gy as f32 - ly as f32);
@@ -312,7 +331,7 @@ fn draw_point_overlay(
             };
 
             // Crosshair across the whole surface.
-            let col = egui::Color32::from_white_alpha(120);
+            let col = Theme::with_alpha(t.text, 120);
             p.line_segment(
                 [egui::pos2(0.0, cy), egui::pos2(w, cy)],
                 egui::Stroke::new(1.0, col),
@@ -338,10 +357,14 @@ fn draw_point_overlay(
             origin.y = origin.y.clamp(2.0, (h - loupe - 26.0).max(2.0));
 
             let frame = egui::Rect::from_min_size(origin, egui::vec2(loupe, loupe));
-            p.rect_filled(frame.expand(3.0), 4.0, egui::Color32::from_black_alpha(220));
+            p.rect_filled(
+                frame.expand(3.0),
+                t.radius(4.0),
+                Theme::with_alpha(t.card, 220),
+            );
             for dy in -R..=R {
                 for dx in -R..=R {
-                    let c = sample(px + dx, py + dy).unwrap_or(egui::Color32::from_gray(20));
+                    let c = sample(px + dx, py + dy).unwrap_or(t.thumb);
                     let cell = egui::Rect::from_min_size(
                         origin + egui::vec2((dx + R) as f32 * Z, (dy + R) as f32 * Z),
                         egui::vec2(Z, Z),
@@ -357,7 +380,7 @@ fn draw_point_overlay(
             p.rect_stroke(
                 centre,
                 0.0,
-                egui::Stroke::new(1.5, ACCENT),
+                egui::Stroke::new(1.5, t.accent),
                 egui::StrokeKind::Outside,
             );
 
@@ -366,32 +389,32 @@ fn draw_point_overlay(
                 let hex = format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b());
                 let at = egui::pos2(origin.x, origin.y + loupe + 4.0);
                 let galley =
-                    p.layout_no_wrap(hex, egui::FontId::monospace(15.0), egui::Color32::WHITE);
+                    p.layout_no_wrap(hex, egui::FontId::monospace(t.text_size(15.0)), t.text);
                 let bg = egui::Rect::from_min_size(
                     at - egui::vec2(4.0, 2.0),
                     galley.size() + egui::vec2(30.0, 6.0),
                 );
-                p.rect_filled(bg, 4.0, egui::Color32::from_black_alpha(220));
+                p.rect_filled(bg, t.radius(4.0), Theme::with_alpha(t.card, 220));
                 let sw = egui::Rect::from_min_size(
                     egui::pos2(bg.max.x - 20.0, bg.min.y + 3.0),
                     egui::vec2(14.0, bg.height() - 6.0),
                 );
-                p.rect_filled(sw, 2.0, c);
-                p.galley(at, galley, egui::Color32::WHITE);
+                p.rect_filled(sw, t.radius(2.0), c);
+                p.galley(at, galley, t.text);
 
                 // Hint below the readout.
                 let hint = p.layout_no_wrap(
                     hint.to_owned(),
-                    egui::FontId::proportional(12.0),
-                    egui::Color32::from_white_alpha(200),
+                    egui::FontId::proportional(t.text_size(12.0)),
+                    t.text_dim,
                 );
                 let hat = egui::pos2(bg.min.x + 2.0, bg.max.y + 4.0);
                 let hbg = egui::Rect::from_min_size(
                     hat - egui::vec2(4.0, 2.0),
                     hint.size() + egui::vec2(8.0, 4.0),
                 );
-                p.rect_filled(hbg, 4.0, egui::Color32::from_black_alpha(200));
-                p.galley(hat, hint, egui::Color32::from_white_alpha(200));
+                p.rect_filled(hbg, t.radius(4.0), Theme::with_alpha(t.card, 200));
+                p.galley(hat, hint, t.text_dim);
             }
         });
 }
@@ -402,6 +425,7 @@ fn draw_point_overlay(
 #[allow(clippy::too_many_arguments)]
 fn draw_magnify_overlay(
     ui: &mut egui::Ui,
+    t: &Theme,
     tex: Option<&egui::TextureHandle>,
     w: f32,
     h: f32,
@@ -417,7 +441,7 @@ fn draw_magnify_overlay(
         .show(ui, |ui| {
             let p = ui.painter();
             let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
-            let Some(t) = tex else { return };
+            let Some(img) = tex else { return };
 
             // Cursor in this surface's local coordinates, if it is here at all.
             let here = pointer
@@ -425,7 +449,7 @@ fn draw_magnify_overlay(
                 .filter(|(cx, cy)| (0.0..=w).contains(cx) && (0.0..=h).contains(cy));
             let Some((cx, cy)) = here else {
                 // Cursor elsewhere: show this output's frozen image at 1×.
-                p.image(t.id(), screen, full_uv, egui::Color32::WHITE);
+                p.image(img.id(), screen, full_uv, egui::Color32::WHITE);
                 return;
             };
 
@@ -436,10 +460,10 @@ fn draw_magnify_overlay(
                 egui::pos2(cu - cx / (zoom * w), cv - cy / (zoom * h)),
                 egui::pos2(cu + (w - cx) / (zoom * w), cv + (h - cy) / (zoom * h)),
             );
-            p.image(t.id(), screen, uv, egui::Color32::WHITE);
+            p.image(img.id(), screen, uv, egui::Color32::WHITE);
 
             // Crosshair at the focus point.
-            let col = egui::Color32::from_white_alpha(120);
+            let col = Theme::with_alpha(t.text, 120);
             p.line_segment(
                 [egui::pos2(0.0, cy), egui::pos2(w, cy)],
                 egui::Stroke::new(1.0, col),
@@ -451,18 +475,15 @@ fn draw_magnify_overlay(
 
             // Zoom readout + quit hint, top-left.
             let label = format!("{zoom:.1}×  ·  {}", hint);
-            let galley = p.layout_no_wrap(
-                label,
-                egui::FontId::proportional(13.0),
-                egui::Color32::WHITE,
-            );
+            let galley =
+                p.layout_no_wrap(label, egui::FontId::proportional(t.text_size(13.0)), t.text);
             let at = egui::pos2(14.0, 14.0);
             let bg = egui::Rect::from_min_size(
                 at - egui::vec2(6.0, 4.0),
                 galley.size() + egui::vec2(12.0, 8.0),
             );
-            p.rect_filled(bg, 6.0, egui::Color32::from_black_alpha(200));
-            p.galley(at, galley, egui::Color32::WHITE);
+            p.rect_filled(bg, t.radius(6.0), Theme::with_alpha(t.card, 200));
+            p.galley(at, galley, t.text);
         });
 }
 
@@ -477,6 +498,8 @@ struct State {
     mode: Mode,
     /// The caller-provided, localised on-screen hint for this mode.
     hint: String,
+    /// The colours, fonts and corners the overlay draws with.
+    theme: Theme,
 
     /// Live pointer position (global logical), for the crosshair + hint.
     pointer_pos: Option<(f64, f64)>,
@@ -523,7 +546,7 @@ impl State {
         let ptr = self.pointer_pos;
         let mode = self.mode;
         for s in &mut self.surfaces {
-            s.render(conn, mode, &self.hint, sel, ptr, self.zoom);
+            s.render(conn, &self.theme, mode, &self.hint, sel, ptr, self.zoom);
         }
     }
 }
@@ -636,6 +659,7 @@ fn run(
         surfaces: Vec::new(),
         mode,
         hint: hint.to_string(),
+        theme: Theme::load(),
         pointer_pos: None,
         start: None,
         cur: None,
@@ -681,6 +705,7 @@ fn run(
         layer.commit();
 
         let egui_ctx = egui::Context::default();
+        state.theme.apply(&egui_ctx);
         state.surfaces.push(Surface {
             layer,
             logical_x: lx,
@@ -741,7 +766,7 @@ impl CompositorHandler for State {
             .iter_mut()
             .find(|s| s.layer.wl_surface() == surface)
         {
-            s.render(conn, mode, &self.hint, sel, ptr, self.zoom);
+            s.render(conn, &self.theme, mode, &self.hint, sel, ptr, self.zoom);
         }
     }
 
@@ -769,7 +794,7 @@ impl CompositorHandler for State {
             .iter_mut()
             .find(|s| s.layer.wl_surface() == surface)
         {
-            s.render(conn, mode, &self.hint, sel, ptr, self.zoom);
+            s.render(conn, &self.theme, mode, &self.hint, sel, ptr, self.zoom);
         }
     }
 
@@ -819,7 +844,7 @@ impl LayerShellHandler for State {
             if let Some(gpu) = s.gpu.as_ref() {
                 gpu.resize((s.width * s.scale) as i32, (s.height * s.scale) as i32);
             }
-            s.render(conn, mode, &self.hint, sel, ptr, self.zoom);
+            s.render(conn, &self.theme, mode, &self.hint, sel, ptr, self.zoom);
         }
     }
 }
