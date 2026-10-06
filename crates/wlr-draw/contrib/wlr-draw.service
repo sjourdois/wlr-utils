@@ -9,8 +9,11 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-# Relies on wlr-draw being on the user manager's PATH (~/.local/bin or /usr/bin).
-ExecStart=wlr-draw
+# systemd looks a bare name up in a fixed list (/usr/bin, /usr/local/bin…), never in
+# PATH: env searches the user manager's PATH instead, so ~/.cargo/bin or ~/.local/bin
+# work once the session imports it (uwsm does). env execs the daemon, which stays the
+# main PID.
+ExecStart=/usr/bin/env wlr-draw
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=2

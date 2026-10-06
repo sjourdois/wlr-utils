@@ -228,8 +228,9 @@ install -Dm644 contrib/wlr-draw.service ~/.config/systemd/user/wlr-draw.service
 
 It is bound to `graphical-session.target`, so it comes up with the Wayland session and
 goes down with it — this needs a session that populates that target, which uwsm does. The
-unit calls `wlr-draw` by name; if yours lives somewhere the user manager's `PATH` does not
-cover, write the full path in `ExecStart`. **Use one mechanism, not several** — and if you
+unit finds `wlr-draw` through the user manager's `PATH` (`systemctl --user
+show-environment`), which uwsm fills from your login environment. Elsewhere, import yours
+(`systemctl --user import-environment PATH`) or write the full path in `ExecStart`. **Use one mechanism, not several** — and if you
 pick one of these, untick **Start on login** in the tray so the autostart entry does not
 race yours.
 

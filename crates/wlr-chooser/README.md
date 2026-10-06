@@ -397,8 +397,9 @@ install -Dm644 contrib/wlr-overlayd.service ~/.config/systemd/user/wlr-overlayd.
 
 It is bound to `graphical-session.target`, so it comes up with the Wayland session and
 goes down with it — this needs a session that populates that target, which uwsm does. The
-unit calls `wlr-overlayd` by name; if yours lives somewhere the user manager's `PATH` does
-not cover, write the full path in `ExecStart`. **Use one mechanism, not both.**
+unit finds `wlr-overlayd` through the user manager's `PATH` (`systemctl --user
+show-environment`), which uwsm fills from your login environment. Elsewhere, import yours
+(`systemctl --user import-environment PATH`) or write the full path in `ExecStart`. **Use one mechanism, not both.**
 
 To check it took, run `wlr-switcher` from a terminal: silence means the daemon served it,
 and a line on stderr says why it did not.

@@ -24,6 +24,9 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **The systemd units start a `cargo install`ed daemon** — systemd looked `wlr-draw` and
+  `wlr-overlayd` up in `/usr/bin` and `/usr/local/bin` only; the units now go through the
+  user manager's `PATH`.
 - **`wlr-peek watch` exits 3 when its window or output goes away** — it exited 0, so
   `watch … && notify-send` fired when the watched window closed.
 - **`wlr-shot screenshot -t ppm` writes PPM** — it wrote PAM, which is now `-t pam`.
