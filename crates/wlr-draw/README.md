@@ -205,9 +205,10 @@ setup needed; a compositor without tablet support just runs with the mouse.
 ### Starting it
 
 **With the tray (the default build), there is nothing to install.** On its very first run
-in a desktop session (one with a D-Bus session bus), the daemon registers itself to start with your session, and comes up on its own from then
-on — picked up by any XDG-compliant session, including the systemd xdg-autostart generator
-under uwsm.
+in a desktop session (one with a D-Bus session bus), the daemon registers itself to start
+with your session, and comes up on its own from then on — picked up by any session that
+runs XDG autostart entries, including the systemd xdg-autostart generator under uwsm.
+**sway on its own runs none:** there, add `exec wlr-draw` to its config (below).
 
 It does that by writing `~/.config/autostart/wlr-draw.desktop`. Worth knowing before it
 happens: it is the one file `wlr-draw` puts in your configuration, and it only ever writes
