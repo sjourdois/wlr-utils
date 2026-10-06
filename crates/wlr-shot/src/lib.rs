@@ -277,7 +277,7 @@ fn pick_window() -> Result<String> {
     let out = cmd
         .arg("--windows")
         .output()
-        .context("lancement de wlr-chooser")?;
+        .context("launching wlr-chooser")?;
     String::from_utf8_lossy(&out.stdout)
         .lines()
         .find_map(|l| l.strip_prefix("Window: "))
