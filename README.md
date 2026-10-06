@@ -158,8 +158,21 @@ cargo install wlr-draw           # annotation overlay
 ```
 
 Building the checkout directly works the same way (`cargo build --release` puts every
-binary in `target/release`). Either route needs the `-dev` packages of the features you
-build: Tesseract for OCR, FFmpeg for recording, and `libgbm-dev` for the GPU capture path.
+binary in `target/release`). Either route needs the development packages of the features
+you build; for the whole suite, the ones CI installs:
+
+```sh
+# Debian / Ubuntu
+sudo apt install clang libwayland-dev libxkbcommon-dev libfontconfig-dev libgbm-dev \
+  libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libavdevice-dev \
+  libswscale-dev libswresample-dev libva-dev libpipewire-0.3-dev \
+  libtesseract-dev libleptonica-dev
+# Arch
+sudo pacman -S --needed cargo clang wayland libxkbcommon fontconfig mesa ffmpeg libva \
+  libpipewire tesseract leptonica
+```
+
+Each tool's README says which of these its features pull in.
 
 ### Uninstall
 

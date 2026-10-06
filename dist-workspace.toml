@@ -42,5 +42,3 @@ libva-dev = '*'
 # wlr-peek `ocr` — Tesseract/Leptonica.
 libtesseract-dev = '*'
 libleptonica-dev = '*'
-# wlr-draw `tray` — StatusNotifierItem over D-Bus.
-libdbus-1-dev = '*'

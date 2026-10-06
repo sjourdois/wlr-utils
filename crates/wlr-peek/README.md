@@ -203,9 +203,10 @@ advertises; see [COMPATIBILITY.md](../../COMPATIBILITY.md) for the full matrix.
   `--no-gpu` (or `WLR_NO_GPU=1`) forces the shm path; `wlr-peek doctor` reports whether the
   dma-buf path works here.
 - **OCR** (`ocr`, `grep`; on by default) — links the system `libtesseract`/`libleptonica`
-  (`-dev` packages, plus `clang` for the bindings); the matching `tesseract-ocr-<lang>`
-  data pack must be installed at runtime (default `eng`). Without the feature the binary
-  needs none of these.
+  (their `-dev` packages and `clang` to build, see
+  [the full list](../../README.md#from-source)); the matching `tesseract-ocr-<lang>` data
+  pack must be installed at runtime (default `eng`). Without the feature the binary needs
+  none of these.
 - **Focus backend** — `--active-window` / `--current-output` ask the compositor: Sway,
   Hyprland and niri over their IPC (niri: `--current-output` only), cosmic-comp over
   `zcosmic_toplevel_info_v1`.

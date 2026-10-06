@@ -67,7 +67,7 @@ jobs:
             libwayland-dev libxkbcommon-dev libfontconfig-dev libgbm-dev \
             libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev \
             libavdevice-dev libswscale-dev libswresample-dev libva-dev \
-            libpipewire-0.3-dev libtesseract-dev libleptonica-dev libdbus-1-dev
+            libpipewire-0.3-dev libtesseract-dev libleptonica-dev
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}

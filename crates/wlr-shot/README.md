@@ -198,20 +198,18 @@ exposes; see [COMPATIBILITY.md](../../COMPATIBILITY.md) for the full matrix.
 
 The interactive region selector (`-s`) renders a frozen overlay through EGL/GLES — its
 layer is named `wlr-shot`, for [compositor rules](../../README.md#compositor-rules) — so
-**every build** needs a working GL stack (`libegl1`) and `libfontconfig1` at runtime. The default build also
-links `libgbm` for the zero-copy dma-buf path used by `record`; screenshots themselves are
+**every build** needs a working GL stack (`libegl1`) and `libfontconfig1` at runtime.
+The default build also links `libgbm` for the zero-copy dma-buf path used by `record`; screenshots themselves are
 captured through shared memory. `--no-gpu` (or `WLR_NO_GPU=1`) forces the shm path
 everywhere, and `wlr-shot doctor` reports whether the dma-buf path actually works here.
 
-The default build (with `record`) additionally links the system **FFmpeg** libraries, so
-it needs their development packages at build time — on Debian/Ubuntu: `libavcodec-dev
-libavformat-dev libavutil-dev libavfilter-dev libavdevice-dev libswscale-dev
-libswresample-dev libva-dev` (and `clang` for the bindings). Hardware encoding needs
+The default build (with `record`) additionally links the system **FFmpeg** libraries,
+and its `audio` feature **PipeWire**, so it needs their development packages and `clang`
+at build time ([the full list](../../README.md#from-source)). Hardware encoding needs
 the matching runtime: NVIDIA's `libnvidia-encode` for NVENC, or a VAAPI driver for
-your GPU. The default `audio` feature records system sound through **PipeWire**, linking
-`libpipewire-0.3` (and `clang` to build); drop it with `--no-default-features --features
-i18n,video,gpu` (video only), or build screenshots-only (`--no-default-features --features
-i18n`) to need none of this.
+your GPU. Drop the sound with `--no-default-features --features i18n,video,gpu` (video
+only), or build screenshots-only (`--no-default-features --features i18n`) to need none
+of this.
 
 ## Uninstall
 
