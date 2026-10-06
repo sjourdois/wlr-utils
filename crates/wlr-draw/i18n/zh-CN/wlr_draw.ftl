@@ -1,6 +1,7 @@
 # 简体中文翻译（界面文本）— wlr-draw。
 
 draw-hint = 绘图 · { $help } 帮助 · Esc 离开
+draw-hint-no-help = 绘图 · Esc 离开
 draw-passthrough-hint = 点击穿透 — 按 { $passthrough } 重新绘图
 draw-text-hint = 输入文字 · Enter 确定 · Esc 取消
 draw-spotlight-hint = 聚光灯 · 拖出形状或移动光标 · 滚轮/i k 大小 · 倾斜/j l 暗度 · 松开 { $spotlight } 结束
@@ -48,6 +49,7 @@ draw-help-key-rdrag = 右键拖动
 draw-help-key-type = 输入
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
+draw-help-key-unassigned = <未分配>
 tray-status-drawing = 绘图中
 tray-status-idle = 空闲（点击穿透）
 tray-toggle = 切换绘图模式

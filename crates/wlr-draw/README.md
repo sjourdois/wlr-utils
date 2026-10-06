@@ -118,9 +118,11 @@ your changes without losing the drawing.
 Fixed (not rebindable): `Esc` and its alias `Ctrl+[` (always back out), the arrow-key
 nudge, and the spotlight size/dim cluster (`i`/`j`/`k`/`l` + wheel, live only while
 spotlighting). The nudge step size still reads the physical `Shift` (1px) / `Ctrl` (big)
-keys. A bad name or a key bound to two things is reported on stderr and the default is
-kept. The on-screen `h` legend and
-the tray's Shortcuts menu reflect your bindings.
+keys. A bad name is reported on stderr, and that entry keeps its default. A key you bind
+goes where you put it: the action that had it by default gives it up and keeps its other
+keys, or shows as unassigned. Two entries of your file on one key are reported; the first
+in the example's order wins, and a held control wins over an action. The on-screen `h`
+legend and the tray's Shortcuts menu reflect your bindings.
 
 ## Drawing
 

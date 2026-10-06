@@ -1,6 +1,7 @@
 # Traducción al español (cadenas de la interfaz) de wlr-draw.
 
 draw-hint = Dibuja · { $help } para ayuda · Esc para salir
+draw-hint-no-help = Dibuja · Esc para salir
 draw-passthrough-hint = Clic atravesado — { $passthrough } para volver a dibujar
 draw-text-hint = Escribe · Enter para confirmar · Esc para cancelar
 draw-spotlight-hint = Foco · arrastra una forma o mueve el cursor · rueda/i k tamaño · inclina/j l atenúa · suelta { $spotlight } para terminar
@@ -48,6 +49,7 @@ draw-help-key-rdrag = Arrastre der.
 draw-help-key-type = Escribir
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
+draw-help-key-unassigned = <sin asignar>
 tray-status-drawing = Dibujando
 tray-status-idle = Inactivo (clic atravesado)
 tray-toggle = Alternar modo dibujo

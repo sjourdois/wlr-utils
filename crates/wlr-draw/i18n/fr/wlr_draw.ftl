@@ -1,6 +1,7 @@
 # Chaînes d'interface de wlr-draw (la ligne de commande, via clap, est en anglais).
 
 draw-hint = Dessin · { $help } pour l'aide · Échap pour quitter
+draw-hint-no-help = Dessin · Échap pour quitter
 draw-passthrough-hint = Clic transparent — { $passthrough } pour redessiner
 draw-text-hint = Saisissez · Entrée pour valider · Échap pour annuler
 draw-spotlight-hint = Spotlight · tracez une forme, ou bougez le curseur · molette/i k taille · inclinaison/j l assombrir · relâchez { $spotlight } pour finir
@@ -48,6 +49,7 @@ draw-help-key-rdrag = Clic-droit
 draw-help-key-type = Saisir
 draw-help-key-text-end = Entrée / Échap
 draw-help-key-esc = Échap / Ctrl+[
+draw-help-key-unassigned = <non affecté>
 tray-status-drawing = Dessin
 tray-status-idle = Inactif (clic à travers)
 tray-toggle = Activer/désactiver le dessin

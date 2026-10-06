@@ -1,6 +1,7 @@
 # Русский перевод (строки интерфейса) wlr-draw.
 
 draw-hint = Рисование · { $help } — справка · Esc — выйти
+draw-hint-no-help = Рисование · Esc — выйти
 draw-passthrough-hint = Сквозной клик — { $passthrough }, чтобы снова рисовать
 draw-text-hint = Печатайте · Enter — готово · Esc — отмена
 draw-spotlight-hint = Подсветка · обведите фигуру или ведите курсор · колесо/i k размер · наклон/j l затемнение · отпустите { $spotlight } для завершения
@@ -48,6 +49,7 @@ draw-help-key-rdrag = Перетаск. ПКМ
 draw-help-key-type = Ввод
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
+draw-help-key-unassigned = <не назначено>
 tray-status-drawing = Рисование
 tray-status-idle = Ожидание (сквозной клик)
 tray-toggle = Переключить режим рисования

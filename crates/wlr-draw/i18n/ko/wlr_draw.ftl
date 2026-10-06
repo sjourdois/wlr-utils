@@ -1,6 +1,7 @@
 # 한국어 번역 (UI 문자열) — wlr-draw.
 
 draw-hint = 그리기 · { $help } 도움말 · Esc 나가기
+draw-hint-no-help = 그리기 · Esc 나가기
 draw-passthrough-hint = 클릭 통과 — { $passthrough } 다시 그리기
 draw-text-hint = 입력 · Enter 확정 · Esc 취소
 draw-spotlight-hint = 스포트라이트 · 도형을 드래그하거나 커서를 이동 · 휠/i k 크기 · 기울이기/j l 어둡기 · { $spotlight } 떼면 종료
@@ -48,6 +49,7 @@ draw-help-key-rdrag = 오른쪽 드래그
 draw-help-key-type = 입력
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
+draw-help-key-unassigned = <할당 안 됨>
 tray-status-drawing = 그리는 중
 tray-status-idle = 대기 (클릭 통과)
 tray-toggle = 그리기 모드 전환

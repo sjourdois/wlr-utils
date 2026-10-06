@@ -2165,7 +2165,10 @@ fn paint_hud(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
     } else if in_spotlight {
         tr!("draw-spotlight-hint", spotlight = km.spotlight.label())
     } else {
-        tr!("draw-hint", help = km.label_for(Action::Help))
+        match km.label_for(Action::Help) {
+            Some(help) => tr!("draw-hint", help = help),
+            None => tr!("draw-hint-no-help"),
+        }
     };
     let font = egui::FontId::proportional(13.0);
     let tool = p.layout_no_wrap(
@@ -2318,7 +2321,10 @@ pub(crate) enum HelpRow {
 /// key-free (the key lives in its own column). Shared by the on-screen [`paint_help`] legend
 /// and the tray's Shortcuts submenu, so they never drift apart.
 pub(crate) fn shortcut_rows(km: &Keymap, capture_available: bool) -> Vec<HelpRow> {
-    let key = |a| km.label_for(a);
+    let key = |a| {
+        km.label_for(a)
+            .unwrap_or_else(|| tr!("draw-help-key-unassigned"))
+    };
     let mut rows = vec![HelpRow::Group(tr!("draw-help-group-tools"))];
     let mut entry = |k: String, d: String| rows.push(HelpRow::Entry(k, d));
     entry(key(Action::Pen), tool_label(Tool::Pen));

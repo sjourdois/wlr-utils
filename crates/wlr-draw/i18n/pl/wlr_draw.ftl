@@ -1,6 +1,7 @@
 # Polskie tłumaczenie (teksty interfejsu) wlr-draw.
 
 draw-hint = Rysuj · { $help } pomoc · Esc wyjście
+draw-hint-no-help = Rysuj · Esc wyjście
 draw-passthrough-hint = Klikanie przez warstwę — { $passthrough } wraca do rysowania
 draw-text-hint = Pisz · Enter zatwierdza · Esc anuluje
 draw-spotlight-hint = Reflektor · przeciągnij kształt lub poruszaj kursorem · kółko/i k rozmiar · przechył/j l przyciemnienie · puść { $spotlight }, aby zakończyć
@@ -48,6 +49,7 @@ draw-help-key-rdrag = Przeciąg. PPM
 draw-help-key-type = Pisz
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
+draw-help-key-unassigned = <nieprzypisany>
 tray-status-drawing = Rysowanie
 tray-status-idle = Bezczynny (klikanie przez warstwę)
 tray-toggle = Przełącz tryb rysowania

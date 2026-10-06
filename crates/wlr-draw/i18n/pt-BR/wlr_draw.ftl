@@ -1,6 +1,7 @@
 # Tradução em português do Brasil (textos da interface) do wlr-draw.
 
 draw-hint = Desenhar · { $help } para ajuda · Esc para sair
+draw-hint-no-help = Desenhar · Esc para sair
 draw-passthrough-hint = Clique passa direto — { $passthrough } para desenhar de novo
 draw-text-hint = Digite · Enter para confirmar · Esc para cancelar
 draw-spotlight-hint = Holofote · arraste uma forma, ou mova o cursor · roda/i k tamanho · inclinar/j l escurecer · solte { $spotlight } para terminar
@@ -48,6 +49,7 @@ draw-help-key-rdrag = Arrastar dir.
 draw-help-key-type = Digitar
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
+draw-help-key-unassigned = <não atribuído>
 tray-status-drawing = Desenhando
 tray-status-idle = Ocioso (clique passa direto)
 tray-toggle = Alternar modo desenho

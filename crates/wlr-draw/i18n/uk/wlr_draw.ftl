@@ -1,6 +1,7 @@
 # Український переклад (рядки інтерфейсу) wlr-draw.
 
 draw-hint = Малювання · { $help } — довідка · Esc — вийти
+draw-hint-no-help = Малювання · Esc — вийти
 draw-passthrough-hint = Наскрізні кліки — { $passthrough }, щоб знову малювати
 draw-text-hint = Введіть текст · Enter — готово · Esc — скасувати
 draw-spotlight-hint = Підсвітка · перетягніть фігуру або рухайте курсор · колесо/i k розмір · нахил/j l затемнення · відпустіть { $spotlight }, щоб завершити
@@ -48,6 +49,7 @@ draw-help-key-rdrag = Перетяг. ПКМ
 draw-help-key-type = Ввід
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
+draw-help-key-unassigned = <не призначено>
 tray-status-drawing = Малювання
 tray-status-idle = Очікування (наскрізні кліки)
 tray-toggle = Перемкнути режим малювання

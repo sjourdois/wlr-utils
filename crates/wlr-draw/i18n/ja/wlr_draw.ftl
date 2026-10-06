@@ -1,6 +1,7 @@
 # 日本語訳（UI 文字列）— wlr-draw キャプチャツール群。
 
 draw-hint = 描画 · { $help } でヘルプ · Esc で終了
+draw-hint-no-help = 描画 · Esc で終了
 draw-passthrough-hint = クリックスルー中 — { $passthrough } で描画に戻る
 draw-text-hint = 入力 · Enter で確定 · Esc でキャンセル
 draw-spotlight-hint = スポットライト · 図形をドラッグ、またはカーソルを移動 · ホイール/i k サイズ · 傾き/j l 暗さ · { $spotlight } を離して終了
@@ -48,6 +49,7 @@ draw-help-key-rdrag = 右ドラッグ
 draw-help-key-type = 入力
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
+draw-help-key-unassigned = <未割り当て>
 tray-status-drawing = 描画中
 tray-status-idle = 待機中（クリックスルー）
 tray-toggle = 描画モードを切替

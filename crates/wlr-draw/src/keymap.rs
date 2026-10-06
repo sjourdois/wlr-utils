@@ -267,27 +267,13 @@ impl Keymap {
         .any(|role| role.has_key(ks))
     }
 
-    /// The label for an action's (first) trigger — for the help legend.
-    pub fn label_for(&self, action: Action) -> String {
+    /// The label for an action's (first) trigger — for the help legend — or `None` when
+    /// the file gave all its keys to something else.
+    pub fn label_for(&self, action: Action) -> Option<String> {
         self.keys
             .iter()
             .find(|(_, a)| *a == action)
             .map(|(t, _)| trigger_label(*t))
-            .unwrap_or_else(|| "?".into())
-    }
-
-    /// Replace every binding for `action` from a config value (or keep the default if the
-    /// value is absent or has no parseable trigger).
-    fn override_action(&mut self, opt: Option<OneOrMany>, action: Action, name: &str) {
-        let Some(o) = opt else { return };
-        let triggers = parse_triggers(o, name);
-        if triggers.is_empty() {
-            return; // all invalid → keep default
-        }
-        self.keys.retain(|(_, a)| *a != action);
-        for t in triggers {
-            self.keys.push((t, action));
-        }
     }
 
     /// Replace a held role's triggers from a config value (or keep the default if the
@@ -301,24 +287,37 @@ impl Keymap {
     }
 
     fn apply(&mut self, raw: RawConfig) {
-        self.override_action(raw.pen, Action::Pen, "pen");
-        self.override_action(raw.rect, Action::Rect, "rect");
-        self.override_action(raw.mask, Action::Mask, "mask");
-        self.override_action(raw.arrow, Action::Arrow, "arrow");
-        self.override_action(raw.text, Action::Text, "text");
-        self.override_action(raw.r#move, Action::Move, "move");
-        self.override_action(raw.eraser, Action::Eraser, "eraser");
-        self.override_action(raw.palette, Action::Palette, "palette");
-        self.override_action(raw.undo, Action::Undo, "undo");
-        self.override_action(raw.redo, Action::Redo, "redo");
-        self.override_action(raw.visibility, Action::Visibility, "visibility");
-        self.override_action(raw.save, Action::Save, "save");
-        self.override_action(raw.help, Action::Help, "help");
-        self.override_action(raw.clear, Action::Clear, "clear");
-        self.override_action(raw.width_inc, Action::WidthInc, "width-inc");
-        self.override_action(raw.width_dec, Action::WidthDec, "width-dec");
-        self.override_action(raw.freeze, Action::Freeze, "freeze");
-        self.override_action(raw.snap, Action::Snap, "snap");
+        // The file's action bindings, kept apart from the defaults until the end so a key
+        // it names can be taken from whichever action had it by default. A value with no
+        // parseable name keeps the action's default.
+        let mut file: Vec<(Trigger, Action)> = Vec::new();
+        for (value, action, name) in [
+            (raw.pen, Action::Pen, "pen"),
+            (raw.rect, Action::Rect, "rect"),
+            (raw.mask, Action::Mask, "mask"),
+            (raw.arrow, Action::Arrow, "arrow"),
+            (raw.text, Action::Text, "text"),
+            (raw.r#move, Action::Move, "move"),
+            (raw.eraser, Action::Eraser, "eraser"),
+            (raw.palette, Action::Palette, "palette"),
+            (raw.undo, Action::Undo, "undo"),
+            (raw.redo, Action::Redo, "redo"),
+            (raw.visibility, Action::Visibility, "visibility"),
+            (raw.save, Action::Save, "save"),
+            (raw.help, Action::Help, "help"),
+            (raw.clear, Action::Clear, "clear"),
+            (raw.width_inc, Action::WidthInc, "width-inc"),
+            (raw.width_dec, Action::WidthDec, "width-dec"),
+            (raw.freeze, Action::Freeze, "freeze"),
+            (raw.snap, Action::Snap, "snap"),
+        ] {
+            let Some(value) = value else { continue };
+            let triggers = parse_triggers(value, name);
+            if !triggers.is_empty() {
+                self.keys.retain(|(_, a)| *a != action);
+                file.extend(triggers.into_iter().map(|t| (t, action)));
+            }
+        }
 
         if let Some(on) = raw.dwell {
             self.snap_on_dwell = on;
@@ -338,11 +337,29 @@ impl Keymap {
         Self::override_role(raw.spotlight, &mut self.spotlight, "spotlight");
         Self::override_role(raw.snap_invert, &mut self.snap_invert, "snap-invert");
 
+        // A key the file names goes where the file puts it: the action that had it by
+        // default gives it up and keeps its other keys, or none. That is the user's
+        // choice, not a mistake to report. (The roles' defaults are modifiers, which no
+        // default action key is.)
+        let role_triggers: Vec<Trigger> = [
+            &self.passthrough,
+            &self.constrain,
+            &self.spotlight,
+            &self.snap_invert,
+        ]
+        .into_iter()
+        .flat_map(|role| role.0.iter().copied())
+        .collect();
+        self.keys
+            .retain(|(t, _)| !file.iter().any(|(f, _)| f == t) && !role_triggers.contains(t));
+        self.keys.extend(file);
+
         self.warn_conflicts();
     }
 
-    /// Best-effort diagnostics: the same key bound to two different actions, or a held
-    /// role sharing a key with a discrete action. Doesn't change anything — just warns.
+    /// Best-effort diagnostics for the file's own clashes, since the defaults have given
+    /// up every key it names: one key named for two actions (the first one wins), or for
+    /// a held role and an action (the role wins). Doesn't change anything — just warns.
     fn warn_conflicts(&self) {
         for i in 0..self.keys.len() {
             for j in (i + 1)..self.keys.len() {
@@ -559,6 +576,29 @@ mod tests {
         assert!(km.is_role_key(Keysym::F13));
         assert_eq!(km.passthrough.label(), "Caps / F13");
         assert_eq!(km.action_for_key(Keysym::from_char('b')), Some(Action::Pen));
+    }
+
+    /// The file's bindings win over the defaults: a key it names is taken from the action
+    /// that had it, which is left with its other keys or none.
+    #[test]
+    fn the_file_takes_a_key_from_a_default() {
+        let mut km = Keymap::default();
+        km.apply(toml::from_str(r#"pen = "r""#).unwrap());
+        assert_eq!(km.action_for_key(Keysym::from_char('r')), Some(Action::Pen));
+        assert_eq!(km.action_for_key(Keysym::from_char('p')), None);
+        assert_eq!(km.label_for(Action::Rect), None);
+
+        // An action with several keys keeps the others.
+        let mut km = Keymap::default();
+        km.apply(toml::from_str(r#"undo = "plus""#).unwrap());
+        assert_eq!(km.action_for_key(Keysym::plus), Some(Action::Undo));
+        assert_eq!(km.action_for_key(Keysym::equal), Some(Action::WidthInc));
+
+        // A held role takes a key the same way.
+        let mut km = Keymap::default();
+        km.apply(toml::from_str(r#"spotlight = "s""#).unwrap());
+        assert!(km.is_role_key(Keysym::from_char('s')));
+        assert_eq!(km.label_for(Action::Move), None);
     }
 
     /// A file that mentions neither leaves both at their default, and turning snapping

@@ -1,6 +1,7 @@
 # English (fallback) UI strings for the wlr-draw tools.
 
 draw-hint = Draw · { $help } for help · Esc to leave
+draw-hint-no-help = Draw · Esc to leave
 draw-passthrough-hint = Click-through — { $passthrough } to draw again
 draw-text-hint = Type · Enter to finish · Esc to cancel
 draw-spotlight-hint = Spotlight · drag a shape, or move the cursor · wheel/i k size · tilt/j l dim · { $spotlight } off to end
@@ -48,6 +49,7 @@ draw-help-key-rdrag = R-drag
 draw-help-key-type = Type
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
+draw-help-key-unassigned = <unassigned>
 tray-status-drawing = Drawing
 tray-status-idle = Idle (click-through)
 tray-toggle = Toggle draw mode
