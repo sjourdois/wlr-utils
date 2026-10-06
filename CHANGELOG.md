@@ -14,41 +14,33 @@ All notable changes to this project are documented here. The format is based on
   workspace, on sway, Hyprland and cosmic-comp.
 - **One `config.toml` for every tool** — `~/.config/wlr-utils/config.toml` holds the
   theme in `[theme]`, by `name` and with any of its keys set over it, and `wlr-draw`'s
-  settings in `[draw]` and `[draw.keys]`. `docs/config.toml` lists every setting at its
-  default. A mistake is named, with its file and key, on stderr and by `doctor`.
+  settings in `[draw]` and `[draw.keys]`; the packages now ship the themes. A mistake
+  is named, with its file and key, on stderr and by `doctor`.
 - **Square corners, and the overlays' sizes**
-  ([#23](https://github.com/sjourdois/wlr-utils/issues/23)) — `corner-radius` in
+  ([#23](https://github.com/sjourdois/wlr-utils/issues/23), requested by
+  [@zlokquay](https://github.com/zlokquay)) — `corner-radius` in
   `[theme]` rounds every corner in proportion, `0` squaring them all. `[chooser]` sets
   the card's size, the tiles' width, the spacing and the Alt-Tab row's size.
 - **Mouse buttons in `wlr-draw`'s bindings**
-  ([#25](https://github.com/sjourdois/wlr-utils/issues/25)) — `button2`, `button8`,
-  `button9` or a `BTN_` name, as in sway: `undo = "button8"` puts undo on the back
-  button. The left and right buttons stay for drawing and moving.
+  ([#25](https://github.com/sjourdois/wlr-utils/issues/25), requested by
+  [@algmyr](https://github.com/algmyr)) — `button2`, `button8`, `button9` or a `BTN_`
+  name, as in sway. The left and right buttons stay for drawing and moving.
 - **`migrate-config`** — moves the old `theme.toml` and `keys.toml` into `config.toml`,
-  comments included, then deletes them; `-` prints the new file instead.
+  comments included, then deletes them.
 - **`wlr-draw reload`** — re-reads the configuration and keeps the drawing, however the
   daemon was started, and prints what it could not apply.
 - **The systemd units from the binaries** — `wlr-draw print-unit` and
   `wlr-overlayd --print-unit` print them, for an install that did not put them in place.
-- **An install script for packagers** — `packaging/install.sh` installs the binaries,
-  the systemd units, the themes, the example configuration, the README and the
-  licences, and honours `DESTDIR` and `PREFIX`. The release archive carries it, and the
-  packages now ship the themes in `/usr/share/wlr-utils/themes`.
+- **The release archive installs itself** — `sudo sh install.sh` puts the binaries,
+  the systemd units, the themes and the example configuration in place.
 
 ### Changed
 
 - **Every overlay follows the theme** — the region selection, the colour picker, the
   loupe, `wlr-draw`'s status, palette and help, and the `wlr-peek` mirror take the
-  theme's colours, font and corners, and every text scales with `font-size`. They were
-  black and white, in fixed sizes. `wlr-draw`'s help shrinks to fit a short screen.
-- **Each overlay's layer is named after its command** — a compositor rule can now tell
-  `wlr-switcher` from `wlr-chooser`, which both used `wlr-chooser`. Region selection,
-  the colour picker and the loupe, until now `wlr-overlay`, use `wlr-shot` or
-  `wlr-peek`. Rules
-  written for the old names need updating; the README lists the namespaces.
-- **`-w ID` names a window in every command** — `wlr-peek mirror -w` opened the chooser,
-  which is now `--pick-window` as everywhere else, and `wlr-peek ocr` gains `-w`: the
-  "several windows match" error points at it.
+  theme's colours, font and corners, and every text scales with `font-size`. The first
+  three were black and white, in fixed sizes. `wlr-draw`'s help shrinks to fit a short
+  screen.
 
 ### Fixed
 
@@ -77,21 +69,19 @@ All notable changes to this project are documented here. The format is based on
   the daemon kept an overlay up, keyboard held, after the invocation that asked for
   it was gone, and answered every new one `busy`. It now takes the overlay down as
   soon as its client hangs up.
-- **A misspelled entry in `wlr-draw`'s `keys.toml` is reported** — it was ignored without
-  a word.
 - **`wlr-draw save rel.png` writes to your current directory** — a relative path was
   resolved from the daemon's.
-- **A list for a held control no longer discards all of `wlr-draw`'s `keys.toml`** —
+- **A list for a held control no longer discards all of `wlr-draw`'s bindings** —
   `passthrough`, `constrain`, `spotlight` and `snap-invert` now take a list like the
   other bindings, and any of its keys or modifiers engages the control.
-- **A key or modifier rebound in `wlr-draw`'s `keys.toml` goes where you put it** —
+- **A key or modifier rebound in `wlr-draw` goes where you put it** —
   `pen = "r"` left `r` on the rectangle and the pen with no key, and
   `passthrough = "alt"` shared Alt with snap-invert. What had it by default now gives it
   up, and the help shows it as unassigned if nothing is left.
 - **`systemctl --user reload wlr-draw` reloads instead of stopping the daemon** — it
-  now re-reads `keys.toml` and the theme and keeps the drawing.
+  now re-reads the configuration and keeps the drawing.
 - **`wlr-draw`'s on-screen hints name your keys** — after rebinding help, click-through
-  or spotlight in `keys.toml`, the hints still showed the default keys.
+  or spotlight, the hints still showed the default keys.
 - **The spotlight status shows its ○ mark** — it was an empty box.
 - **A non-ASCII colour no longer crashes `wlr-draw`** — `wlr-draw color '#aébcd'`
   panicked instead of reporting an unknown colour, and the same `color` line sent by
@@ -113,8 +103,8 @@ All notable changes to this project are documented here. The format is based on
 - **The systemd units start a `cargo install`ed daemon** — systemd looked `wlr-draw` and
   `wlr-overlayd` up in `/usr/bin` and `/usr/local/bin` only; the units now go through the
   user manager's `PATH`.
-- **A theme that cannot be applied says so** — an unreadable theme file, a value that is
-  no colour or a misspelled key left the default colours without a word.
+- **A mistake in the theme or in `wlr-draw`'s bindings is reported** — an unreadable
+  theme file, a value that is no colour or a misspelled entry was ignored without a word.
 - **Translated messages no longer wrap the values they insert in bidi isolation marks**
   — every language had them, English included.
 
@@ -125,6 +115,14 @@ All notable changes to this project are documented here. The format is based on
 
 ### Breaking
 
+- **Each overlay's layer is named after its command** — a compositor rule can now tell
+  `wlr-switcher` from `wlr-chooser`, which both used `wlr-chooser`, and region
+  selection, the colour picker and the loupe use `wlr-shot` or `wlr-peek` instead of
+  `wlr-overlay`. Rules written for the old names stop matching; the README lists the
+  namespaces.
+- **`wlr-peek mirror -w` takes a window ID** — `-w` opened the chooser, which is now
+  `--pick-window` as everywhere else; `-w ID` names a window in every command, and
+  `wlr-peek ocr` gains it.
 - `wlr-capture`: the `overlay` functions (`select_region`, `pick_point`, `magnify` and
   their `_on` forms) take the layer-shell namespace to use, and
   `VideoEncoder::resolved_backend` is gone: with `Backend::Auto`, the encoder is only
