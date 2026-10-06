@@ -31,6 +31,72 @@ alpha-blends over the live screen — nothing is captured until you freeze the f
 
 <p align="center"><sub>📖 See every tool in action on the <a href="https://sjourdois.github.io/wlr-utils/">showcase</a>.</sub></p>
 
+## Install
+
+> **Want the whole suite?** Install the bundle instead — `cargo install wlr-utils` gets
+> every tool (`wlr-chooser`, `wlr-switcher`, `wlr-overlayd`, `wlr-peek`, `wlr-shot`,
+> `wlr-draw`) in one go. The single-tool install below is the lighter, à-la-carte option.
+
+Building needs the Rust the [main README](../../README.md#from-source) names, and on
+Debian/Ubuntu `build-essential pkg-config libwayland-dev libxkbcommon-dev` (Arch:
+`base-devel wayland libxkbcommon`).
+
+```sh
+cargo install wlr-draw
+```
+
+Or build just this binary from the [wlr-utils](../../README.md) workspace:
+
+```sh
+cargo build --release -p wlr-draw
+```
+
+`--no-default-features` drops Fluent (English-only hints) **and** the tray.
+
+## Requirements
+
+**Works on** every compositor with `wlr-layer-shell`: sway, Hyprland, niri, labwc,
+Wayfire, river, dwl, cosmic-comp, and KDE's KWin, where freeze-frame and save are missing
+for want of a capture protocol. Not on GNOME. Details in
+[COMPATIBILITY.md](../../COMPATIBILITY.md).
+
+- **GL stack** — `libegl1` at runtime; the overlay renders through EGL/GLES. The
+  freeze-frame capture goes through shared memory, so `--no-gpu` (or `WLR_NO_GPU=1`)
+  changes nothing here — it is accepted for consistency with the other tools.
+- **Compositor** — one advertising `wlr-layer-shell` (sway, Hyprland, niri, …)
+  for the always-on-top overlay, whose layer is named `wlr-draw` for
+  [compositor rules](../../README.md#compositor-rules). Plain annotation needs only that,
+  at any version.
+- **Screen capture** (freeze-frame `Space`, save `w`) — additionally needs
+  `ext-image-copy-capture-v1` with the **output** source, i.e. **Sway ≥ 1.11 /
+  wlroots ≥ 0.19**, or `wlr-screencopy`. Where neither is exposed, freeze and save are
+  hidden from the help/tray and plain annotation still works. Run `wlr-draw doctor` to
+  check your own; see [COMPATIBILITY.md](../../COMPATIBILITY.md).
+- **Stylus** (optional) — `tablet-v2` (`zwp_tablet_manager_v2`); without it the stylus
+  isn't seen and everything else works.
+- **Tray** (`tray` feature, on by default) — a StatusNotifierItem host on the session
+  bus. `--no-default-features` drops the tray.
+
+## Quick start
+
+```sh
+wlr-draw &            # start the daemon (to start it with your session, see below)
+wlr-draw toggle       # draw over the screen; Esc, or toggle again, gives it back
+```
+
+**The only binding you need is `wlr-draw toggle`.** Once draw mode is on, the overlay holds
+keyboard focus, so every other tool is a bare key shortcut while drawing (see the table
+below) — no extra compositor binds required. And if you have the tray, **left-clicking its
+icon toggles draw mode too**, so even that one binding is optional.
+
+In sway, with two conveniences for driving the daemon from *outside* draw mode:
+
+```
+bindsym $mod+p       exec wlr-draw toggle
+bindsym $mod+Shift+p exec wlr-draw clear
+bindsym $mod+z       exec wlr-draw undo
+```
+
 ## How it works
 
 A wlroots layer-shell client **cannot grab a global hotkey**, so — like gromit-mpx —
@@ -56,6 +122,10 @@ wlr-draw migrate-config  # move the old keys.toml and theme.toml into config.tom
 wlr-draw print-unit      # print the systemd --user unit
 ```
 
+The protocol is plain text, one command per connection on the socket
+(`$XDG_RUNTIME_DIR/wlr-draw.sock`), so you can also drive it from scripts:
+`echo 'tool arrow' | socat - UNIX-CONNECT:$XDG_RUNTIME_DIR/wlr-draw.sock`.
+
 In **draw mode** the overlay grabs the pointer and keyboard; in **click-through** mode
 it sets an empty input region so clicks and keys go straight to the apps underneath.
 **Caps Lock** toggles a pointer pass-through *while staying in draw mode* — the pointer
@@ -72,20 +142,30 @@ The overlay holds keyboard focus in draw mode, so bare keys are local shortcuts 
 don't clash with the compositor's `$mod+…` bindings, so you only need to bind one key
 (toggle) in your compositor. Press **`h`** for an on-screen legend.
 
-| Key | Action | Key | Action |
-| --- | --- | --- | --- |
-| `p` | pen | `c` | colour palette (click a swatch) |
-| `r` | rectangle | `u` / `y` | undo / redo |
-| `m` | mask (solid box) | `+` / `-` | width up / down |
-| `a` | arrow | `Delete` | clear |
-| `t` | text | `v` | hide / show |
-| `w` | save annotated screenshot | | |
-| `e` | eraser | `h` | toggle the help legend |
-| `s` | move tool (or right-drag) | `Ctrl` | constrain shape / move axis (hold) |
-| `Space` | freeze-frame on/off | `Shift` | spotlight (hold); wheel/`ijkl` size & dim |
-| `d` | dwell-to-snap on/off | `Alt` | invert dwell-to-snap for one stroke (hold) |
-| `Esc` / `Ctrl+[` | unfreeze / close popup / leave | | |
-| `↑↓←→` | nudge selection (`Shift`: 1px, `Ctrl`: big) | | |
+| Key | Action | In `[draw.keys]` |
+| --- | --- | --- |
+| `p` | pen | `pen` |
+| `r` | rectangle | `rect` |
+| `m` | mask (solid box) | `mask` |
+| `a` | arrow | `arrow` |
+| `t` | text | `text` |
+| `e` | eraser | `eraser` |
+| `s` | move tool (or right-drag) | `move` |
+| `c` | colour palette (click a swatch) | `palette` |
+| `u` / `y` | undo / redo | `undo` / `redo` |
+| `+` / `-` | width up / down | `width-inc` / `width-dec` |
+| `Delete` | clear | `clear` |
+| `v` | hide / show | `visibility` |
+| `w` | save annotated screenshot | `save` |
+| `Space` | freeze-frame on/off | `freeze` |
+| `d` | dwell-to-snap on/off | `snap` |
+| `h` | toggle the help legend | `help` |
+| `Caps Lock` | pointer pass-through, staying in draw mode | `passthrough` |
+| `Ctrl` (hold) | constrain shape / move axis | `constrain` |
+| `Shift` (hold) | spotlight; wheel or `ijkl` size and dim it | `spotlight` |
+| `Alt` (hold) | invert dwell-to-snap for one stroke | `snap-invert` |
+| `Esc` / `Ctrl+[` | unfreeze / close popup / leave draw mode | fixed |
+| `↑↓←→` | nudge the selection (`Shift`: 1px, `Ctrl`: big step) | fixed |
 
 Shortcuts are by produced letter, so they follow your keyboard layout. While typing a
 text label, keys go to the label (`Enter` commits, `Esc` cancels) instead. The status
@@ -134,15 +214,11 @@ how snapping is switched off.
 names what it could not apply. An old `~/.config/wlr-draw/keys.toml` is still read when
 there is no `config.toml`; `wlr-draw migrate-config` moves it in.
 
-Fixed (not rebindable): `Esc` and its alias `Ctrl+[` (always back out), the arrow-key
-nudge, and the spotlight size/dim cluster (`i`/`j`/`k`/`l` + wheel, live only while
-spotlighting). The nudge step size still reads the physical `Shift` (1px) / `Ctrl` (big)
-keys. A bad key name or a misspelled entry is reported on stderr, and the binding keeps
-its default. A key or modifier you bind goes where you put it: the action or held control
-that had it by default gives it up and keeps its other ones, or shows as unassigned. Two
-entries of your file on one key or modifier are reported; the first in the example's
-order wins, a held control wins over an action, and two held controls both engage. The
-on-screen `h` legend and the tray's Shortcuts menu reflect your bindings.
+Fixed (not rebindable): `Esc` and its alias `Ctrl+[`, the arrow-key nudge, and the
+spotlight's `i`/`j`/`k`/`l` and wheel. A bad key name or a misspelled entry is
+reported, and that binding keeps its default. A key you bind is taken from the action
+or held control that had it by default; two entries of your file on one key are
+reported. The on-screen `h` legend and the tray's Shortcuts menu follow your bindings.
 
 ## Drawing
 
@@ -283,70 +359,17 @@ With the `tray` feature (on by default) the daemon shows a StatusNotifierItem tr
 clear / undo / quit, a **Shortcuts** submenu with the full key legend, and the **Start on
 login** checkbox described above. `--no-default-features` drops it.
 
-## Example sway bindings
+## Troubleshooting
 
-**The only binding you need is `wlr-draw toggle`.** Once draw mode is on, the overlay holds
-keyboard focus, so every other tool is a bare key shortcut while drawing (see the table
-above) — no extra compositor binds required. And if you have the tray, **left-clicking its
-icon toggles draw mode too**, so even that one binding is optional.
-
-The bindings below are just conveniences for driving the daemon from *outside* draw mode:
-
-```
-bindsym $mod+p       exec wlr-draw toggle
-bindsym $mod+Shift+p exec wlr-draw clear
-bindsym $mod+z       exec wlr-draw undo
-```
-
-The protocol is plain text, one command per connection on the socket
-(`$XDG_RUNTIME_DIR/wlr-draw.sock`), so you can also drive it from scripts:
-`echo 'tool arrow' | socat - UNIX-CONNECT:$XDG_RUNTIME_DIR/wlr-draw.sock`.
-
-## Install
-
-> **Want the whole suite?** Install the bundle instead — `cargo install wlr-utils` gets
-> every tool (`wlr-chooser`, `wlr-switcher`, `wlr-overlayd`, `wlr-peek`, `wlr-shot`,
-> `wlr-draw`) in one go. The single-tool install below is the lighter, à-la-carte option.
-
-Building needs the Rust the [main README](../../README.md#from-source) names, and on
-Debian/Ubuntu `build-essential pkg-config libwayland-dev libxkbcommon-dev` (Arch:
-`base-devel wayland libxkbcommon`).
-
-```sh
-cargo install wlr-draw
-```
-
-Or build just this binary from the [wlr-utils](../../README.md) workspace:
-
-```sh
-cargo build --release -p wlr-draw
-```
-
-`--no-default-features` drops Fluent (English-only hints) **and** the tray.
-
-## Requirements
-
-**Works on** every compositor with `wlr-layer-shell`: sway, Hyprland, niri, labwc,
-Wayfire, river, dwl, cosmic-comp, and KDE's KWin, where freeze-frame and save are missing
-for want of a capture protocol. Not on GNOME. Details in
-[COMPATIBILITY.md](../../COMPATIBILITY.md).
-
-- **GL stack** — `libegl1` at runtime; the overlay renders through EGL/GLES. The
-  freeze-frame capture goes through shared memory, so `--no-gpu` (or `WLR_NO_GPU=1`)
-  changes nothing here — it is accepted for consistency with the other tools.
-- **Compositor** — one advertising `wlr-layer-shell` (sway, Hyprland, niri, …)
-  for the always-on-top overlay, whose layer is named `wlr-draw` for
-  [compositor rules](../../README.md#compositor-rules). Plain annotation needs only that,
-  at any version.
-- **Screen capture** (freeze-frame `Space`, save `w`) — additionally needs
-  `ext-image-copy-capture-v1` with the **output** source, i.e. **Sway ≥ 1.11 /
-  wlroots ≥ 0.19**, or `wlr-screencopy`. Where neither is exposed, freeze and save are
-  hidden from the help/tray and plain annotation still works. Run `wlr-draw doctor` to
-  check your own; see [COMPATIBILITY.md](../../COMPATIBILITY.md).
-- **Stylus** (optional) — `tablet-v2` (`zwp_tablet_manager_v2`); without it the stylus
-  isn't seen and everything else works.
-- **Tray** (`tray` feature, on by default) — a StatusNotifierItem host on the session
-  bus. `--no-default-features` drops the tray.
+- **`no wlr-draw daemon listening`** — start the daemon: `wlr-draw &` now, and with your
+  session as [Starting it](#starting-it) says.
+- **No daemon after logging in, on sway** — sway on its own runs no XDG autostart entry:
+  add `exec wlr-draw` to its config.
+- **No freeze-frame (`Space`) or save (`w`)** — the compositor exposes no capture
+  protocol (KDE's KWin, for one): plain annotation still works, and `wlr-draw doctor`
+  says what is there.
+- **A binding does not take** — `wlr-draw reload` prints what it could not apply, with
+  the file and the key.
 
 ## Uninstall
 
