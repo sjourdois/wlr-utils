@@ -272,7 +272,9 @@ shots_park() { shots_cursor 7 7; }
 
 # Launch a Chromium window (native Wayland) on a URL, with a throwaway profile,
 # an ad-blocker, and a DevTools port (so we can dismiss cookie walls). Records the
-# port in SHOTS_LAST_PORT for a following shots_consent.
+# port in SHOTS_LAST_PORT for a following shots_consent. The basic password store
+# keeps it off the keyring: asked over our private session bus, it held the first
+# navigation for D-Bus's 25 s timeout.
 SHOTS_CHROMIUM_PROFILES=()
 SHOTS_CDP_PORT=9400
 SHOTS_LAST_PORT=""
@@ -283,6 +285,7 @@ shots_chromium() {
   [ -d "${SHOTS_UBO:-/nonexistent}" ] && ext=(--load-extension="$SHOTS_UBO")
   shots_spawn chromium --ozone-platform=wayland --no-first-run \
     --no-default-browser-check --disable-dev-shm-usage --disable-features=Translate \
+    --password-store=basic \
     --force-prefers-color-scheme=light \
     --remote-debugging-port="$SHOTS_LAST_PORT" --remote-allow-origins='*' \
     "${ext[@]}" \
@@ -290,6 +293,9 @@ shots_chromium() {
   # Each call opens exactly one window, so the profile count is how many
   # chromium windows the tree must hold by now.
   shots_wait_window '^chromium ' "${#SHOTS_CHROMIUM_PROFILES[@]}" 30
+  # The window maps on a blank page long before a slow site answers.
+  python3 "$SHOTS_DIR/cdp.py" "$SHOTS_LAST_PORT" loaded 60 >/dev/null 2>&1 \
+    || shots_msg "PAGE NOT LOADED: $url after 60s"
 }
 
 # Dismiss a cookie-consent dialog on the most recently launched Chromium (or the
@@ -388,9 +394,9 @@ shots_visible_desktop() {
   # browsers first, then focus back to github so the video lands BETWEEN them, and
   # splitv so the calculator stacks under the video.
   shots_chromium "https://github.com/sjourdois/wlr-utils"
-  shots_settle 9
+  shots_settle 1.5
   shots_chromium "https://www.phoronix.com"
-  shots_settle 10
+  shots_settle 1.5
   shots_consent
   shots_settle 1.0
   swaymsg "focus left" >/dev/null 2>&1   # back to github
