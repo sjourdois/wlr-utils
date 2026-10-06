@@ -537,10 +537,11 @@ mod record_impl {
         Ok((Box::new(enc), "H.264".into()))
     }
 
-    /// Whether audio recording is wanted: not `--no-audio`, and a video (not image) file.
+    /// Whether audio recording is wanted: not `--no-audio`, a video (not image) file, and
+    /// not a timelapse, whose sped-up footage the encoder gives no sound track.
     #[cfg(feature = "audio")]
     fn audio_wanted(args: &RecordArgs) -> bool {
-        !args.no_audio && is_video_ext(&args.file)
+        !args.no_audio && args.timelapse.is_none() && is_video_ext(&args.file)
     }
 
     #[derive(Args)]
@@ -954,6 +955,28 @@ mod record_impl {
             assert_eq!(parse_interval("1.5s").unwrap(), Duration::from_millis(1500));
             // A bare number is seconds.
             assert_eq!(parse_interval("3").unwrap(), Duration::from_millis(3000));
+        }
+
+        /// Audio is captured for a real-time video only: a timelapse or an animated image
+        /// would record it for nothing.
+        #[cfg(feature = "audio")]
+        #[test]
+        fn audio_is_wanted_for_a_real_time_video_only() {
+            use clap::Parser;
+            #[derive(Parser)]
+            struct Cli {
+                #[command(flatten)]
+                args: super::RecordArgs,
+            }
+            let wanted = |argv: &[&str]| {
+                let cli =
+                    Cli::try_parse_from(std::iter::once("record").chain(argv.iter().copied()));
+                super::audio_wanted(&cli.unwrap().args)
+            };
+            assert!(wanted(&["clip.mp4"]));
+            assert!(!wanted(&["--no-audio", "clip.mp4"]));
+            assert!(!wanted(&["--timelapse", "2s", "day.mp4"]));
+            assert!(!wanted(&["demo.gif"]));
         }
 
         #[test]

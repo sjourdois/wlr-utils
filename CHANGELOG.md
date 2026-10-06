@@ -32,6 +32,8 @@ All notable changes to this project are documented here. The format is based on
   user manager's `PATH`.
 - **`wlr-peek watch` exits 3 when its window or output goes away** — it exited 0, so
   `watch … && notify-send` fired when the watched window closed.
+- **`wlr-shot record --timelapse` no longer captures sound it cannot use** — it ran a
+  PipeWire capture and announced `+ audio`, but a timelapse has no sound track.
 - **`wlr-shot screenshot -t ppm` writes PPM** — it wrote PAM, which is now `-t pam`.
 - **`wlr-shot screenshot shot.jpg` writes a JPEG** — without `-t`, the format now
   follows the file's extension; it was always PNG.
