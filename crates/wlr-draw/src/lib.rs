@@ -90,7 +90,13 @@ enum Ctl {
         #[arg(value_parser = ["-"])]
         output: Option<String>,
     },
+    /// Print the systemd --user unit:
+    /// `wlr-draw print-unit > ~/.config/systemd/user/wlr-draw.service`
+    PrintUnit,
 }
+
+/// The systemd --user unit, for an install that did not put it in place.
+const UNIT: &str = include_str!("../contrib/wlr-draw.service");
 
 pub fn main() -> anyhow::Result<()> {
     // Negotiate the UI language from the desktop locale (no-op without the `i18n`
@@ -111,6 +117,10 @@ pub fn main() -> anyhow::Result<()> {
         Some(Ctl::MigrateConfig { output }) => {
             let output = wlr_config::migrate::Output::from_arg(output.as_deref());
             wlr_config::migrate::run(output).map_err(Into::into)
+        }
+        Some(Ctl::PrintUnit) => {
+            print!("{UNIT}");
+            Ok(())
         }
         Some(ctl) => ipc::send(&ctl_to_cmd(ctl)?),
     }
@@ -141,7 +151,7 @@ fn ctl_to_cmd(ctl: Ctl) -> anyhow::Result<Cmd> {
         // mean the caller's.
         Ctl::Save { path } => Cmd::Save(path.as_deref().map(absolute).transpose()?),
         // Not daemon commands — handled directly in `main` before we get here.
-        Ctl::Doctor | Ctl::MigrateConfig { .. } => {
+        Ctl::Doctor | Ctl::MigrateConfig { .. } | Ctl::PrintUnit => {
             unreachable!("handled before ctl_to_cmd")
         }
     })
@@ -157,7 +167,16 @@ fn absolute(path: &str) -> anyhow::Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::absolute;
+    use super::{Cli, Ctl, UNIT, absolute};
+    use clap::{CommandFactory, Parser};
+
+    #[test]
+    fn print_unit_prints_the_shipped_unit() {
+        Cli::command().debug_assert();
+        let cli = Cli::try_parse_from(["wlr-draw", "print-unit"]).unwrap();
+        assert!(matches!(cli.cmd, Some(Ctl::PrintUnit)));
+        assert!(UNIT.lines().any(|l| l == "ExecStart=/usr/bin/env wlr-draw"));
+    }
 
     #[test]
     fn a_relative_save_path_is_the_callers() {

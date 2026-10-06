@@ -33,8 +33,8 @@ find it on their own, and work exactly as before when it is not running.\n\n\
     sway:      exec wlr-overlayd\n\
     Hyprland:  exec-once = wlr-overlayd\n\
     niri:      spawn-at-startup \"wlr-overlayd\"\n\n\
-A systemd --user unit is shipped as contrib/wlr-overlayd.service. Nothing is captured \
-while the daemon waits. To show an overlay in its own process anyway, pass --no-daemon \
+A systemd --user unit comes with it: `wlr-overlayd --print-unit` prints it. Nothing is \
+captured while the daemon waits. To show an overlay in its own process anyway, pass --no-daemon \
 to wlr-switcher or wlr-chooser."
 )]
 struct Cli {
@@ -46,11 +46,22 @@ struct Cli {
     /// Stop the running daemon, then exit.
     #[arg(long, conflicts_with = "no_gpu")]
     quit: bool,
+    /// Print the systemd --user unit, then exit:
+    /// `wlr-overlayd --print-unit > ~/.config/systemd/user/wlr-overlayd.service`.
+    #[arg(long, conflicts_with_all = ["no_gpu", "quit"])]
+    print_unit: bool,
 }
+
+/// The systemd --user unit, for an install that did not put it in place.
+const UNIT: &str = include_str!("../contrib/wlr-overlayd.service");
 
 pub fn main() {
     let t0 = Instant::now();
     let cli = Cli::parse();
+    if cli.print_unit {
+        print!("{UNIT}");
+        return;
+    }
     i18n::init();
     wlr_config::set_migrate_command("wlr-chooser --migrate-config");
 
@@ -80,5 +91,26 @@ fn serve(host: &mut Host, tool: Tool, args: Vec<String>) -> Reply {
     match tool {
         Tool::Switch => crate::switcher_cli::serve(host, args),
         Tool::Choose => crate::chooser_cli::serve(host, args),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cli, UNIT};
+    use clap::{CommandFactory, Parser};
+
+    #[test]
+    fn print_unit_prints_the_shipped_unit() {
+        Cli::command().debug_assert();
+        assert!(
+            Cli::try_parse_from(["wlr-overlayd", "--print-unit"])
+                .unwrap()
+                .print_unit
+        );
+        assert!(Cli::try_parse_from(["wlr-overlayd", "--print-unit", "--quit"]).is_err());
+        assert!(
+            UNIT.lines()
+                .any(|l| l == "ExecStart=/usr/bin/env wlr-overlayd")
+        );
     }
 }

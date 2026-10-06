@@ -389,17 +389,19 @@ One line in your compositor's config:
 - niri: `spawn-at-startup "wlr-overlayd"`
 
 Or, if you would rather have it in the journal and restarted with the session, the
-provided systemd `--user` unit ([`contrib/wlr-overlayd.service`](contrib/wlr-overlayd.service)):
+provided systemd `--user` unit ([`contrib/wlr-overlayd.service`](contrib/wlr-overlayd.service)).
+The AUR packages and the suite's `.deb` install it in `/usr/lib/systemd/user`; after a
+`cargo install`, put it in place first:
+
+```sh
+mkdir -p ~/.config/systemd/user
+wlr-overlayd --print-unit > ~/.config/systemd/user/wlr-overlayd.service
+```
+
+Then:
 
 ```sh
 systemctl --user enable --now wlr-overlayd.service
-```
-
-The AUR packages and the suite's `.deb` install it in `/usr/lib/systemd/user`. With
-`cargo install`, copy it in place first:
-
-```sh
-install -Dm644 contrib/wlr-overlayd.service ~/.config/systemd/user/wlr-overlayd.service
 ```
 
 It is bound to `graphical-session.target`, so it comes up with the Wayland session and
@@ -461,6 +463,7 @@ bindsym Mod1+Tab exec wlr-switcher --no-daemon
 |---|---|
 | `wlr-overlayd` | run the daemon in the foreground (what your autostart runs) |
 | `wlr-overlayd --quit` | stop the running daemon |
+| `wlr-overlayd --print-unit` | print its systemd `--user` unit |
 | `wlr-overlayd --no-gpu` | serve every overlay through shared memory instead of dma-buf |
 | `--no-daemon` | on either tool: show the overlay in this process, daemon or not |
 

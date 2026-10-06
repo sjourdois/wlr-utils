@@ -53,6 +53,7 @@ wlr-draw reload          # re-read the configuration, keeping the drawing
 wlr-draw quit            # stop the daemon
 wlr-draw doctor          # what the compositor supports (needs no daemon)
 wlr-draw migrate-config  # move the old keys.toml and theme.toml into config.toml
+wlr-draw print-unit      # print the systemd --user unit
 ```
 
 In **draw mode** the overlay grabs the pointer and keyboard; in **click-through** mode
@@ -225,17 +226,18 @@ your session. One line in your compositor's config:
 
 Or the provided systemd `--user` unit
 ([`contrib/wlr-draw.service`](contrib/wlr-draw.service)), which also restarts the daemon
-if it ever dies:
+if it ever dies. The AUR and `.deb` packages install it in `/usr/lib/systemd/user`; after
+a `cargo install`, put it in place first:
+
+```sh
+mkdir -p ~/.config/systemd/user
+wlr-draw print-unit > ~/.config/systemd/user/wlr-draw.service
+```
+
+Then:
 
 ```sh
 systemctl --user enable --now wlr-draw.service
-```
-
-The AUR and `.deb` packages install it in `/usr/lib/systemd/user`. With `cargo install`,
-copy it in place first:
-
-```sh
-install -Dm644 contrib/wlr-draw.service ~/.config/systemd/user/wlr-draw.service
 ```
 
 It is bound to `graphical-session.target`, so it comes up with the Wayland session and
@@ -247,7 +249,8 @@ show-environment`), which uwsm fills from your login environment. Elsewhere, imp
 login** in the tray so the autostart entry does not race yours.
 
 You will know soon enough either way: with no daemon listening, every command but
-`doctor` and `migrate-config` exits non-zero with `no wlr-draw daemon listening on … ; start one with wlr-draw`.
+`doctor`, `migrate-config` and `print-unit` exits non-zero with `no wlr-draw daemon
+listening on … ; start one with wlr-draw`.
 
 ### Stopping, restarting, logs
 

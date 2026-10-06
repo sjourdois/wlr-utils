@@ -28,6 +28,8 @@ All notable changes to this project are documented here. The format is based on
   comments included, then deletes them; `-` prints the new file instead.
 - **`wlr-draw reload`** — re-reads the configuration and keeps the drawing, however the
   daemon was started, and prints what it could not apply.
+- **The systemd units from the binaries** — `wlr-draw print-unit` and
+  `wlr-overlayd --print-unit` print them, for an install that did not put them in place.
 - **An install script for packagers** — `packaging/install.sh` installs the binaries,
   the systemd units, the themes, the example configuration, the README and the
   licences, and honours `DESTDIR` and `PREFIX`. The release archive carries it, and the
