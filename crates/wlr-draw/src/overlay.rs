@@ -17,7 +17,7 @@
 //! additionally takes single-key shortcuts (incl. `h` help, `c` colour picker) and text.
 
 use crate::ipc;
-use crate::keymap::{Action, Keymap, ModKind, Trigger, trigger_label};
+use crate::keymap::{Action, Keymap, ModKind, Role};
 use crate::model;
 use crate::model::{Color, Document, Element, Recognized, ShapeKind, Tool, constrain, recognize};
 use crate::proto::Cmd;
@@ -361,6 +361,13 @@ struct State {
     /// Snap-invert role active (the snap-invert bind): the stroke in progress dwells the
     /// other way round from the persistent setting.
     snap_invert_active: bool,
+    /// Keys bound to a held role that are down right now: a role stays engaged while any
+    /// of its triggers is, and a key repeat is not a new press.
+    role_keys_down: Vec<Keysym>,
+    /// Pass-through as toggled by its keys; its modifiers count on top of this.
+    passthrough_latched: bool,
+    /// The modifier state last reported, to re-evaluate the roles on a key event.
+    modifiers: Modifiers,
     /// Physical Ctrl / Shift state, read only for the arrow-nudge step granularity
     /// (Shift = 1px, Ctrl = big) — kept on the real modifiers regardless of how the
     /// constrain / spotlight roles are rebound.
@@ -555,8 +562,10 @@ impl State {
             self.unfreeze();
             self.gesture = Gesture::None;
             self.flash_start = None;
-            // The keyboard is released here, so a snap-invert key released afterwards
-            // is never seen: drop the momentary state rather than carry it over.
+            // The keyboard is released here, so a role key released afterwards is never
+            // seen: drop the momentary state rather than carry it over.
+            self.role_keys_down.clear();
+            self.passthrough_latched = false;
             self.set_snap_invert(false);
         } else if self.doc.elements().is_empty() {
             // Entering draw mode on an empty canvas: pulse the chip to draw the eye.
@@ -639,6 +648,25 @@ impl State {
         }
         self.snap_invert_active = on;
         self.dirty = true; // the chip states the effective mode
+    }
+
+    /// Re-evaluate the held roles from the modifier state and the role keys that are
+    /// down: a role is engaged while any of its triggers is. Pass-through counts its key
+    /// latch instead of held keys, since its keys toggle it.
+    fn sync_roles(&mut self) {
+        let mods = self.modifiers;
+        let by_mod = |role: &Role| role.mods().any(|m| mod_active(&mods, m));
+        let engaged =
+            |role: &Role| by_mod(role) || self.role_keys_down.iter().any(|&ks| role.has_key(ks));
+        let km = &self.keymap;
+        let passthrough = by_mod(&km.passthrough) || self.passthrough_latched;
+        let constrain = engaged(&km.constrain);
+        let spotlight = engaged(&km.spotlight);
+        let snap_invert = engaged(&km.snap_invert);
+        self.set_passthrough(passthrough);
+        self.set_constrain(constrain);
+        self.set_spotlight(spotlight);
+        self.set_snap_invert(snap_invert);
     }
 
     /// Whether a held-still pen stroke snaps right now: the persistent setting, inverted
@@ -790,13 +818,14 @@ impl State {
 
     /// Re-read `keys.toml` and the theme (`wlr-draw reload`, or SIGHUP). The
     /// drawing and what was changed at runtime — tool, colour, width, snapping toggled by
-    /// `snap` — are kept. Held roles are released, since their trigger may have moved.
+    /// `snap` — are kept. Held roles are released, since their triggers may have moved;
+    /// those on a modifier still active re-engage from it.
     fn reload_config(&mut self) {
         self.theme = Theme::load();
         self.keymap = Keymap::load();
-        self.set_constrain(false);
-        self.set_spotlight(false);
-        self.set_snap_invert(false);
+        self.role_keys_down.clear();
+        self.passthrough_latched = false;
+        self.sync_roles();
         #[cfg(feature = "tray")]
         if let Some(h) = &self.tray {
             let shortcuts = shortcut_rows(&self.keymap, self.capture_available);
@@ -1265,21 +1294,16 @@ impl State {
         // --- Configurable bindings ---
         let ks = event.keysym;
         // Held roles bound to a key: pass-through toggles (parity with the Caps latch),
-        // constrain / spotlight engage while held (released in `on_key_release`).
-        if self.keymap.passthrough == Trigger::Key(ks) {
-            self.set_passthrough(!self.passthrough);
-            return;
-        }
-        if self.keymap.constrain == Trigger::Key(ks) {
-            self.set_constrain(true);
-            return;
-        }
-        if self.keymap.spotlight == Trigger::Key(ks) {
-            self.set_spotlight(true);
-            return;
-        }
-        if self.keymap.snap_invert == Trigger::Key(ks) {
-            self.set_snap_invert(true);
+        // the others engage while held (released in `on_key_release`). A key already down
+        // is a repeat, not a press.
+        if self.keymap.is_role_key(ks) {
+            if !self.role_keys_down.contains(&ks) {
+                self.role_keys_down.push(ks);
+                if self.keymap.passthrough.has_key(ks) {
+                    self.passthrough_latched = !self.passthrough_latched;
+                }
+                self.sync_roles();
+            }
             return;
         }
         // Discrete actions.
@@ -1289,17 +1313,12 @@ impl State {
     }
 
     /// Release handler for held roles bound to a regular key. A no-op for everything else
-    /// (discrete actions only fire on press); pass-through is a toggle, so it ignores
-    /// release too.
+    /// (discrete actions only fire on press); pass-through is a toggle, so its release
+    /// only ends the key's repeat.
     fn on_key_release(&mut self, ks: Keysym) {
-        if self.keymap.constrain == Trigger::Key(ks) {
-            self.set_constrain(false);
-        }
-        if self.keymap.spotlight == Trigger::Key(ks) {
-            self.set_spotlight(false);
-        }
-        if self.keymap.snap_invert == Trigger::Key(ks) {
-            self.set_snap_invert(false);
+        if let Some(i) = self.role_keys_down.iter().position(|&k| k == ks) {
+            self.role_keys_down.swap_remove(i);
+            self.sync_roles();
         }
     }
 
@@ -1418,6 +1437,9 @@ pub fn run() -> anyhow::Result<()> {
         constrain_active: false,
         spotlight_active: false,
         snap_invert_active: false,
+        role_keys_down: Vec::new(),
+        passthrough_latched: false,
+        modifiers: Modifiers::default(),
         ctrl_held: false,
         shift_held: false,
         spotlight_radius: DEFAULT_SPOTLIGHT_RADIUS,
@@ -2136,15 +2158,12 @@ fn paint_hud(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
     let hint = if frame.passthrough {
         tr!(
             "draw-passthrough-hint",
-            passthrough = trigger_label(km.passthrough)
+            passthrough = km.passthrough.label()
         )
     } else if frame.text_edit.is_some() {
         tr!("draw-text-hint")
     } else if in_spotlight {
-        tr!(
-            "draw-spotlight-hint",
-            spotlight = trigger_label(km.spotlight)
-        )
+        tr!("draw-spotlight-hint", spotlight = km.spotlight.label())
     } else {
         tr!("draw-hint", help = km.label_for(Action::Help))
     };
@@ -2344,11 +2363,11 @@ pub(crate) fn shortcut_rows(km: &Keymap, capture_available: bool) -> Vec<HelpRow
 
     rows.push(HelpRow::Group(tr!("draw-help-group-hold")));
     rows.push(HelpRow::Entry(
-        trigger_label(km.constrain),
+        km.constrain.label(),
         tr!("draw-help-constrain"),
     ));
     rows.push(HelpRow::Entry(
-        trigger_label(km.spotlight),
+        km.spotlight.label(),
         tr!("draw-help-spotlight"),
     ));
     rows.push(HelpRow::Entry(
@@ -2356,11 +2375,11 @@ pub(crate) fn shortcut_rows(km: &Keymap, capture_available: bool) -> Vec<HelpRow
         tr!("draw-help-spotlight-tune"),
     ));
     rows.push(HelpRow::Entry(
-        trigger_label(km.snap_invert),
+        km.snap_invert.label(),
         tr!("draw-help-snap-invert"),
     ));
     rows.push(HelpRow::Entry(
-        trigger_label(km.passthrough),
+        km.passthrough.label(),
         tr!("draw-help-passthrough"),
     ));
 
@@ -2657,6 +2676,9 @@ impl KeyboardHandler for State {
         _: &wl_surface::WlSurface,
         _: u32,
     ) {
+        // Keys released from now on are not ours to see: the roles they hold let go.
+        self.role_keys_down.clear();
+        self.sync_roles();
     }
     fn press_key(
         &mut self,
@@ -2706,21 +2728,10 @@ impl KeyboardHandler for State {
         // real modifiers regardless of how the constrain / spotlight roles are bound.
         self.ctrl_held = modifiers.ctrl;
         self.shift_held = modifiers.shift;
-        // Roles whose trigger is a modifier follow that modifier's state; roles bound to a
-        // key are driven from `on_key` / `on_key_release` instead. `set_*` no-op when the
-        // value is unchanged, so this is cheap to call on every modifier event.
-        if let Trigger::Mod(m) = self.keymap.passthrough {
-            self.set_passthrough(mod_active(&modifiers, m));
-        }
-        if let Trigger::Mod(m) = self.keymap.constrain {
-            self.set_constrain(mod_active(&modifiers, m));
-        }
-        if let Trigger::Mod(m) = self.keymap.spotlight {
-            self.set_spotlight(mod_active(&modifiers, m));
-        }
-        if let Trigger::Mod(m) = self.keymap.snap_invert {
-            self.set_snap_invert(mod_active(&modifiers, m));
-        }
+        // Roles follow their modifiers' state on top of their held keys. `set_*` no-op
+        // when the value is unchanged, so this is cheap to call on every modifier event.
+        self.modifiers = modifiers;
+        self.sync_roles();
     }
 }
 

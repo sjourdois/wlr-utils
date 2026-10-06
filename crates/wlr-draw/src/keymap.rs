@@ -8,8 +8,9 @@
 //! falls back to the built-in defaults, which reproduce the historical hardcoded layout —
 //! so existing users need no config.
 //!
-//! The held roles (`passthrough`, `constrain`, `spotlight`, `snap-invert`) take either a
-//! modifier or a regular key; the rest are discrete actions.
+//! The held roles (`passthrough`, `constrain`, `spotlight`, `snap-invert`) take a modifier,
+//! a regular key, or a list of them, any of which engages the role; the rest are discrete
+//! actions.
 //!
 //! Besides the bindings the file carries the two scalars the `snap` binding acts on:
 //! `dwell` (whether the pen snaps on its own) and `dwell-ms` (how long it must hold
@@ -22,7 +23,7 @@
 //! pen = "p"
 //! save = "w"
 //! width-inc = ["plus", "equal"]   # a single string or a list
-//! passthrough = "caps"            # a modifier (caps/ctrl/shift/alt/super) or a key
+//! passthrough = "caps"            # a modifier (caps/ctrl/shift/alt/super), a key, or a list
 //! constrain = "ctrl"
 //! spotlight = "shift"
 //! snap = "d"
@@ -58,10 +59,40 @@ pub enum Trigger {
     Mod(ModKind),
 }
 
+/// The triggers of a held role (pass-through, constrain, spotlight, snap-invert). Any of
+/// them engages it: a modifier while it is active, a key while it is held — or, for
+/// pass-through, a key toggles it on each press, like the Caps Lock latch.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Role(Vec<Trigger>);
+
+impl Role {
+    fn one(t: Trigger) -> Self {
+        Self(vec![t])
+    }
+
+    /// Whether `ks` is one of this role's keys.
+    pub fn has_key(&self, ks: Keysym) -> bool {
+        self.0.contains(&Trigger::Key(ks))
+    }
+
+    /// The modifiers among this role's triggers.
+    pub fn mods(&self) -> impl Iterator<Item = ModKind> + '_ {
+        self.0.iter().filter_map(|t| match t {
+            Trigger::Mod(m) => Some(*m),
+            Trigger::Key(_) => None,
+        })
+    }
+
+    /// Every trigger's label, for the HUD and the help legend: `Caps / F13`.
+    pub fn label(&self) -> String {
+        let labels: Vec<String> = self.0.iter().map(|t| trigger_label(*t)).collect();
+        labels.join(" / ")
+    }
+}
+
 /// A discrete action — fires once on key press. The held roles (pass-through, constrain,
-/// spotlight, snap-invert) are not here; they live as the `passthrough`/`constrain`/
-/// `spotlight`/`snap_invert` fields of [`Keymap`] because they can be a modifier as well
-/// as a key.
+/// spotlight, snap-invert) are not here; they live as the [`Role`] fields of [`Keymap`]
+/// because they can be modifiers as well as keys.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Action {
     Pen,
@@ -137,17 +168,17 @@ pub fn trigger_label(t: Trigger) -> String {
 }
 
 /// The resolved configuration. `keys` maps discrete-action triggers (an action may have
-/// several — e.g. `+` and `=`); each held role carries one trigger; the dwell pair tunes
+/// several — e.g. `+` and `=`); each held role carries its triggers; the dwell pair tunes
 /// what the `snap` binding and its held counterpart act on.
 #[derive(Clone)]
 pub struct Keymap {
     keys: Vec<(Trigger, Action)>,
-    pub passthrough: Trigger,
-    pub constrain: Trigger,
-    pub spotlight: Trigger,
+    pub passthrough: Role,
+    pub constrain: Role,
+    pub spotlight: Role,
     /// Held to invert [`Keymap::snap_on_dwell`] for the stroke in progress — suppressing
     /// the snap where it is on, arming it where it is off.
-    pub snap_invert: Trigger,
+    pub snap_invert: Role,
     /// Whether the pen snaps a held-still stroke to a clean shape without being asked.
     /// The starting state only: [`Action::Snap`] flips it at runtime.
     pub snap_on_dwell: bool,
@@ -184,10 +215,10 @@ impl Default for Keymap {
                 (Trigger::Key(Keysym::KP_Space), Action::Freeze),
                 (c('d'), Action::Snap),
             ],
-            passthrough: Trigger::Mod(ModKind::Caps),
-            constrain: Trigger::Mod(ModKind::Ctrl),
-            spotlight: Trigger::Mod(ModKind::Shift),
-            snap_invert: Trigger::Mod(ModKind::Alt),
+            passthrough: Role::one(Trigger::Mod(ModKind::Caps)),
+            constrain: Role::one(Trigger::Mod(ModKind::Ctrl)),
+            spotlight: Role::one(Trigger::Mod(ModKind::Shift)),
+            snap_invert: Role::one(Trigger::Mod(ModKind::Alt)),
             snap_on_dwell: true,
             dwell: DEFAULT_DWELL,
         }
@@ -224,6 +255,18 @@ impl Keymap {
             .map(|(_, a)| *a)
     }
 
+    /// Whether `ks` engages a held role.
+    pub fn is_role_key(&self, ks: Keysym) -> bool {
+        [
+            &self.passthrough,
+            &self.constrain,
+            &self.spotlight,
+            &self.snap_invert,
+        ]
+        .into_iter()
+        .any(|role| role.has_key(ks))
+    }
+
     /// The label for an action's (first) trigger — for the help legend.
     pub fn label_for(&self, action: Action) -> String {
         self.keys
@@ -237,17 +280,7 @@ impl Keymap {
     /// value is absent or has no parseable trigger).
     fn override_action(&mut self, opt: Option<OneOrMany>, action: Action, name: &str) {
         let Some(o) = opt else { return };
-        let triggers: Vec<Trigger> = o
-            .into_vec()
-            .iter()
-            .filter_map(|s| match parse_trigger(s) {
-                Ok(t) => Some(t),
-                Err(e) => {
-                    eprintln!("wlr-draw: {name}: {e}");
-                    None
-                }
-            })
-            .collect();
+        let triggers = parse_triggers(o, name);
         if triggers.is_empty() {
             return; // all invalid → keep default
         }
@@ -257,13 +290,13 @@ impl Keymap {
         }
     }
 
-    /// Set a held role from a config value, keeping the default on an unknown name.
-    fn override_role(&mut self, opt: Option<String>, role: &mut Trigger, name: &str) {
-        if let Some(s) = opt {
-            match parse_trigger(&s) {
-                Ok(t) => *role = t,
-                Err(e) => eprintln!("wlr-draw: {name}: {e}"),
-            }
+    /// Replace a held role's triggers from a config value (or keep the default if the
+    /// value is absent or has no parseable trigger).
+    fn override_role(opt: Option<OneOrMany>, role: &mut Role, name: &str) {
+        let Some(o) = opt else { return };
+        let triggers = parse_triggers(o, name);
+        if !triggers.is_empty() {
+            *role = Role(triggers);
         }
     }
 
@@ -300,18 +333,10 @@ impl Keymap {
             }
         }
 
-        let mut pt = self.passthrough;
-        let mut co = self.constrain;
-        let mut sp = self.spotlight;
-        let mut si = self.snap_invert;
-        self.override_role(raw.passthrough, &mut pt, "passthrough");
-        self.override_role(raw.constrain, &mut co, "constrain");
-        self.override_role(raw.spotlight, &mut sp, "spotlight");
-        self.override_role(raw.snap_invert, &mut si, "snap-invert");
-        self.passthrough = pt;
-        self.constrain = co;
-        self.spotlight = sp;
-        self.snap_invert = si;
+        Self::override_role(raw.passthrough, &mut self.passthrough, "passthrough");
+        Self::override_role(raw.constrain, &mut self.constrain, "constrain");
+        Self::override_role(raw.spotlight, &mut self.spotlight, "spotlight");
+        Self::override_role(raw.snap_invert, &mut self.snap_invert, "snap-invert");
 
         self.warn_conflicts();
     }
@@ -330,16 +355,18 @@ impl Keymap {
             }
         }
         for role in [
-            self.passthrough,
-            self.constrain,
-            self.spotlight,
-            self.snap_invert,
+            &self.passthrough,
+            &self.constrain,
+            &self.spotlight,
+            &self.snap_invert,
         ] {
-            if matches!(role, Trigger::Key(_)) && self.keys.iter().any(|(t, _)| *t == role) {
-                eprintln!(
-                    "wlr-draw: `{}` is bound to both a held role and a tool",
-                    trigger_label(role)
-                );
+            for &t in &role.0 {
+                if matches!(t, Trigger::Key(_)) && self.keys.iter().any(|(k, _)| *k == t) {
+                    eprintln!(
+                        "wlr-draw: `{}` is bound to both a held role and a tool",
+                        trigger_label(t)
+                    );
+                }
             }
         }
     }
@@ -355,6 +382,20 @@ fn config_path() -> Option<PathBuf> {
 }
 
 /// A binding value: one trigger name or a list of them.
+/// Parse every name of a config value, reporting (and dropping) the ones that don't.
+fn parse_triggers(o: OneOrMany, name: &str) -> Vec<Trigger> {
+    o.into_vec()
+        .iter()
+        .filter_map(|s| match parse_trigger(s) {
+            Ok(t) => Some(t),
+            Err(e) => {
+                eprintln!("wlr-draw: {name}: {e}");
+                None
+            }
+        })
+        .collect()
+}
+
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum OneOrMany {
@@ -395,10 +436,10 @@ struct RawConfig {
     width_dec: Option<OneOrMany>,
     freeze: Option<OneOrMany>,
     snap: Option<OneOrMany>,
-    passthrough: Option<String>,
-    constrain: Option<String>,
-    spotlight: Option<String>,
-    snap_invert: Option<String>,
+    passthrough: Option<OneOrMany>,
+    constrain: Option<OneOrMany>,
+    spotlight: Option<OneOrMany>,
+    snap_invert: Option<OneOrMany>,
     dwell: Option<bool>,
     dwell_ms: Option<u64>,
 }
@@ -442,10 +483,10 @@ mod tests {
             Some(Action::Snap)
         );
         assert_eq!(km.action_for_key(Keysym::from_char('z')), None);
-        assert_eq!(km.passthrough, Trigger::Mod(ModKind::Caps));
-        assert_eq!(km.constrain, Trigger::Mod(ModKind::Ctrl));
-        assert_eq!(km.spotlight, Trigger::Mod(ModKind::Shift));
-        assert_eq!(km.snap_invert, Trigger::Mod(ModKind::Alt));
+        assert_eq!(km.passthrough, Role::one(Trigger::Mod(ModKind::Caps)));
+        assert_eq!(km.constrain, Role::one(Trigger::Mod(ModKind::Ctrl)));
+        assert_eq!(km.spotlight, Role::one(Trigger::Mod(ModKind::Shift)));
+        assert_eq!(km.snap_invert, Role::one(Trigger::Mod(ModKind::Alt)));
         assert!(km.snap_on_dwell);
         assert_eq!(km.dwell, Duration::from_millis(650));
     }
@@ -466,8 +507,8 @@ mod tests {
         assert_eq!(km.action_for_key(Keysym::from_char('b')), Some(Action::Pen));
         assert_eq!(km.action_for_key(Keysym::from_char('p')), None);
         // role rebound, others untouched.
-        assert_eq!(km.passthrough, Trigger::Mod(ModKind::Alt));
-        assert_eq!(km.constrain, Trigger::Mod(ModKind::Ctrl));
+        assert_eq!(km.passthrough, Role::one(Trigger::Mod(ModKind::Alt)));
+        assert_eq!(km.constrain, Role::one(Trigger::Mod(ModKind::Ctrl)));
         assert_eq!(
             km.action_for_key(Keysym::from_char('w')),
             Some(Action::Save)
@@ -495,7 +536,29 @@ mod tests {
         assert_eq!(km.action_for_key(Keysym::from_char('d')), None);
         assert!(!km.snap_on_dwell);
         assert_eq!(km.dwell, Duration::from_millis(1200));
-        assert_eq!(km.snap_invert, Trigger::Mod(ModKind::Logo));
+        assert_eq!(km.snap_invert, Role::one(Trigger::Mod(ModKind::Logo)));
+    }
+
+    /// A held role takes a list like an action does, and the rest of the file still
+    /// applies: a list there once failed the whole file.
+    #[test]
+    fn a_role_takes_a_list() {
+        let mut km = Keymap::default();
+        let raw: RawConfig = toml::from_str(
+            r#"
+            passthrough = ["caps", "F13", "wobble"]
+            pen = "b"
+        "#,
+        )
+        .unwrap();
+        km.apply(raw);
+        assert_eq!(
+            km.passthrough,
+            Role(vec![Trigger::Mod(ModKind::Caps), Trigger::Key(Keysym::F13)])
+        );
+        assert!(km.is_role_key(Keysym::F13));
+        assert_eq!(km.passthrough.label(), "Caps / F13");
+        assert_eq!(km.action_for_key(Keysym::from_char('b')), Some(Action::Pen));
     }
 
     /// A file that mentions neither leaves both at their default, and turning snapping

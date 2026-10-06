@@ -27,6 +27,9 @@ All notable changes to this project are documented here. The format is based on
 - **`wlr-shot record` falls back when hardware encoding is unavailable** — `--encoder
   auto` picked NVENC whenever FFmpeg was built with it, as Debian's and Arch's are, and
   failed on machines without NVIDIA. It now tries VAAPI, then `libx264`.
+- **A list for a held control no longer discards all of `wlr-draw`'s `keys.toml`** —
+  `passthrough`, `constrain`, `spotlight` and `snap-invert` now take a list like the
+  other bindings, and any of its keys or modifiers engages the control.
 - **`systemctl --user reload wlr-draw` reloads instead of stopping the daemon** — it
   now re-reads `keys.toml` and the theme and keeps the drawing.
 - **`wlr-draw`'s on-screen hints name your keys** — after rebinding help, click-through

@@ -99,11 +99,11 @@ binding is a single name or a list; missing entries keep their default, so a par
 is fine and no config at all means the defaults below.
 
 The four held controls — `passthrough` (click-through), `constrain`, `spotlight`,
-`snap-invert` — take **either a modifier** (`caps`, `ctrl`, `shift`, `alt`, `super`) **or
-a regular key**. This is the fix for keyboards without a usable Caps Lock (e.g. HHKB):
-point `passthrough` at `alt`, `super`, or any key. A modifier engages while held (Caps
-Lock latches); a regular key bound to `passthrough` toggles, and to
-`constrain`/`spotlight`/`snap-invert` engages while held.
+`snap-invert` — take **a modifier** (`caps`, `ctrl`, `shift`, `alt`, `super`), **a
+regular key**, or a list of them, any of which engages the control. This is the fix for
+keyboards without a usable Caps Lock (e.g. HHKB): point `passthrough` at `alt`, `super`,
+or any key. A modifier engages while held (Caps Lock latches); a regular key bound to
+`passthrough` toggles, and to `constrain`/`spotlight`/`snap-invert` engages while held.
 
 The same file carries the two settings the `snap` binding acts on: `dwell` (whether a
 pen stroke snaps on its own) and `dwell-ms` (how long it must hold still, 650 by
