@@ -50,8 +50,9 @@ capture protocols it exposes:
 
 | Capability | Compositor floor | Wayland protocol |
 | --- | --- | --- |
-| **Screen** capture (screenshots, recording, loupe, annotation) | wlroots ≥ 0.19 · Sway ≥ 1.11, or any compositor with `wlr-screencopy` | `ext-image-copy-capture-v1` (else `wlr-screencopy`) + `wlr-layer-shell` |
-| **Window** capture (switcher, `-w`, window mirror/record) | wlroots ≥ 0.20 · Sway ≥ 1.12 | adds `ext-foreign-toplevel-list-v1` |
+| **Overlays** (pickers, region selection, annotation) | any | `wlr-layer-shell` |
+| **Screen** capture (screenshots, recording, loupe, wlr-draw's freeze and save) | wlroots ≥ 0.19 · Sway ≥ 1.11, or any compositor with `wlr-screencopy` | `ext-image-copy-capture-v1` (else `wlr-screencopy`) |
+| **Window** capture (switcher, `-w`, window mirror/record) | wlroots ≥ 0.20 · Sway ≥ 1.12 | adds the foreign-toplevel capture source and `ext-foreign-toplevel-list-v1` |
 
 Tools degrade gracefully: where windows aren't capturable they keep their screen features
 and say so. See [COMPATIBILITY.md](COMPATIBILITY.md) for the full matrix (Hyprland, niri,
@@ -66,7 +67,9 @@ Runtime libraries:
 | --- | --- | --- |
 | `libegl1` | every tool | EGL/GLES overlay rendering |
 | `libfontconfig1` | every tool | looking up the UI font; without it the overlay falls back to the embedded fonts, which have no CJK coverage |
-| `libgbm` (Mesa) | every tool | zero-copy GPU capture path; pass `--no-gpu` (or set `WLR_NO_GPU=1`) to capture through shared memory instead |
+| `libgbm` (Mesa) | every tool | zero-copy GPU capture path; `--no-gpu` (or `WLR_NO_GPU=1`) captures through shared memory instead, but the library must still be there |
+| FFmpeg (`libav*`), `libpipewire-0.3` | `wlr-shot record` | encoding, and recording system sound |
+| Tesseract, Leptonica, the `eng` tessdata pack | `wlr-peek ocr` / `grep` | text recognition |
 | `xdg-desktop-portal-wlr` ≥ 0.8 | `wlr-chooser` | portal-based picking |
 | `zwlr-foreign-toplevel-management-v1`, or `cosmic-toplevel-management` | `wlr-switcher` | focusing windows |
 
@@ -90,7 +93,8 @@ Both ship the same tools and conflict with each other — pick one. Any AUR help
 
 One package with the whole suite is attached to every
 [release](https://github.com/sjourdois/wlr-utils/releases/latest), built **per distro** so
-it links against that distro's FFmpeg / Leptonica. Pick the matching asset:
+it links against that distro's FFmpeg / Leptonica. Pick the matching asset (the forky,
+sid and 26.04 builds are experimental, and a release may lack them):
 
 | Distro | Asset suffix |
 | --- | --- |
@@ -105,14 +109,15 @@ sudo apt install ./wlr-utils_*_amd64.trixie.deb   # apt pulls the dependencies i
 ```
 
 Ubuntu 22.04's PipeWire / FFmpeg are too old to build the recorder, so that `.deb` omits
-`wlr-shot record`; install from source there if you need it.
+`wlr-shot record`, and a source build there hits the same limit.
 
 > [!IMPORTANT]
 > These `.deb`s link **dynamically** against the FFmpeg (`libavutil`) and Leptonica
-> (`liblept`) of the distro they were built on. If your installed versions don't match
-> (different release, backports, a soname your distro doesn't ship), the tool won't start —
-> `error while loading shared libraries: libavutil.so.NN` / `liblept.so.N`. Build from
-> source instead: it links against whatever you have.
+> (`libleptonica`, formerly `liblept`) of the distro they were built on. If your installed
+> versions don't match (different release, backports, a soname your distro doesn't ship),
+> the package won't install or the tool won't start —
+> `error while loading shared libraries: libavutil.so.NN`. Build from source instead: it
+> links against whatever you have.
 
 ### NixOS / Nix
 
@@ -128,7 +133,8 @@ On NixOS, add `wlr-utils` to `environment.systemPackages`.
 
 ### Prebuilt binaries
 
-One archive with every binary, for any distro — no Rust toolchain needed:
+One archive with every binary, no Rust toolchain needed. It is built on Ubuntu 24.04 and linked to its FFmpeg, PipeWire and Leptonica, so elsewhere it
+needs those same versions — a package or a source build is the safer route:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf \
@@ -167,6 +173,15 @@ cargo uninstall wlr-utils        # the whole bundle
 cargo uninstall wlr-draw         # …or just one: wlr-chooser / wlr-peek / wlr-shot
 ```
 
+The prebuilt installer also puts the binaries in `~/.cargo/bin`, but cargo does not know
+them, and it leaves a receipt; on Nix, remove the profile entry:
+
+```sh
+rm -f ~/.cargo/bin/{wlr-chooser,wlr-switcher,wlr-overlayd,wlr-peek,wlr-shot,wlr-draw} \
+      ~/.config/wlr-utils/wlr-utils-receipt.json
+nix profile remove wlr-utils
+```
+
 `wlr-draw` also registers an XDG autostart entry on first run (see its README). Drop the
 checkbox in its tray menu, or delete the files by hand (honouring `$XDG_CONFIG_HOME` /
 `$XDG_STATE_HOME` if you set them):
@@ -199,6 +214,9 @@ layer rule (blur, animation, …) can target one tool:
 | `wlr-draw` | the annotation overlay |
 | `wlr-shot` | region selection |
 | `wlr-peek` | the colour picker, the loupe and region selection |
+
+`wlr-peek mirror` is an ordinary window instead, with the app id `wlr-peek-mirror` for
+window rules.
 
 ## Documentation
 

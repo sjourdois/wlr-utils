@@ -53,9 +53,9 @@ workspaces* — even occluded ones. Real moving thumbnails, not icons.
 <video src="assets/wlr-switcher/altab.mp4" autoplay loop muted playsinline width="49%"></video>
 <video src="assets/wlr-switcher/expose.mp4" autoplay loop muted playsinline width="49%"></video>
 
-Press a letter to jump straight to a window: the label is whatever your keyboard
-layout prints on that key, so it names the key under your finger — `a` on QWERTY,
-`q` on AZERTY, same position. Narrow the list first with `--app-id`, `--title`,
+With `--hints`, press a letter to jump straight to a window: the label is whatever your
+keyboard layout prints on that key, so it names the key under your finger — `a` on
+QWERTY, `q` on AZERTY, same position. Narrow the list first with `--app-id`, `--title`,
 `--pid` or, on sway, `--scratchpad`; the windows left out are never captured, and
 with hold-to-switch a lone window left is switched to at once.
 
@@ -111,7 +111,7 @@ freehand stroke still and it snaps to a clean line or ellipse; tune that delay i
 <video src="assets/wlr-draw/annotate.mp4" autoplay loop muted playsinline width="900"></video>
 
 Presenter **spotlight** — hold Shift to dim everything but a flashlight that
-follows the cursor, or pose a fixed spotlight on a window:
+follows the cursor, or drag a fixed one into place:
 
 <video src="assets/wlr-draw/spotlight.mp4" autoplay loop muted playsinline width="900"></video>
 
@@ -146,28 +146,30 @@ wlr-peek mirror --app-id firefox        # live PiP of a window by name — even 
 wlr-peek region                         # slurp replacement — print "X,Y WxH"
 wlr-peek ocr --app-id thunderbird       # read a window's text without raising it
 wlr-peek grep "feature"                 # visual grep — find on-screen text
-wlr-peek watch -o DP-1 --on change      # fire when a region changes
+wlr-peek watch -o DP-1 --on change      # fire when a screen changes
 ```
 
 ---
 
 ## Install
 
-All five tools in one go — the `wlr-utils` bundle:
+Every tool in one go — the `wlr-utils` bundle:
 
 ```sh
 cargo install wlr-utils
 ```
 
-…or grab the [prebuilt bundle](https://github.com/sjourdois/wlr-utils/releases/latest)
-(one archive + a one-line `wlr-utils-installer.sh`). Prefer a single tool? Install it on
+…or a package: AUR (`wlr-utils`, `wlr-utils-bin`), a `.deb` per Debian/Ubuntu release,
+or nixpkgs — see the [install guide](https://github.com/sjourdois/wlr-utils#install). The
+[prebuilt bundle](https://github.com/sjourdois/wlr-utils/releases/latest) is built on
+Ubuntu 24.04 and linked to its libraries. Prefer a single tool? Install it on
 its own — `cargo install wlr-shot` (also `wlr-chooser`, `wlr-peek`, `wlr-draw`). Uninstall
 with `cargo uninstall <name>`; see the
 [main README](https://github.com/sjourdois/wlr-utils#uninstall) for the leftover files
 `wlr-draw` writes (its autostart entry).
 
-They run on wlroots compositors that implement `ext-image-copy-capture-v1`
-(**sway**, **Hyprland**, **cosmic-comp**, …), and on the screen features alone where
+They run on compositors that implement `ext-image-copy-capture-v1` (**sway**,
+**Hyprland**, **cosmic-comp**, …), and on the screen features alone where
 only `wlr-screencopy` is exposed (**niri**, and **dwl** before 0.9). See the
 [compatibility matrix](https://github.com/sjourdois/wlr-utils/blob/main/COMPATIBILITY.md).
 

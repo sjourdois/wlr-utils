@@ -18,6 +18,7 @@ body:
       options:
         - wlr-chooser
         - wlr-switcher
+        - wlr-overlayd
         - wlr-peek
         - wlr-shot
         - wlr-draw
@@ -107,9 +108,8 @@ body:
     attributes:
       label: Logs
       description: |
-        Any error output. For `wlr-draw` (a daemon), the journal helps:
-        `journalctl --user -u wlr-draw -e`. Re-running with `RUST_LOG=debug` in the
-        environment adds detail.
+        Any error output. For the daemons, the journal helps:
+        `journalctl --user -t wlr-draw -e` (or `-t wlr-overlayd`).
       render: text
     validations:
       required: false
