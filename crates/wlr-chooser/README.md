@@ -274,9 +274,9 @@ Windows are listed most recently focused first where the compositor reports it
 (Sway, Hyprland, niri), by name otherwise; `--window-order by-name` always orders
 them by name.
 
-Whatever the order, the overlay opens with the **first window that is not the one
-you are on** highlighted, so releasing the modifier straight away always switches
-somewhere. Which window that is comes from `zwlr-foreign-toplevel-management-v1`
+Whatever the order and the layout, the overlay opens with the **first window that is
+not the one you are on** highlighted, so releasing the modifier straight away, or
+pressing Enter, always switches somewhere. Which window that is comes from `zwlr-foreign-toplevel-management-v1`
 (the `activated` state) rather than from a compositor IPC. cosmic-comp does not
 expose that protocol, so the overlay opens on the first tile there.
 

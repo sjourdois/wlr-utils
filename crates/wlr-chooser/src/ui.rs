@@ -976,6 +976,10 @@ pub struct Options {
     /// The layer-shell namespace of the overlay's surface: the name of the command
     /// that shows it, so compositor rules can tell the chooser from the switcher.
     pub namespace: &'static str,
+    /// Open on the first window that is not the one the user is on: the switcher's
+    /// pick is a window to go to, and the current one would switch nowhere. Hold-to-
+    /// switch does the same when it arms, whatever this says.
+    pub leave_current: bool,
 }
 
 /// How long the tiles stay hidden in hold-to-switch mode if keyboard focus
@@ -1085,7 +1089,7 @@ impl App {
             cycle: opts.cycle,
             armed: false,
             pending_auto_select: opts.auto_select,
-            pending_initial_select: false,
+            pending_initial_select: opts.leave_current,
             focused,
             pending_confirm: false,
             // Without hold-to-switch there is no tap to mistake the first frames for.
@@ -2267,6 +2271,7 @@ mod tests {
     fn options() -> Options {
         Options {
             namespace: "wlr-switcher",
+            leave_current: false,
             mode: Mode::Windows,
             show_system: false,
             grid: None,
@@ -2526,6 +2531,31 @@ mod tests {
             h.app.confirm_release();
             assert_eq!(h.picked().as_deref(), Some("Window: b"), "order: {name}");
         }
+    }
+
+    #[test]
+    fn the_switcher_opens_past_the_current_window_without_hold_to_switch() {
+        // Grid, card, `--no-hold`, or no modifier held: nothing arms, and Enter on the
+        // window the user is on would switch nowhere.
+        let switcher = Options {
+            order: Order::Mru,
+            leave_current: true,
+            ..options()
+        };
+        let mut h = Harness::focused_on(switcher, Some(focus("foot")));
+        h.send(vec![window("a", "foot"), window("b", "firefox")]);
+        h.frame();
+        assert_eq!(h.app.selected, 1);
+
+        // The chooser keeps the first tile: what it picks is a source to share.
+        let chooser = Options {
+            order: Order::Mru,
+            ..options()
+        };
+        let mut h = Harness::focused_on(chooser, Some(focus("foot")));
+        h.send(vec![window("a", "foot"), window("b", "firefox")]);
+        h.frame();
+        assert_eq!(h.app.selected, 0);
     }
 
     #[test]

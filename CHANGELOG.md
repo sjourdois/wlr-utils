@@ -24,6 +24,9 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **`wlr-switcher` opens past the current window in every layout** — outside
+  hold-to-switch (`--layout grid` or `card`, `--no-hold`), it opened on the window you
+  were on.
 - **The systemd units start a `cargo install`ed daemon** — systemd looked `wlr-draw` and
   `wlr-overlayd` up in `/usr/bin` and `/usr/local/bin` only; the units now go through the
   user manager's `PATH`.
