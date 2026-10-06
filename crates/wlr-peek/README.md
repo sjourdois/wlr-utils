@@ -151,7 +151,8 @@ $ wlr-peek watch -o DP-4 --on change --threshold 2 --repeat --exec 'mpc next'
   pixels (default 0 = any change) — raise it to skip a blinking cursor or clock.
 - By default it prints one line and exits 0 on the first trigger (composes with
   `&&`); `--repeat` keeps watching and fires every time. `--exec CMD` runs a shell
-  command on each trigger. `--timeout DUR` gives up (exit 2) if nothing fires.
+  command on each trigger. `--timeout DUR` gives up (exit 2) if nothing fires. If the
+  watched window closes or the output goes away, it exits 3.
 
 Capture is damage-driven, so `watch` is cheap: a static source delivers no frames.
 

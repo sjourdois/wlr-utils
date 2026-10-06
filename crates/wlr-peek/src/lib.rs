@@ -48,6 +48,9 @@ enum Cmd {
     #[cfg(feature = "ocr")]
     Ocr(OcrArgs),
     /// Watch a region, window or output and act when it changes (or stops changing).
+    ///
+    /// Exits 0 once it fires (unless --repeat), 2 when --timeout runs out, 3 when the
+    /// watched window or output goes away, and 1 on an error.
     #[cfg(feature = "watch")]
     Watch(WatchArgs),
     /// Find text on screen (OCR) and print where it is — a visual grep.
@@ -1150,8 +1153,10 @@ mod watch_impl {
                 match end {
                     stream::End::NeverAppeared => bail!("source did not appear"),
                     stream::End::SourceGone => {
+                        // Not 0: `watch … && notify-send` must not take a closed window
+                        // for a change.
                         eprintln!("wlr-peek: source gone");
-                        return Ok(());
+                        std::process::exit(3);
                     }
                 }
             }
