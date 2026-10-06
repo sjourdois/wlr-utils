@@ -21,6 +21,9 @@ All notable changes to this project are documented here. The format is based on
   `wlr-switcher` from `wlr-chooser`, which both used `wlr-chooser`. Region selection
   and the colour picker, until now `wlr-overlay`, use `wlr-shot` or `wlr-peek`. Rules
   written for the old names need updating; the README lists the namespaces.
+- **`-w ID` names a window in every command** — `wlr-peek mirror -w` opened the chooser,
+  which is now `--pick-window` as everywhere else, and `wlr-peek ocr` gains `-w`: the
+  "several windows match" error points at it.
 
 ### Fixed
 

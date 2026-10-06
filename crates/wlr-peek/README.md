@@ -57,10 +57,10 @@ $ wlr-peek ocr -l fra+eng -c       # French+English, copy to the clipboard
 ```
 
 With no source flag it selects a region interactively (the default). Other sources
-mirror `wlr-shot`: `-g "X,Y WxH"`, `-o NAME`, `--app-id`/`--title`, `-a/--active-window`,
-`--current-output`. `--app-id`/`--title` capture the **window itself**, so they read a
-window that is occluded or on another workspace — unlike `-a`, which captures the screen
-area the focused window occupies.
+mirror `wlr-shot`: `-g "X,Y WxH"`, `-o NAME`, `-w ID`, `--app-id`/`--title`,
+`-a/--active-window`, `--current-output`. `-w`, `--app-id`/`--title` capture the
+**window itself**, so they read a window that is occluded or on another workspace —
+unlike `-a`, which captures the screen area the focused window occupies.
 `-l/--lang` picks the Tesseract language(s) (default `eng`; the matching
 `tesseract-ocr-<lang>` data pack must be installed). `-c` copies the text instead, like
 `color --clipboard`; `--clipboard-foreground` keeps that server in the foreground.
@@ -90,7 +90,7 @@ A floating, always-on-top window that mirrors live content.
 ```console
 $ wlr-peek mirror                  # no source: launch wlr-chooser to pick a window
 $ wlr-peek mirror <ID>             # mirror a window (ID as printed by wlr-chooser)
-$ wlr-peek mirror -w               # pick a window via the chooser (explicit)
+$ wlr-peek mirror --pick-window    # pick a window via the chooser (explicit)
 $ wlr-peek mirror -s               # select a region with the mouse, then mirror it
 $ wlr-peek mirror --app-id firefox # mirror a window by application id
 $ wlr-peek mirror -o DP-4          # mirror a whole output / screen
@@ -99,8 +99,7 @@ $ wlr-peek mirror -a               # the active window's area (needs focus info)
 $ wlr-peek mirror -g "100,200 640x480" --zoom 4   # a fixed region, magnified
 ```
 
-It mirrors a window (`ID`, `--app-id`/`--title`, or `-w`/`--pick-window`, which here
-picks one through the chooser), or a region/output as a live loupe (`-s`, `-g "X,Y WxH"`,
+It mirrors a window (`ID` or `-w ID`, `--app-id`/`--title`, or `--pick-window`), or a region/output as a live loupe (`-s`, `-g "X,Y WxH"`,
 `-o NAME`, `--current-output`, and `-a`, the area the focused window covers), magnified
 by `--zoom` (default ×2). Region/output mode is mono-output for now (clipped to the output
 its top-left corner sits on). Keep the window outside the mirrored region to avoid

@@ -236,6 +236,9 @@ struct MirrorArgs {
     /// `wlr-chooser`). With no source flag, the chooser is launched to pick one.
     #[arg(group = "source")]
     id: Option<String>,
+    /// The window to mirror, by the same identifier — `-w` as in the other commands.
+    #[arg(short = 'w', long, value_name = "ID", group = "source")]
+    window: Option<String>,
     /// Select a region with the mouse, then mirror it (a frozen-screen drag, like
     /// `wlr-shot -s`) — no need for slurp.
     #[arg(short = 's', long, group = "source")]
@@ -255,7 +258,7 @@ struct MirrorArgs {
     #[arg(long, value_name = "TEXT", conflicts_with = "source")]
     title: Option<String>,
     /// Pick a window to mirror via the chooser (same as no source flag).
-    #[arg(short = 'w', long = "pick-window", group = "source")]
+    #[arg(long = "pick-window", group = "source")]
     pick_window: bool,
     /// Mirror the active (focused) window's area — needs compositor focus info.
     #[cfg(any(feature = "ocr", feature = "watch"))]
@@ -315,8 +318,8 @@ fn mirror(args: MirrorArgs) -> Result<()> {
         return mirror_region(region, args.zoom, args.follow);
     }
     // Otherwise a window: an explicit id, an `--app-id`/`--title` match, else the
-    // chooser (incl. `-w`).
-    let id = match args.id {
+    // chooser (incl. `--pick-window`).
+    let id = match args.window.or(args.id) {
         Some(id) => id,
         None => {
             match capture::WindowFilter::from_flags(args.app_id.as_deref(), args.title.as_deref()) {
@@ -642,6 +645,11 @@ struct OcrArgs {
     /// OCR this whole named output (e.g. `DP-4`).
     #[arg(short = 'o', long, value_name = "NAME", group = "source")]
     output: Option<String>,
+    /// OCR the window with this `ext-foreign-toplevel` identifier (as printed by
+    /// `wlr-chooser` or `wlr-shot screenshot --list-windows`). Reads the window itself,
+    /// so it works even occluded or off-workspace.
+    #[arg(short = 'w', long, value_name = "ID", group = "source")]
+    window: Option<String>,
     /// OCR the window with this application id (exact, case-insensitive) — e.g.
     /// `firefox`. Reads the window itself, so it works even occluded or off-workspace.
     /// Combine with `--title` when several windows share an app id.
@@ -693,6 +701,8 @@ fn ocr_source(client: &mut wl::Client, args: &OcrArgs) -> Result<wl::CapturedIma
             .map_err(Into::into)
     } else if let Some(name) = &args.output {
         capture::capture_output(client, Some(name), DEFAULT_BUDGET).map_err(Into::into)
+    } else if let Some(id) = &args.window {
+        capture::capture_window(client, id, DEFAULT_BUDGET).map_err(Into::into)
     } else if let Some(filter) =
         capture::WindowFilter::from_flags(args.app_id.as_deref(), args.title.as_deref())
     {
