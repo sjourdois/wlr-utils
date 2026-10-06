@@ -153,22 +153,28 @@ wlr-peek watch -o DP-1 --on change      # fire when a screen changes
 
 ## Install
 
-Every tool in one go — the `wlr-utils` bundle, which needs Rust 1.95 or newer and the
-development packages the [install guide](https://github.com/sjourdois/wlr-utils#from-source)
-lists:
+Every tool in one package:
 
 ```sh
-cargo install wlr-utils
+paru -S wlr-utils-bin                                # Arch (AUR; or wlr-utils, built here)
+sudo apt install ./wlr-utils_*_amd64.trixie.deb      # Debian / Ubuntu: one .deb per release
+nix profile install nixpkgs#wlr-utils                # Nix
 ```
 
-…or a package: AUR (`wlr-utils`, `wlr-utils-bin`), a `.deb` per Debian/Ubuntu release,
-or nixpkgs — see the [install guide](https://github.com/sjourdois/wlr-utils#install). The
-[prebuilt bundle](https://github.com/sjourdois/wlr-utils/releases/latest) is built on
-Ubuntu 24.04 and linked to its libraries. Prefer a single tool? Install it on
-its own — `cargo install wlr-shot` (also `wlr-chooser`, `wlr-peek`, `wlr-draw`). Uninstall
-with `cargo uninstall <name>`; see the
-[main README](https://github.com/sjourdois/wlr-utils#uninstall) for the leftover files
-`wlr-draw` writes (its autostart entry).
+The `.deb` for your release is attached to every
+[release](https://github.com/sjourdois/wlr-utils/releases/latest), with a prebuilt archive
+built on Ubuntu 24.04 and linked to its libraries. From source, with Rust 1.95 or newer
+and the development packages the
+[install guide](https://github.com/sjourdois/wlr-utils#from-source) lists:
+
+```sh
+cargo install wlr-utils    # or a single tool: wlr-shot, wlr-chooser, wlr-peek, wlr-draw
+```
+
+Then [first steps](https://github.com/sjourdois/wlr-utils#first-steps): five commands to
+try, and the key bindings. The [install guide](https://github.com/sjourdois/wlr-utils#install)
+has every route, and [uninstalling](https://github.com/sjourdois/wlr-utils#uninstall)
+covers the files `wlr-draw` leaves (its autostart entry).
 
 They run on compositors that implement `ext-image-copy-capture-v1` (**sway**,
 **Hyprland**, **cosmic-comp**, …), and on the screen features alone where
