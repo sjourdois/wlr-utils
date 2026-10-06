@@ -273,8 +273,8 @@ icon toggles draw mode too**, so even that one binding is optional.
 The bindings below are just conveniences for driving the daemon from *outside* draw mode:
 
 ```
-bindsym $mod+d       exec wlr-draw toggle
-bindsym $mod+Shift+d exec wlr-draw clear
+bindsym $mod+p       exec wlr-draw toggle
+bindsym $mod+Shift+p exec wlr-draw clear
 bindsym $mod+z       exec wlr-draw undo
 ```
 

@@ -27,7 +27,7 @@ use clap::{Parser, Subcommand};
     about = "Draw and annotate live on screen (wlroots / layer-shell)",
     long_about = "Run with no subcommand to start the overlay daemon. A wlroots client \
 cannot grab a global hotkey, so further invocations drive the running daemon over a \
-control socket — bind them to compositor keys (e.g. sway `bindsym $mod+a exec wlr-draw \
+control socket — bind them to compositor keys (e.g. sway `bindsym $mod+p exec wlr-draw \
 toggle`)."
 )]
 struct Cli {
