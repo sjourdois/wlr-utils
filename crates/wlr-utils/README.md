@@ -41,6 +41,13 @@ curl --proto '=https' --tlsv1.2 -LsSf \
   https://github.com/sjourdois/wlr-utils/releases/latest/download/wlr-utils-installer.sh | sh
 ```
 
+The installer copies the binaries alone. Unpacked by hand, the archive installs itself
+with its systemd units and themes, into `/usr/local` unless `PREFIX` says otherwise:
+
+```sh
+sudo sh install.sh
+```
+
 ## Uninstall
 
 ```sh

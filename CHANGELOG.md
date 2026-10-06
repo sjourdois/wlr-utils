@@ -14,6 +14,10 @@ All notable changes to this project are documented here. The format is based on
   workspace, on sway, Hyprland and cosmic-comp.
 - **`wlr-draw reload`** — re-reads `keys.toml` and the theme and keeps the drawing,
   however the daemon was started.
+- **An install script for packagers** — `packaging/install.sh` installs the binaries,
+  the systemd units, the themes, the README and the licences, and honours `DESTDIR` and
+  `PREFIX`. The release archive carries it, and the packages now ship the themes in
+  `/usr/share/wlr-utils/themes`.
 
 ### Changed
 

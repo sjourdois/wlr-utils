@@ -11,6 +11,13 @@ ci = "github"
 installers = ["shell"]
 # Target platforms to build apps for (Linux/wlroots only).
 targets = ["x86_64-unknown-linux-gnu"]
+# Shipped in the archive next to the binaries, so its install script runs from there.
+include = [
+    "packaging/install.sh",
+    "crates/wlr-chooser/contrib/wlr-overlayd.service",
+    "crates/wlr-draw/contrib/wlr-draw.service",
+    "docs/themes",
+]
 # Build on 24.04, not the cargo-dist default 22.04: the pipewire 0.10 crate needs a
 # libpipewire newer than 22.04 ships (libspa-sys fails to bind spa_meta_first / the
 # spa_video_info_raw.flags field). wlroots desktops run recent glibc anyway.

@@ -77,8 +77,8 @@ Runtime libraries:
 
 Every route below installs the same six binaries (`wlr-chooser`, `wlr-switcher`,
 `wlr-overlayd`, `wlr-peek`, `wlr-shot`, `wlr-draw`). The AUR and `.deb` packages also
-install the systemd `--user` units for the `wlr-overlayd` and `wlr-draw` daemons; enable
-the one you want with `systemctl --user enable --now wlr-overlayd.service`.
+install the themes and the systemd `--user` units for the `wlr-overlayd` and `wlr-draw`
+daemons; enable the one you want with `systemctl --user enable --now wlr-overlayd.service`.
 
 ### Arch Linux
 
@@ -157,9 +157,17 @@ cargo install wlr-shot           # screenshots + recording
 cargo install wlr-draw           # annotation overlay
 ```
 
-Building the checkout directly works the same way (`cargo build --release` puts every
-binary in `target/release`). Either route needs the development packages of the features
-you build; for the whole suite, the ones CI installs:
+To install a checkout with its systemd units and themes, build the bundle and run the
+install script. It installs into `/usr/local`; `PREFIX` and `DESTDIR` change that, as the
+AUR packages do:
+
+```sh
+cargo build --release -p wlr-utils
+sudo sh packaging/install.sh
+```
+
+Either route needs the development packages of the features you build; for the whole
+suite, the ones CI installs:
 
 ```sh
 # Debian / Ubuntu
@@ -184,6 +192,14 @@ A `cargo install` drops the binaries in `~/.cargo/bin`; remove the bundle with
 ```sh
 cargo uninstall wlr-utils        # the whole bundle
 cargo uninstall wlr-draw         # …or just one: wlr-chooser / wlr-peek / wlr-shot
+```
+
+What `packaging/install.sh` installed comes off by hand, from the same `PREFIX`:
+
+```sh
+sudo rm -rf /usr/local/bin/wlr-{chooser,switcher,overlayd,peek,shot,draw} \
+  /usr/local/lib/systemd/user/wlr-{overlayd,draw}.service \
+  /usr/local/share/{wlr-utils,doc/wlr-utils,licenses/wlr-utils}
 ```
 
 The prebuilt installer also puts the binaries in `~/.cargo/bin`, but cargo does not know

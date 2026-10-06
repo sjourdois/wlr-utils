@@ -85,6 +85,7 @@ assets = [
     ["../../target/release/wlr-draw", "usr/bin/", "755"],
     ["../wlr-chooser/contrib/wlr-overlayd.service", "usr/lib/systemd/user/", "644"],
     ["../wlr-draw/contrib/wlr-draw.service", "usr/lib/systemd/user/", "644"],
+    ["../../docs/themes/*.toml", "usr/share/wlr-utils/themes/", "644"],
     ["README.md", "usr/share/doc/wlr-utils/README.md", "644"],
 ]
 
