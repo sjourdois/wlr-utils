@@ -213,8 +213,8 @@ bindsym $mod+p exec wlr-draw toggle
 ```
 
 The first binding gives a true Alt-Tab: hold Alt, Tab cycles, release switches. The
-second copies the region to the clipboard. [Key bindings on other
-compositors](#key-bindings-on-other-compositors) has the same in Hyprland and niri, and
+second copies the region to the clipboard. [Key bindings and startup, per
+compositor](#key-bindings-and-startup-per-compositor) has the same in Hyprland and niri, and
 each tool's README has more. For screen sharing, [point the portal at
 `wlr-chooser`](crates/wlr-chooser/README.md#set-up-the-portal).
 
@@ -262,7 +262,7 @@ wlr-draw migrate-config     # also wlr-shot and wlr-peek, or wlr-chooser/wlr-swi
 wlr-draw migrate-config -
 ```
 
-## Key bindings on other compositors
+## Key bindings and startup, per compositor
 
 The examples in these READMEs are written for sway. The same binding, and the same
 command run at startup, elsewhere:

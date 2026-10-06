@@ -139,7 +139,7 @@ bindsym Mod1+Tab exec wlr-switcher
 ```
 
 [True Alt-Tab](#true-alt-tab-hold-to-switch) has the details, and the
-[main README](../../README.md#key-bindings-on-other-compositors) the same binding in
+[main README](../../README.md#key-bindings-and-startup-per-compositor) the same binding in
 Hyprland and niri.
 
 ### Instant overlays
