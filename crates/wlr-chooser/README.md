@@ -525,6 +525,10 @@ catalog matches. Override it any time with `LANGUAGE`:
 LANGUAGE=ja wlr-chooser
 ```
 
+With [`wlr-overlayd`](#instant-overlays--wlr-overlayd) running, the overlays speak the
+daemon's language whatever the command's: set `LANGUAGE` in the daemon's environment
+instead, or pass `--no-daemon`.
+
 Rendering CJK text needs a CJK font installed (e.g. Noto Sans CJK); one is
 auto-detected. New locales are welcome — copy
 `crates/wlr-chooser/i18n/en/wlr_chooser.ftl`.
