@@ -8,6 +8,7 @@ config-invalid = { $file } の { $line } 行目: { $error }
 config-unknown-key = { $file }: 不明なキー `{ $key }`
 config-bad-value = { $file }: { $error }
 config-bad-colour = { $file }: `{ $key }`: "{ $value }" は色ではありません (#rgb、#rrggbb、#rrggbbaa)
+config-negative = { $file }: `{ $key }` には 0 以上の数値を指定します
 config-bad-theme-name = { $file }: `theme.name` にはテーマ名かパスを引用符で囲んで指定します
 config-theme-not-found = { $file }: { $dirs } にテーマ `{ $name }` がありません
 config-not-a-section = { $file }: `{ $key }` はセクションです: [{ $key }] を単独の行に書き、その下にキーを書いてください

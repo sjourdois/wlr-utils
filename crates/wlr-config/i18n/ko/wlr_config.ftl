@@ -8,6 +8,7 @@ config-invalid = { $file }, { $line }번째 줄: { $error }
 config-unknown-key = { $file }: 알 수 없는 키 `{ $key }`
 config-bad-value = { $file }: { $error }
 config-bad-colour = { $file }: `{ $key }`: "{ $value }"은(는) 색이 아닙니다 (#rgb, #rrggbb 또는 #rrggbbaa)
+config-negative = { $file }: `{ $key }`에는 0 이상의 숫자를 적습니다
 config-bad-theme-name = { $file }: `theme.name`에는 테마 이름이나 경로를 따옴표로 감싸서 적습니다
 config-theme-not-found = { $file }: { $dirs }에 `{ $name }` 테마가 없습니다
 config-not-a-section = { $file }: `{ $key }`은(는) 섹션입니다: [{ $key }]를 한 줄에 단독으로 쓰고 그 아래에 키를 쓰세요

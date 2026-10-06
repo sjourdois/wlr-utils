@@ -8,6 +8,7 @@ config-invalid = { $file }, рядок { $line }: { $error }
 config-unknown-key = { $file }: невідомий ключ `{ $key }`
 config-bad-value = { $file }: { $error }
 config-bad-colour = { $file }: `{ $key }`: "{ $value }" — не колір (#rgb, #rrggbb або #rrggbbaa)
+config-negative = { $file }: `{ $key }` приймає число, 0 або більше
 config-bad-theme-name = { $file }: `theme.name` приймає назву теми або шлях у лапках
 config-theme-not-found = { $file }: немає теми `{ $name }` у { $dirs }
 config-not-a-section = { $file }: `{ $key }` — це розділ: напишіть [{ $key }] в окремому рядку, а під ним його ключі

@@ -8,6 +8,7 @@ config-invalid = { $file }, regel { $line }: { $error }
 config-unknown-key = { $file }: onbekende sleutel `{ $key }`
 config-bad-value = { $file }: { $error }
 config-bad-colour = { $file }: `{ $key }`: "{ $value }" is geen kleur (#rgb, #rrggbb of #rrggbbaa)
+config-negative = { $file }: `{ $key }` verwacht een getal, 0 of meer
 config-bad-theme-name = { $file }: `theme.name` verwacht een themanaam of een pad, tussen aanhalingstekens
 config-theme-not-found = { $file }: geen thema `{ $name }` in { $dirs }
 config-not-a-section = { $file }: `{ $key }` is een sectie: schrijf [{ $key }] op een eigen regel, met daaronder de sleutels

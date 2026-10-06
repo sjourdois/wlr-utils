@@ -29,3 +29,4 @@ daemon-busy = El demonio wlr-overlayd ya está mostrando una superposición, as�
 daemon-bypassed = Esta ejecución no pasa por el demonio — --no-gpu cambia el comportamiento de todo el proceso — así que paga todo el arranque.
 daemon-cannot-serve = Un demonio no puede encargarse de esta ejecución: --no-gpu y --doctor cambian el comportamiento de todo el proceso. Ejecútala con --no-daemon.
 hold-no-modifier = El modo mantener para cambiar está activo: el selector cambia en cuanto no se mantiene ninguna tecla Alt o Super — al instante y sin mostrar nada si no se mantiene ninguna al abrirse. Quita --hold para que la superposición espere cuando no se mantiene ninguna.
+chooser-config-min = debe ser al menos { $min }

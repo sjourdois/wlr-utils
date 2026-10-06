@@ -29,3 +29,4 @@ daemon-busy = De wlr-overlayd-daemon toont al een overlay, dus deze wordt hier g
 daemon-bypassed = Deze uitvoering gaat niet via de daemon — --no-gpu verandert het gedrag van het hele proces — en betaalt dus de volledige opstart.
 daemon-cannot-serve = Een daemon kan deze uitvoering niet overnemen: --no-gpu en --doctor veranderen het gedrag van het hele proces. Voer haar uit met --no-daemon.
 hold-no-modifier = Vasthouden-om-te-wisselen staat aan: de wisselaar wisselt zodra er geen Alt- of Super-toets meer wordt vastgehouden — meteen en zonder iets te tonen als er bij het openen geen wordt vastgehouden. Laat --hold weg om de overlay te laten wachten als er geen wordt vastgehouden.
+chooser-config-min = moet minstens { $min } zijn

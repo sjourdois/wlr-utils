@@ -29,3 +29,4 @@ daemon-busy = Il demone wlr-overlayd sta già mostrando una sovrapposizione, qui
 daemon-bypassed = Questa esecuzione non passa dal demone — --no-gpu cambia il comportamento dell'intero processo — quindi paga l'intero avvio.
 daemon-cannot-serve = Un demone non può farsi carico di questa esecuzione: --no-gpu e --doctor cambiano il comportamento dell'intero processo. Eseguila con --no-daemon.
 hold-no-modifier = La modalità tieni-per-cambiare è attiva: il selettore cambia finestra appena nessun tasto Alt o Super è premuto — subito, senza mostrare nulla, se nessuno lo è all'apertura. Togli --hold perché la sovrapposizione attenda quando nessuno è premuto.
+chooser-config-min = deve valere almeno { $min }

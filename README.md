@@ -242,6 +242,10 @@ A mistake is reported on stderr and by `doctor`, and the rest still applies.
 [theme]
 name = "catppuccin-mocha"   # a theme, by name or by path
 accent = "#89b4fa"          # …and any of its keys, set over it
+corner-radius = 0           # square corners
+
+[chooser]
+tile-width = 360            # the overlays' sizes
 
 [draw]
 dwell-ms = 400

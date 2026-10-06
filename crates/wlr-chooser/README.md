@@ -513,11 +513,24 @@ font      = "JetBrains Mono" # UI font family (via fontconfig)
 # font-path = "/path/to/Font.ttf"
 # cjk-font = "Noto Sans CJK JP"
 font-size = 15.0             # the card's text: tabs and filter
+
+corner-radius = 0            # square corners everywhere; 12 by default
 ```
 
 The ready-made themes set every colour key: Catppuccin (Mocha, Macchiato, Frappé,
 Latte), Nord, Gruvbox, Dracula, Tokyo Night. A theme file holds the keys of `[theme]`
 without its header; yours go in `~/.config/wlr-utils/themes`.
+
+The sizes, in pixels, come from the `[chooser]` section:
+
+```toml
+[chooser]
+card-width = 1000     # the card, when --grid does not size it to its tiles
+card-height = 760
+tile-width = 280      # the narrowest a card tile gets
+spacing = 10          # between tiles; the exposé and the Alt-Tab row scale theirs from it
+switcher-size = 96    # the largest preview or icon in the Alt-Tab row
+```
 
 ## Localisation
 

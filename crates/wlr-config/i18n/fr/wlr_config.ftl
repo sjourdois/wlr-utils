@@ -8,6 +8,7 @@ config-invalid = { $file }, ligne { $line } : { $error }
 config-unknown-key = { $file } : clé inconnue `{ $key }`
 config-bad-value = { $file } : { $error }
 config-bad-colour = { $file } : `{ $key }` : "{ $value }" n'est pas une couleur (#rgb, #rrggbb ou #rrggbbaa)
+config-negative = { $file } : `{ $key }` attend un nombre, 0 ou plus
 config-bad-theme-name = { $file } : `theme.name` attend un nom de thème ou un chemin, entre guillemets
 config-theme-not-found = { $file } : aucun thème `{ $name }` dans { $dirs }
 config-not-a-section = { $file } : `{ $key }` est une section : écrivez [{ $key }] seul sur une ligne, puis ses clés

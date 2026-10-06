@@ -2122,7 +2122,7 @@ fn paint_selection(p: &egui::Painter, off: egui::Vec2, frame: &Frame) {
     let accent = frame.theme.accent;
     p.rect_stroke(
         r,
-        2.0,
+        frame.theme.radius(2.0),
         egui::Stroke::new(1.5, accent),
         egui::StrokeKind::Outside,
     );
@@ -2134,7 +2134,7 @@ fn paint_selection(p: &egui::Painter, off: egui::Vec2, frame: &Frame) {
     ] {
         p.rect_filled(
             egui::Rect::from_center_size(c, egui::vec2(5.0, 5.0)),
-            1.0,
+            frame.theme.radius(1.0),
             accent,
         );
     }
@@ -2230,19 +2230,20 @@ fn paint_hud(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
         screen.bottom() - box_size.y - 24.0,
     );
     let bg = egui::Rect::from_min_size(origin, box_size);
-    p.rect_filled(bg, 8.0, egui::Color32::from_black_alpha(190));
+    let radius = frame.theme.radius(8.0);
+    p.rect_filled(bg, radius, egui::Color32::from_black_alpha(190));
     // Attention pulse on draw-mode entry: a glowing accent halo + border that blinks a
     // few times, so the chip catches the eye on an otherwise empty screen.
     if frame.flash > 0.0 {
         let a = frame.theme.accent;
         let halo =
             egui::Color32::from_rgba_unmultiplied(a.r(), a.g(), a.b(), (frame.flash * 70.0) as u8);
-        p.rect_filled(bg.expand(6.0 * frame.flash), 12.0, halo);
+        p.rect_filled(bg.expand(6.0 * frame.flash), frame.theme.radius(12.0), halo);
         let border =
             egui::Color32::from_rgba_unmultiplied(a.r(), a.g(), a.b(), (frame.flash * 255.0) as u8);
         p.rect_stroke(
             bg,
-            8.0,
+            radius,
             egui::Stroke::new(2.5, border),
             egui::StrokeKind::Outside,
         );
@@ -2252,10 +2253,11 @@ fn paint_hud(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
     let mut x = origin.x + pad.x;
     // Colour swatch.
     let swatch = egui::Rect::from_min_size(egui::pos2(x, mid - SW * 0.5), egui::vec2(SW, SW));
-    p.rect_filled(swatch, 3.0, col(frame.color));
+    let swatch_radius = frame.theme.radius(3.0);
+    p.rect_filled(swatch, swatch_radius, col(frame.color));
     p.rect_stroke(
         swatch,
-        3.0,
+        swatch_radius,
         egui::Stroke::new(1.0, egui::Color32::from_white_alpha(120)),
         egui::StrokeKind::Inside,
     );
@@ -2317,7 +2319,11 @@ fn palette_cells(w: f32, h: f32) -> (egui::Rect, Vec<(egui::Rect, Color)>) {
 fn paint_palette(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
     let screen = ui.max_rect();
     let (panel, cells) = palette_cells(screen.width(), screen.height());
-    p.rect_filled(panel, 10.0, egui::Color32::from_black_alpha(225));
+    p.rect_filled(
+        panel,
+        frame.theme.radius(10.0),
+        egui::Color32::from_black_alpha(225),
+    );
     p.text(
         egui::pos2(panel.min.x + 12.0, panel.min.y + 8.0),
         egui::Align2::LEFT_TOP,
@@ -2326,11 +2332,11 @@ fn paint_palette(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
         frame.theme.text,
     );
     for (rect, c) in &cells {
-        p.rect_filled(*rect, 3.0, col(*c));
+        p.rect_filled(*rect, frame.theme.radius(3.0), col(*c));
         if *c == frame.color {
             p.rect_stroke(
                 rect.expand(1.5),
-                3.0,
+                frame.theme.radius(3.0),
                 egui::Stroke::new(2.5, egui::Color32::WHITE),
                 egui::StrokeKind::Outside,
             );
@@ -2511,7 +2517,7 @@ fn paint_help(p: &egui::Painter, _ui: &egui::Ui, frame: &Frame) {
         origin - egui::vec2(pad, pad),
         egui::vec2(content_w + 2.0 * pad, content_h + 40.0),
     );
-    p.rect_filled(panel, 10.0, egui::Color32::from_black_alpha(220));
+    p.rect_filled(panel, t.radius(10.0), egui::Color32::from_black_alpha(220));
     p.galley(origin, title, t.accent);
     let mut y = origin.y + 26.0;
     for line in lines {

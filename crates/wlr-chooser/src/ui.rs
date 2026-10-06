@@ -5,6 +5,7 @@
 //! first is fine.
 
 use crate::hints::{Hint, HintRow};
+use crate::layout::Layout;
 use crate::tr;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
@@ -53,8 +54,6 @@ impl Selection {
 
 const TILE_W: f32 = 300.0; // reference tile size (aspect ratio for the thumbnail)
 const TILE_H: f32 = 180.0;
-const MIN_TILE: f32 = 280.0; // tiles grow from here to fill the row width
-const GRID_GAP: f32 = 10.0; // gap between tiles
 /// The card header's height (tabs and filter field) with the default font: the guess a
 /// `--grid` card is first sized with, before the header is measured.
 const CARD_HEADER: f32 = 57.0;
@@ -1051,6 +1050,7 @@ pub struct App {
     closing: bool,
     out: Outcome,
     theme: Theme,
+    layout: Layout,
     /// Which physical row the tile hints come from, or `None` when they are off.
     hint_row: Option<HintRow>,
     /// The hints handed to the tiles, in tile order; empty until the host delivers a
@@ -1066,6 +1066,7 @@ impl App {
         opts: Options,
         focused: Option<wl::WindowIdentity>,
         theme: Theme,
+        layout: Layout,
         gpu_failed: Arc<AtomicBool>,
     ) -> Self {
         Self {
@@ -1099,6 +1100,7 @@ impl App {
             closing: false,
             out,
             theme,
+            layout,
             hint_row: opts.hints,
             hints: Vec::new(),
             namespace: opts.namespace,
@@ -1507,21 +1509,22 @@ impl App {
         // backdrop cancels, like rofi.
         let screen = ctx.content_rect();
         let forced_cols = self.grid.map(|(c, _)| c as usize);
+        let (tile_min, gap) = (self.layout.tile_width, self.layout.spacing);
         let (cw, ch) = match self.grid {
             Some((cols, rows)) => {
                 let (cols, rows) = (cols as f32, rows as f32);
                 let bar = 14.0; // scrollbar gutter
-                let tile_h = MIN_TILE * (TILE_H / TILE_W) + 26.0;
-                let inner_w = cols * MIN_TILE + (cols - 1.0) * GRID_GAP + bar;
-                let inner_h = self.card_header + rows * tile_h + (rows - 1.0) * GRID_GAP;
+                let tile_h = tile_min * (TILE_H / TILE_W) + 26.0;
+                let inner_w = cols * tile_min + (cols - 1.0) * gap + bar;
+                let inner_h = self.card_header + rows * tile_h + (rows - 1.0) * gap;
                 (inner_w + 24.0, inner_h + 24.0) // + card inner margin (12 each side)
             }
-            None => (1000.0, 760.0),
+            None => (self.layout.card_width, self.layout.card_height),
         };
         let w = cw.min(screen.width() - 24.0);
         let h = ch.min(screen.height() - 24.0);
         let card_rect = egui::Rect::from_center_size(screen.center(), egui::vec2(w, h));
-        let radius = 12.0;
+        let radius = self.theme.radius(12.0);
 
         egui::Window::new("wlr-chooser-card")
             .title_bar(false)
@@ -1580,13 +1583,12 @@ impl App {
                         // Grid: either a forced column count (--grid) or as many as
                         // fit. Tiles fill the row exactly; reserve the scrollbar gutter
                         // so the last column isn't hidden by it.
-                        let gap = GRID_GAP;
                         ui.spacing_mut().item_spacing = egui::vec2(gap, gap);
                         let bar =
                             ui.spacing().scroll.bar_width + ui.spacing().scroll.bar_inner_margin;
                         let avail = ui.available_width() - bar;
                         let cols = forced_cols
-                            .unwrap_or_else(|| ((avail + gap) / (MIN_TILE + gap)).floor() as usize)
+                            .unwrap_or_else(|| ((avail + gap) / (tile_min + gap)).floor() as usize)
                             .max(1);
                         let tile_w = (avail - gap * (cols as f32 - 1.0)) / cols as f32;
                         let visible = self.visible();
@@ -1636,7 +1638,8 @@ impl App {
         } else {
             t.tile
         };
-        p.rect_filled(rect, 8.0, bg);
+        let radius = t.radius(8.0);
+        p.rect_filled(rect, radius, bg);
 
         // Coloured outline distinguishing screens (screen_accent) from windows
         // (window_accent) at a glance.
@@ -1647,7 +1650,7 @@ impl App {
         };
         p.rect_stroke(
             rect,
-            8.0,
+            radius,
             egui::Stroke::new(if selected { 3.0 } else { 2.0 }, accent),
             egui::StrokeKind::Inside,
         );
@@ -1657,7 +1660,7 @@ impl App {
             rect.min + egui::vec2(pad, pad),
             egui::vec2(w - 2.0 * pad, thumb_h - 2.0 * pad),
         );
-        p.rect_filled(img_rect, 4.0, t.thumb);
+        p.rect_filled(img_rect, t.radius(4.0), t.thumb);
 
         if let Some((tex_id, ts)) = self.thumb_tex(&s.key) {
             // Contain (no crop): fit the texture inside img_rect, centred.
@@ -1726,7 +1729,7 @@ impl App {
     fn render_expose(&mut self, ui: &mut egui::Ui) -> Option<Selection> {
         let ctx = ui.ctx().clone();
         let area = ctx.content_rect().shrink(24.0);
-        let gap = 12.0;
+        let gap = self.layout.spacing * 1.2;
 
         // Intro animation clock: anchor t0 to the first exposé frame so startup
         // latency doesn't eat the animation. (Computed before borrowing sources.)
@@ -1804,7 +1807,7 @@ impl App {
         let selected = index == self.selected;
         let t = &self.theme;
         let p = ui.painter();
-        let radius = 8.0;
+        let radius = t.radius(8.0);
         let fade = |c: egui::Color32| c.gamma_multiply(a);
         let white = egui::Color32::WHITE.gamma_multiply(a);
         p.rect_filled(rect, radius, fade(t.thumb));
@@ -1837,9 +1840,12 @@ impl App {
         let strip_h = 24.0_f32.min(rect.height() * 0.3);
         let strip =
             egui::Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - strip_h), rect.max);
+        // Rounded like the tile's bottom corners, so it does not stick out of them.
+        let mut strip_corners = egui::CornerRadius::from(radius);
+        (strip_corners.nw, strip_corners.ne) = (0, 0);
         p.rect_filled(
             strip,
-            0.0,
+            strip_corners,
             egui::Color32::from_black_alpha(160).gamma_multiply(a),
         );
         let icon_sz = (strip_h - 8.0).max(10.0);
@@ -1906,18 +1912,18 @@ impl App {
         }
         let sel = self.selected.min(n - 1);
 
-        // Geometry: shrink the icon until the single row fits the screen width.
-        let gap = 14.0;
+        // Geometry: shrink the icon until the single row fits the screen width, but not
+        // below a size that still reads.
+        let gap = self.layout.spacing * 1.4;
         let pad = 12.0; // inside each cell, around the icon
         let margin = 22.0; // panel padding
         let label_h = 30.0;
         let max_panel_w = screen.width() * 0.92;
         let cell = |ic: f32| ic + 2.0 * pad;
-        let needed = |ic: f32| n as f32 * cell(ic) + (n as f32 - 1.0) * gap + 2.0 * margin;
-        let mut icon = 96.0_f32;
-        while icon > 44.0 && needed(icon) > max_panel_w {
-            icon -= 4.0;
-        }
+        let largest = self.layout.switcher_size;
+        let fits =
+            ((max_panel_w - 2.0 * margin - (n as f32 - 1.0) * gap) / n as f32 - 2.0 * pad).floor();
+        let icon = fits.min(largest).max(largest.min(44.0));
         let cw = cell(icon);
         let row_w = n as f32 * cw + (n as f32 - 1.0) * gap;
         let panel_w = (row_w + 2.0 * margin).min(max_panel_w);
@@ -1931,7 +1937,8 @@ impl App {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE)
             .show(ui, |ui| {
-                ui.painter().rect_filled(panel, 16.0, self.theme.card);
+                ui.painter()
+                    .rect_filled(panel, self.theme.radius(16.0), self.theme.card);
 
                 // Highlighted window's name, centred above the row.
                 let label = vis
@@ -1961,12 +1968,13 @@ impl App {
                     if resp.hovered() {
                         hovered = Some(i);
                     }
+                    let cell_radius = self.theme.radius(12.0);
                     if i == sel {
                         ui.painter()
-                            .rect_filled(cell_rect, 12.0, self.theme.tile_selected);
+                            .rect_filled(cell_rect, cell_radius, self.theme.tile_selected);
                     } else if resp.hovered() {
                         ui.painter()
-                            .rect_filled(cell_rect, 12.0, self.theme.tile_hover);
+                            .rect_filled(cell_rect, cell_radius, self.theme.tile_hover);
                     }
                     let inner =
                         egui::Rect::from_center_size(cell_rect.center(), egui::vec2(icon, icon));
@@ -2012,7 +2020,7 @@ impl App {
         }
         let full = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         let p = ui.painter();
-        p.rect_filled(rect, 6.0, self.theme.thumb); // backdrop for letterboxing
+        p.rect_filled(rect, self.theme.radius(6.0), self.theme.thumb); // backdrop for letterboxing
         if let Some((tex, ts)) = self.thumb_tex(&s.key) {
             let scale = (rect.width() / ts.x).min(rect.height() / ts.y);
             let d = egui::Rect::from_center_size(rect.center(), ts * scale);
@@ -2049,7 +2057,7 @@ impl App {
             egui::Rect::from_min_size(rect.min + egui::vec2(5.0, 5.0), egui::vec2(size, size));
         p.rect_filled(
             badge,
-            5.0,
+            self.theme.radius(5.0),
             egui::Color32::from_black_alpha(190).gamma_multiply(a),
         );
         p.text(
@@ -2383,7 +2391,15 @@ mod tests {
             let (tx, rx) = mpsc::channel();
             let out: Outcome = Arc::new(Mutex::new(None));
             let gpu_failed = Arc::new(AtomicBool::new(false));
-            let app = App::new(rx, out.clone(), opts, focused, Theme::default(), gpu_failed);
+            let app = App::new(
+                rx,
+                out.clone(),
+                opts,
+                focused,
+                Theme::default(),
+                Layout::default(),
+                gpu_failed,
+            );
             Self {
                 app,
                 tx,

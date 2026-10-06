@@ -27,6 +27,20 @@ impl ApplyTheme for Theme {
         v.hyperlink_color = self.accent;
         v.widgets.hovered.bg_fill = self.tile_hover;
         v.widgets.active.bg_fill = self.tile_selected;
+        // egui's own corners — tabs, the filter field, windows — keep their proportion
+        // to the theme's, as every corner the overlays draw does.
+        let rounding = self.radius(1.0);
+        v.window_corner_radius *= rounding;
+        v.menu_corner_radius *= rounding;
+        for w in [
+            &mut v.widgets.noninteractive,
+            &mut v.widgets.inactive,
+            &mut v.widgets.hovered,
+            &mut v.widgets.active,
+            &mut v.widgets.open,
+        ] {
+            w.corner_radius *= rounding;
+        }
         ctx.set_visuals(v);
 
         // The configured UI font first (if any), then egui's defaults, then a CJK

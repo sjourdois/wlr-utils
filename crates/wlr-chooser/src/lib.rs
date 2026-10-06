@@ -8,6 +8,7 @@ pub mod chooser_cli;
 pub mod daemon;
 pub mod hints;
 mod i18n;
+pub mod layout;
 pub mod overlayd;
 pub mod shell;
 pub mod switcher_cli;
@@ -16,7 +17,6 @@ pub mod ui;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Instant;
-use wlr_capture::theme;
 
 /// Window order (CLI mirror of [`ui::Order`]), shared by both front-ends.
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -247,8 +247,11 @@ fn build_overlay(mut opts: ui::Options, t0: Instant) -> (ui::App, ui::Outcome) {
     shell::tlog(t0, "capture-thread spawned");
 
     let out: ui::Outcome = Arc::new(Mutex::new(None));
-    let theme = theme::Theme::load();
-    let app = ui::App::new(rx, out.clone(), opts, focused, theme, gpu_failed);
+    let mut config = wlr_config::load();
+    let layout = layout::Layout::from_config(&mut config);
+    config.report();
+    let theme = config.theme().clone();
+    let app = ui::App::new(rx, out.clone(), opts, focused, theme, layout, gpu_failed);
     (app, out)
 }
 

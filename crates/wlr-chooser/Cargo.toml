@@ -55,6 +55,13 @@ xkbcommon.workspace = true
 # `--json`: one object per pick, escaped properly. Already in the tree via
 # wlr-capture's compositor IPC backends.
 serde_json.workspace = true
+# The `[chooser]` section of config.toml.
+serde.workspace = true
+
+[dev-dependencies]
+# The tests read the example configuration, and write whole ones in a temporary home.
+toml.workspace = true
+tempfile.workspace = true
 
 [features]
 default = ["gpu", "i18n"]

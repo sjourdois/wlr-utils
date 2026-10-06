@@ -310,6 +310,10 @@ impl Config {
                         value = value
                     )
                 }
+                Problem::Negative(key) => {
+                    let (file, key) = self.locate(&format!("theme.{key}"));
+                    tr!("config-negative", file = file.display(), key = key)
+                }
                 Problem::BadValue(error) => {
                     let (file, _) = self.locate("theme");
                     tr!("config-bad-value", file = file.display(), error = error)
@@ -357,6 +361,7 @@ fn describe(file: &Path, problem: Problem) -> String {
         Problem::BadColour { key, value } => {
             tr!("config-bad-colour", file = file, key = key, value = value)
         }
+        Problem::Negative(key) => tr!("config-negative", file = file, key = key),
         Problem::BadValue(error) => tr!("config-bad-value", file = file, error = error),
     }
 }

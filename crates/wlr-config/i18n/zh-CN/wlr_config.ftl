@@ -8,6 +8,7 @@ config-invalid = { $file }，第 { $line } 行：{ $error }
 config-unknown-key = { $file }：未知的键 `{ $key }`
 config-bad-value = { $file }：{ $error }
 config-bad-colour = { $file }：`{ $key }`："{ $value }" 不是颜色（#rgb、#rrggbb 或 #rrggbbaa）
+config-negative = { $file }：`{ $key }` 需要大于或等于 0 的数
 config-bad-theme-name = { $file }：`theme.name` 需要用引号括起的主题名或路径
 config-theme-not-found = { $file }：在 { $dirs } 中找不到主题 `{ $name }`
 config-not-a-section = { $file }：`{ $key }` 是一个节：请把 [{ $key }] 单独写一行，再在下面写它的键

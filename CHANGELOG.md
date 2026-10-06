@@ -16,6 +16,10 @@ All notable changes to this project are documented here. The format is based on
   theme in `[theme]`, by `name` and with any of its keys set over it, and `wlr-draw`'s
   settings in `[draw]` and `[draw.keys]`. `docs/config.toml` lists every setting at its
   default. A mistake is named, with its file and key, on stderr and by `doctor`.
+- **Square corners, and the overlays' sizes**
+  ([#23](https://github.com/sjourdois/wlr-utils/issues/23)) — `corner-radius` in
+  `[theme]` rounds every corner in proportion, `0` squaring them all. `[chooser]` sets
+  the card's size, the tiles' width, the spacing and the Alt-Tab row's size.
 - **`migrate-config`** — moves the old `theme.toml` and `keys.toml` into `config.toml`,
   comments included, then deletes them; `-` prints the new file instead.
 - **`wlr-draw reload`** — re-reads the configuration and keeps the drawing, however the

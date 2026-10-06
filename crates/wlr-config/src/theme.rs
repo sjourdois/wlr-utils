@@ -53,7 +53,13 @@ pub struct Theme {
     pub cjk_font: Option<String>,
     /// Base UI text size in points.
     pub font_size: Option<f32>,
+    /// How round the corners are, in logical pixels: the card's radius, every other
+    /// corner keeping its proportion to it. 0 squares them all.
+    pub corner_radius: f32,
 }
+
+/// The card's corner radius by default, which every other corner is drawn in proportion to.
+const DEFAULT_CORNER_RADIUS: f32 = 12.0;
 
 impl Default for Theme {
     fn default() -> Self {
@@ -75,6 +81,7 @@ impl Default for Theme {
             font_path: None,
             cjk_font: None,
             font_size: None,
+            corner_radius: DEFAULT_CORNER_RADIUS,
         }
     }
 }
@@ -86,6 +93,8 @@ pub(crate) enum Problem {
     Unknown(String),
     /// A colour key whose value is no colour.
     BadColour { key: String, value: String },
+    /// A size that is negative, or not a number.
+    Negative(String),
     /// The table does not have the theme's shape (a value of the wrong type).
     BadValue(String),
 }
@@ -110,6 +119,7 @@ struct Keys {
     font_path: Option<String>,
     cjk_font: Option<String>,
     font_size: Option<f32>,
+    corner_radius: Option<f32>,
 }
 
 impl Theme {
@@ -157,7 +167,20 @@ impl Theme {
         if keys.font_size.is_some() {
             self.font_size = keys.font_size;
         }
+        if let Some(radius) = keys.corner_radius {
+            if radius.is_finite() && radius >= 0.0 {
+                self.corner_radius = radius;
+            } else {
+                problems.push(Problem::Negative("corner-radius".into()));
+            }
+        }
         problems
+    }
+
+    /// The radius of a corner drawn `at_default` with the default rounding: every corner
+    /// keeps its proportion to the card's.
+    pub fn radius(&self, at_default: f32) -> f32 {
+        at_default * self.corner_radius / DEFAULT_CORNER_RADIUS
     }
 }
 
@@ -182,6 +205,7 @@ pub(crate) fn unset_keys(table: toml::Table) -> Vec<&'static str> {
         ("font-path", k.font_path.is_none()),
         ("cjk-font", k.cjk_font.is_none()),
         ("font-size", k.font_size.is_none()),
+        ("corner-radius", k.corner_radius.is_none()),
     ]
     .into_iter()
     .filter(|&(_, unset)| unset)
@@ -327,6 +351,21 @@ mod tests {
             matches!(problems[..], [Problem::BadValue(_)]),
             "{problems:?}"
         );
+    }
+
+    /// Every corner keeps its proportion to the card's radius, so 0 squares them all; a
+    /// whole number reads as well as a fraction, and a negative one is refused.
+    #[test]
+    fn the_corner_radius_scales_every_corner() {
+        let mut theme = Theme::default();
+        assert_eq!(theme.radius(8.0), 8.0);
+        assert!(theme.merge(table("corner-radius = 0")).is_empty());
+        assert_eq!(theme.radius(8.0), 0.0);
+        assert!(theme.merge(table("corner-radius = 18.0")).is_empty());
+        assert_eq!(theme.radius(8.0), 12.0);
+        let problems = theme.merge(table("corner-radius = -4"));
+        assert_eq!(problems, [Problem::Negative("corner-radius".into())]);
+        assert_eq!(theme.corner_radius, 18.0);
     }
 
     #[test]
