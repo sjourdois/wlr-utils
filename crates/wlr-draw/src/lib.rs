@@ -125,8 +125,33 @@ fn ctl_to_cmd(ctl: Ctl) -> anyhow::Result<Cmd> {
             parse_color(&value).ok_or_else(|| anyhow::anyhow!("unknown colour: {value}"))?,
         ),
         Ctl::Width { px } => Cmd::Width(px),
-        Ctl::Save { path } => Cmd::Save(path),
+        // The daemon writes the file from its own directory: a relative path has to
+        // mean the caller's.
+        Ctl::Save { path } => Cmd::Save(path.as_deref().map(absolute).transpose()?),
         // Not a daemon command — handled directly in `main` before we get here.
         Ctl::Doctor => unreachable!("Doctor is handled before ctl_to_cmd"),
     })
+}
+
+/// `path` resolved against this process's current directory.
+fn absolute(path: &str) -> anyhow::Result<String> {
+    std::path::absolute(path)?
+        .into_os_string()
+        .into_string()
+        .map_err(|p| anyhow::anyhow!("not a UTF-8 path: {}", p.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::absolute;
+
+    #[test]
+    fn a_relative_save_path_is_the_callers() {
+        let cwd = std::env::current_dir().unwrap();
+        assert_eq!(
+            absolute("shot.png").unwrap(),
+            cwd.join("shot.png").to_str().unwrap()
+        );
+        assert_eq!(absolute("/tmp/shot.png").unwrap(), "/tmp/shot.png");
+    }
 }
