@@ -153,7 +153,9 @@ wlr-peek watch -o DP-1 --on change      # fire when a screen changes
 
 ## Install
 
-Every tool in one go — the `wlr-utils` bundle:
+Every tool in one go — the `wlr-utils` bundle, which needs Rust 1.95 or newer and the
+development packages the [install guide](https://github.com/sjourdois/wlr-utils#from-source)
+lists:
 
 ```sh
 cargo install wlr-utils

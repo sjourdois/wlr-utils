@@ -85,6 +85,10 @@ Or build just these binaries from the [wlr-utils](../../README.md) workspace:
 cargo build --release -p wlr-chooser
 ```
 
+Building needs the Rust the [main README](../../README.md#from-source) names, and on
+Debian/Ubuntu `build-essential pkg-config libwayland-dev libxkbcommon-dev libgbm-dev`
+(Arch: `base-devel wayland libxkbcommon mesa`).
+
 The `gpu` feature (on by default) enables zero-copy dma-buf capture and needs `libgbm-dev`
 at build time (`libgbm` at runtime, from Mesa). `--no-default-features` builds a binary
 with no gbm dependency, English-only; `--no-gpu` (or `WLR_NO_GPU=1`) switches the same

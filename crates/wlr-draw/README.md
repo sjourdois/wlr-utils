@@ -307,6 +307,10 @@ The protocol is plain text, one command per connection on the socket
 > every tool (`wlr-chooser`, `wlr-switcher`, `wlr-overlayd`, `wlr-peek`, `wlr-shot`,
 > `wlr-draw`) in one go. The single-tool install below is the lighter, à-la-carte option.
 
+Building needs the Rust the [main README](../../README.md#from-source) names, and on
+Debian/Ubuntu `build-essential pkg-config libwayland-dev libxkbcommon-dev` (Arch:
+`base-devel wayland libxkbcommon`).
+
 ```sh
 cargo install wlr-draw
 ```

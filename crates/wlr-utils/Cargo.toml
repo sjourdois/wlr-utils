@@ -3,6 +3,7 @@ name = "wlr-utils"
 description = "The wlr-utils suite in one install: wlr-chooser, wlr-switcher, wlr-overlayd, wlr-peek, wlr-shot and wlr-draw (Wayland/wlroots screen tools)"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true

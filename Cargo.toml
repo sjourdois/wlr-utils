@@ -28,6 +28,8 @@ resolver = "3"
 [workspace.package]
 version = "1.10.0"
 edition = "2024"
+# The highest rust-version among the dependencies (egui); RELEASING says how to measure it.
+rust-version = "1.95"
 authors = ["Stéphane Jourdois <stephane@jourdois.fr>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/sjourdois/wlr-utils"

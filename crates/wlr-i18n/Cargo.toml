@@ -3,6 +3,7 @@ name = "wlr-i18n"
 description = "Shared i18n infrastructure for the wlr-utils tools: each tool crate owns its own Fluent catalog and loader; this crate provides the reusable plumbing."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true

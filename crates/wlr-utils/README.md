@@ -11,7 +11,9 @@ five screen tools for **wlroots and derivatives**, all sharing one capture engin
 cargo install wlr-utils
 ```
 
-This installs every binary at once:
+It needs Rust 1.95 or newer and the development packages the
+[main README](https://github.com/sjourdois/wlr-utils#from-source) lists. This installs
+every binary at once:
 
 | Binary | What it does |
 | --- | --- |

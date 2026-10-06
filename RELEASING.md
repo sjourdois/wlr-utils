@@ -69,15 +69,26 @@ grep 'for pkg in' .github/workflows/publish.yml   # every crate in the publish o
    version in `rust-toolchain.toml`. CI, the `.deb` builds and a local checkout all
    resolve to it, so a green local `clippy` means a green CI `clippy`; only the AUR
    package builds with Arch's own Rust.
-2. **Bump the version.** It lives in `[workspace.package]` **and** in each inter-crate
+2. **Upgrade the dependencies, then the minimum Rust.** `cargo upgrade --incompatible
+   --ignore-rust-version` (without the flag, cargo-edit holds back what needs a newer Rust
+   than ours), fix what breaks, then measure the highest `rust-version` the dependencies
+   declare:
+   ```sh
+   cargo metadata --format-version 1 | jq -r '[.packages[] | select(.source and .rust_version) | .rust_version] | max_by(split(".") | map(tonumber))'
+   ```
+   Set it as `rust-version` in `[workspace.package]`, and where the docs name it (the
+   README's build prerequisites, `docs/index.md`, the bundle's README), with whether
+   Debian's `trixie-backports` still has that Rust. Left
+   below the real floor, it makes `resolver = "3"` hold back later `cargo update`s.
+3. **Bump the version.** It lives in `[workspace.package]` **and** in each inter-crate
    dependency pin (the `version = "X.Y.Z"` next to `path = "../wlr-…"`). Every crate's
    own version inherits via `version.workspace = true`, but the tool crates pin the
    engine/i18n version explicitly, so those pins must move too. `cargo set-version X.Y.Z`
    (from `cargo-edit`) handles both; verify the pins and refresh `Cargo.lock`.
-3. **Update [`CHANGELOG.md`](CHANGELOG.md)** — a `## X.Y.Z — YYYY-MM-DD` section
+4. **Update [`CHANGELOG.md`](CHANGELOG.md)** — a `## X.Y.Z — YYYY-MM-DD` section
    (Added / Changed / Fixed), referencing the issues/PRs it closes. Commit
    (`chore(release): X.Y.Z`) as the last commit of the release PR.
-4. **Tag and push:**
+5. **Tag and push:**
    ```sh
    git tag vX.Y.Z
    git push --tags
@@ -101,7 +112,7 @@ grep 'for pkg in' .github/workflows/publish.yml   # every crate in the publish o
      it: `deb` and `aur` (source package) run it on what they built before shipping it,
      and `release-check`, also chained to `release`, runs it on the published
      cargo-dist archive.
-5. **Replay a failed tag workflow** without re-tagging: `deb`, `aur` and
+6. **Replay a failed tag workflow** without re-tagging: `deb`, `aur` and
    `release-check` take a `workflow_dispatch` with the tag as an input; `publish` takes
    one on the version currently in `Cargo.toml`.
 

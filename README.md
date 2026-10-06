@@ -143,6 +143,28 @@ curl --proto '=https' --tlsv1.2 -LsSf \
 
 ### From source
 
+First, **Rust 1.95 or newer** and the development packages. For the whole suite, the ones
+CI installs:
+
+```sh
+# Debian 13: its own cargo is too old, the backports' is recent enough
+sudo apt install -t trixie-backports cargo
+# Debian 14, sid: plain `sudo apt install cargo`
+sudo apt install build-essential pkg-config clang libwayland-dev libxkbcommon-dev \
+  libfontconfig-dev libgbm-dev libavcodec-dev libavformat-dev libavutil-dev \
+  libavfilter-dev libavdevice-dev libswscale-dev libswresample-dev libva-dev \
+  libpipewire-0.3-dev libtesseract-dev libleptonica-dev
+# Arch
+sudo pacman -S --needed base-devel cargo clang wayland libxkbcommon fontconfig mesa \
+  ffmpeg libva libpipewire tesseract leptonica
+```
+
+Ubuntu up to 26.04 ships an older Rust: take it from [rustup](https://rustup.rs), or
+install the [`.deb`](#debian--ubuntu) instead. Each tool's README says which of these
+packages it needs on its own.
+
+Then:
+
 ```sh
 cargo install wlr-utils          # the whole suite
 ```
@@ -165,22 +187,6 @@ AUR packages do:
 cargo build --release -p wlr-utils
 sudo sh packaging/install.sh
 ```
-
-Either route needs the development packages of the features you build; for the whole
-suite, the ones CI installs:
-
-```sh
-# Debian / Ubuntu
-sudo apt install clang libwayland-dev libxkbcommon-dev libfontconfig-dev libgbm-dev \
-  libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libavdevice-dev \
-  libswscale-dev libswresample-dev libva-dev libpipewire-0.3-dev \
-  libtesseract-dev libleptonica-dev
-# Arch
-sudo pacman -S --needed cargo clang wayland libxkbcommon fontconfig mesa ffmpeg libva \
-  libpipewire tesseract leptonica
-```
-
-Each tool's README says which of these its features pull in.
 
 ### Uninstall
 

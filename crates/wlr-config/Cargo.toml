@@ -3,6 +3,7 @@ name = "wlr-config"
 description = "The configuration of the wlr-utils tools: one config.toml, its themes, and the migration from the old files."
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
