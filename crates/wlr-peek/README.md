@@ -51,7 +51,7 @@ Captures a source and runs it through Tesseract, printing the recognised text.
 ```console
 $ wlr-peek ocr                    # select a region interactively (default)
 $ wlr-peek ocr -g "100,200 640x480"
-$ wlr-peek ocr --active-window     # OCR the focused window (needs compositor IPC)
+$ wlr-peek ocr --active-window     # OCR the area the focused window covers (compositor IPC)
 $ wlr-peek ocr --app-id firefox    # OCR a window by app id — even occluded
 $ wlr-peek ocr -l fra+eng -c       # French+English, copy to the clipboard
 ```
@@ -61,9 +61,10 @@ mirror `wlr-shot`: `-g "X,Y WxH"`, `-o NAME`, `-w ID`, `--app-id`/`--title`,
 `-a/--active-window`, `--current-output`. `-w`, `--app-id`/`--title` capture the
 **window itself**, so they read a window that is occluded or on another workspace —
 unlike `-a`, which captures the screen area the focused window occupies.
-`-l/--lang` picks the Tesseract language(s) (default `eng`; the matching
-`tesseract-ocr-<lang>` data pack must be installed). `-c` copies the text instead, like
-`color --clipboard`; `--clipboard-foreground` keeps that server in the foreground.
+`-l/--lang` picks the Tesseract language(s) (default `eng`; the matching data pack must
+be installed: `tesseract-ocr-<lang>` on Debian and Ubuntu, `tesseract-data-<lang>` on
+Arch, and the suite's `.deb` recommends the English one). `-c` copies the text instead,
+like `color --clipboard`; `--clipboard-foreground` keeps that server in the foreground.
 
 OCR is behind the `ocr` Cargo feature (**on by default**); it links system
 `libtesseract`/`libleptonica`. Build without it for a binary with no native OCR
@@ -98,6 +99,9 @@ $ wlr-peek mirror --current-output # the focused output
 $ wlr-peek mirror -a               # the active window's area (needs focus info)
 $ wlr-peek mirror -g "100,200 640x480" --zoom 4   # a fixed region, magnified
 ```
+
+Picking a window, with no source or `--pick-window`, runs `wlr-chooser`: it must be on
+`PATH`, which a `cargo install wlr-peek` on its own does not provide.
 
 It mirrors a window (`ID` or `-w ID`, `--app-id`/`--title`, or `--pick-window`), or a region/output as a live loupe (`-s`, `-g "X,Y WxH"`,
 `-o NAME`, `--current-output`, and `-a`, the area the focused window covers), magnified

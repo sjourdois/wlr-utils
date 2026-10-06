@@ -9,15 +9,15 @@ loading = …
 preview-unavailable = Vorschau nicht verfügbar
 show-system = Systemfenster
 error = wlr-chooser: { $error }
-capture-no-window = Dieser Compositor kann keine einzelnen Fenster aufnehmen. Fensteraufnahme benötigt ext-image-copy-capture-v1 mit der Foreign-Toplevel-Quelle (wlroots >= 0.20 / Sway >= 1.12). Führe `wlr-peek doctor` aus, um zu sehen, was dein Compositor unterstützt.
-focus-unsupported = Dieser Compositor kann das gewählte Fenster nicht fokussieren. Das Fokussieren eines Fensters benötigt wlr-foreign-toplevel-management-v1 oder cosmic-toplevel-management-v1 unter COSMIC. Führe `wlr-peek doctor` aus, um zu sehen, was dein Compositor unterstützt.
+capture-no-window = Dieser Compositor kann keine einzelnen Fenster aufnehmen. Fensteraufnahme benötigt ext-image-copy-capture-v1 mit der Foreign-Toplevel-Quelle (wlroots >= 0.20 / Sway >= 1.12). Führe `{ $doctor }` aus, um zu sehen, was dein Compositor unterstützt.
+focus-unsupported = Dieser Compositor kann das gewählte Fenster nicht fokussieren. Das Fokussieren eines Fensters benötigt wlr-foreign-toplevel-management-v1 oder cosmic-toplevel-management-v1 unter COSMIC. Führe `{ $doctor }` aus, um zu sehen, was dein Compositor unterstützt.
 mru-unmatched = Der Fokusverlauf dieses Compositors benennt keines der aufgeführten Fenster; --window-order mru fällt auf die Sortierung nach Namen zurück.
 filter-no-match = Kein offenes Fenster entspricht { $filter }. Nichts anzuzeigen.
-pid-unsupported = Dieser Compositor nennt den Prozess hinter einem Fenster nicht, daher kann --pid nicht angewendet werden. Dafür wird die IPC von sway, Hyprland oder niri benötigt. Führe `wlr-peek doctor` aus, um zu sehen, ob ein Fokus-Backend erkannt wurde.
-scratchpad-unsupported = Dieser Compositor hat keinen Scratchpad, zwischen dessen Fenstern gewechselt werden könnte, daher kann --scratchpad nicht angewendet werden. Dafür wird die IPC von sway benötigt ($SWAYSOCK). Führe `wlr-peek doctor` aus, um zu sehen, ob ein Fokus-Backend erkannt wurde.
+pid-unsupported = Dieser Compositor nennt den Prozess hinter einem Fenster nicht, daher kann --pid nicht angewendet werden. Dafür wird die IPC von sway, Hyprland oder niri benötigt. Führe `{ $doctor }` aus, um zu sehen, ob ein Fokus-Backend erkannt wurde.
+scratchpad-unsupported = Dieser Compositor hat keinen Scratchpad, zwischen dessen Fenstern gewechselt werden könnte, daher kann --scratchpad nicht angewendet werden. Dafür wird die IPC von sway benötigt ($SWAYSOCK). Führe `{ $doctor }` aus, um zu sehen, ob ein Fokus-Backend erkannt wurde.
 scratchpad-empty = Der Scratchpad enthält kein Fenster. Nichts anzuzeigen.
 scratchpad-not-put-aside = Der Compositor hat das fokussierte Fenster nicht in den Scratchpad zurückgelegt.
-move-unsupported = Das gewählte Fenster wurde an seinem Platz fokussiert: Dieser Compositor kann nicht angewiesen werden, es auf den aktuellen Arbeitsbereich zu verschieben. --move benötigt sway, Hyprland oder cosmic-comp. Führe `wlr-peek doctor` aus, um zu sehen, ob ein Fokus-Backend erkannt wurde.
+move-unsupported = Das gewählte Fenster wurde an seinem Platz fokussiert: Dieser Compositor kann nicht angewiesen werden, es auf den aktuellen Arbeitsbereich zu verschieben. --move benötigt sway, Hyprland oder cosmic-comp. Führe `{ $doctor }` aus, um zu sehen, ob ein Fokus-Backend erkannt wurde.
 move-failed = Das gewählte Fenster wurde an seinem Platz fokussiert: Der Compositor hat es nicht auf den aktuellen Arbeitsbereich verschoben.
 hints-need-keyboard = --hints benötigt eine Darstellung ohne Filterfeld: Verwenden Sie --layout strip oder --layout grid.
 grid-needs-card = --grid bemisst die Karte und benötigt daher --layout card (die Voreinstellung). Exposé und Leiste ordnen sich selbst an.

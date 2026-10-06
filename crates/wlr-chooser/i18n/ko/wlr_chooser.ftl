@@ -9,15 +9,15 @@ loading = …
 preview-unavailable = 미리 보기를 사용할 수 없음
 show-system = 시스템 창
 error = wlr-chooser: { $error }
-capture-no-window = 이 컴포지터는 개별 창을 캡처할 수 없습니다. 창 캡처에는 ext-image-copy-capture-v1과 foreign-toplevel 소스(wlroots >= 0.20 / Sway >= 1.12)가 필요합니다. `wlr-peek doctor`를 실행하여 컴포지터가 지원하는 기능을 확인하세요.
-focus-unsupported = 이 컴포지터는 선택한 창에 포커스를 줄 수 없습니다. 창 포커스에는 wlr-foreign-toplevel-management-v1이, COSMIC에서는 cosmic-toplevel-management-v1이 필요합니다. `wlr-peek doctor`를 실행하여 컴포지터가 지원하는 기능을 확인하세요.
+capture-no-window = 이 컴포지터는 개별 창을 캡처할 수 없습니다. 창 캡처에는 ext-image-copy-capture-v1과 foreign-toplevel 소스(wlroots >= 0.20 / Sway >= 1.12)가 필요합니다. `{ $doctor }`를 실행하여 컴포지터가 지원하는 기능을 확인하세요.
+focus-unsupported = 이 컴포지터는 선택한 창에 포커스를 줄 수 없습니다. 창 포커스에는 wlr-foreign-toplevel-management-v1이, COSMIC에서는 cosmic-toplevel-management-v1이 필요합니다. `{ $doctor }`를 실행하여 컴포지터가 지원하는 기능을 확인하세요.
 mru-unmatched = 이 컴포지터의 포커스 기록이 나열된 어떤 창과도 일치하지 않으므로 --window-order mru는 이름순 정렬로 대체됩니다.
 filter-no-match = { $filter }와(과) 일치하는 열린 창이 없습니다. 표시할 것이 없습니다.
-pid-unsupported = 이 컴포지터는 창이 속한 프로세스를 알려주지 않으므로 --pid를 적용할 수 없습니다. sway, Hyprland 또는 niri의 IPC가 필요합니다. `wlr-peek doctor`를 실행하여 포커스 백엔드가 감지되었는지 확인하세요.
-scratchpad-unsupported = 이 컴포지터에는 전환할 scratchpad가 없으므로 --scratchpad를 적용할 수 없습니다. sway의 IPC($SWAYSOCK)가 필요합니다. `wlr-peek doctor`를 실행하여 포커스 백엔드가 감지되었는지 확인하세요.
+pid-unsupported = 이 컴포지터는 창이 속한 프로세스를 알려주지 않으므로 --pid를 적용할 수 없습니다. sway, Hyprland 또는 niri의 IPC가 필요합니다. `{ $doctor }`를 실행하여 포커스 백엔드가 감지되었는지 확인하세요.
+scratchpad-unsupported = 이 컴포지터에는 전환할 scratchpad가 없으므로 --scratchpad를 적용할 수 없습니다. sway의 IPC($SWAYSOCK)가 필요합니다. `{ $doctor }`를 실행하여 포커스 백엔드가 감지되었는지 확인하세요.
 scratchpad-empty = scratchpad에 창이 없습니다. 표시할 것이 없습니다.
 scratchpad-not-put-aside = 컴포지터가 포커스된 창을 scratchpad로 되돌리지 않았습니다.
-move-unsupported = 선택한 창은 원래 위치에서 포커스되었습니다. 이 컴포지터에는 창을 현재 작업 공간으로 옮기도록 요청할 수 없습니다. --move에는 sway, Hyprland 또는 cosmic-comp가 필요합니다. `wlr-peek doctor`를 실행하여 포커스 백엔드가 감지되었는지 확인하세요.
+move-unsupported = 선택한 창은 원래 위치에서 포커스되었습니다. 이 컴포지터에는 창을 현재 작업 공간으로 옮기도록 요청할 수 없습니다. --move에는 sway, Hyprland 또는 cosmic-comp가 필요합니다. `{ $doctor }`를 실행하여 포커스 백엔드가 감지되었는지 확인하세요.
 move-failed = 선택한 창은 원래 위치에서 포커스되었습니다. 컴포지터가 창을 현재 작업 공간으로 옮기지 않았습니다.
 hints-need-keyboard = --hints는 필터 입력란이 없는 레이아웃이 필요합니다. --layout strip 또는 --layout grid를 사용하세요.
 grid-needs-card = --grid는 카드 크기를 정하므로 --layout card(기본값)가 필요합니다. 엑스포제와 스트립은 스스로 배치됩니다.

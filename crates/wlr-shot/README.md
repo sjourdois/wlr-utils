@@ -54,7 +54,8 @@ Source (pick one; defaults to the sole output):
   each other. If more than one window matches, the command fails and lists the
   candidates rather than picking one arbitrarily — narrow it down, or use the
   `-w ID` it prints.
-- `--pick-window` — launch `wlr-chooser` to choose the window interactively.
+- `--pick-window` — launch `wlr-chooser` to choose the window interactively; it must be
+  on `PATH`, which a `cargo install wlr-shot` on its own does not provide.
 - `-a, --active-window` — the screen area the focused window covers (a region, not the
   window itself).
 - `--current-output` — the focused output.

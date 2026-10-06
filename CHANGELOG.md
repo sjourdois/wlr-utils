@@ -52,6 +52,12 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **`wlr-peek ocr` says what to install** — a missing language names its package, and
+  the `.deb` now recommends the English data, without which OCR could not start.
+- **A missing `wlr-chooser` is named** — `wlr-peek mirror` and `--pick-window` exited
+  without a word, or with "launching wlr-chooser", when it was not installed.
+- **The hints point at the right `doctor`** — `wlr-chooser` and `wlr-switcher` sent you
+  to `wlr-peek doctor`, which an install of `wlr-chooser` alone does not have.
 - **`wlr-switcher` opens past the current window in every layout** — outside
   hold-to-switch (`--layout grid` or `card`, `--no-hold`), it opened on the window you
   were on.

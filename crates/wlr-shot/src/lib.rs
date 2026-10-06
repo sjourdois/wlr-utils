@@ -92,7 +92,7 @@ struct ShotArgs {
     /// Capture the whole layout: every output combined into one image.
     #[arg(long, group = "source")]
     all: bool,
-    /// Capture the active (focused) window — needs compositor focus info.
+    /// Capture the screen area the focused window covers — needs compositor focus info.
     #[arg(short = 'a', long, group = "source")]
     active_window: bool,
     /// Capture the focused output — needs compositor focus info.
@@ -317,10 +317,13 @@ fn pick_window() -> Result<String> {
         Some(p) => std::process::Command::new(p),
         None => std::process::Command::new("wlr-chooser"),
     };
-    let out = cmd
-        .arg("--windows")
-        .output()
-        .context("launching wlr-chooser")?;
+    let out = match cmd.arg("--windows").output() {
+        Ok(out) => out,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            anyhow::bail!(crate::tr!("chooser-missing"))
+        }
+        Err(e) => return Err(anyhow::Error::new(e).context("launching wlr-chooser")),
+    };
     String::from_utf8_lossy(&out.stdout)
         .lines()
         .find_map(|l| l.strip_prefix("Window: "))

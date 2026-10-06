@@ -70,6 +70,8 @@ section = "utils"
 priority = "optional"
 license-file = ["../../LICENSE-MIT", "0"]
 depends = "$auto, libegl1, libfontconfig1"
+# libtesseract does not pull any language data; without it, `wlr-peek ocr` cannot start.
+recommends = "tesseract-ocr-eng"
 conflicts = "wlr-chooser, wlr-shot, wlr-peek, wlr-draw, wlr-pip"
 replaces = "wlr-chooser, wlr-shot, wlr-peek, wlr-draw, wlr-pip"
 extended-description = """\
@@ -102,4 +104,4 @@ The wlr-utils suite in one package: wlr-chooser (screen-share picker), wlr-switc
 wlr-shot (screenshots) and wlr-draw (on-screen annotation overlay) — native screen tools \
 for wlroots compositors, sharing one capture engine. This is a screenshots-only build: \
 `wlr-shot record` is omitted because this distribution's FFmpeg/PipeWire are too old to \
-build the encoder. For recording, install with `cargo install wlr-utils` or the tarball."""
+build the encoder."""

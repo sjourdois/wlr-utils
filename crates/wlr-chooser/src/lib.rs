@@ -144,11 +144,12 @@ impl From<FilterArgs> for ui::WindowFilters {
 pub(crate) fn require_window_pids(
     filters: &mut ui::WindowFilters,
     toplevels: &[wlr_capture::wl::Toplevel],
+    doctor: &str,
 ) -> Result<(), String> {
     if filters.refresh_pids(toplevels) {
         return Ok(());
     }
-    Err(crate::tr!("pid-unsupported"))
+    Err(crate::tr!("pid-unsupported", doctor = doctor))
 }
 
 /// Say so and exit when the window filter matches none of the open windows. The caller

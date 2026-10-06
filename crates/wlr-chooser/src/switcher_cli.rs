@@ -20,6 +20,9 @@ use std::time::Instant;
 use wlr_capture::keys::{KeyPress, UnknownKey};
 use wlr_capture::{CaptureError, focus, wl};
 
+/// What a message sends the user to, to see what the compositor supports.
+const DOCTOR: &str = "wlr-switcher --doctor";
+
 /// Which tiles show a live preview (CLI mirror of [`Live`]).
 #[derive(Clone, Copy, ValueEnum)]
 enum LiveArg {
@@ -355,7 +358,7 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, Str
         // A failed move still focuses the window, and says so afterwards.
         let moved = if cli.move_window {
             match focus::detect() {
-                None => Err(tr!("move-unsupported")),
+                None => Err(tr!("move-unsupported", doctor = DOCTOR)),
                 Some(backend) => backend
                     .move_to_current_workspace(&sel.identifier)
                     .ok_or_else(|| tr!("move-failed")),
@@ -371,7 +374,9 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, Str
                 // setup, not a bug in this run: say what is missing, like the pre-flight
                 // does for window capture, rather than dumping a protocol name.
                 match err {
-                    CaptureError::ActivationUnsupported => tr!("focus-unsupported"),
+                    CaptureError::ActivationUnsupported => {
+                        tr!("focus-unsupported", doctor = DOCTOR)
+                    }
                     _ => tr!("error", error = format!("{err:#}")),
                 }
             })
@@ -384,10 +389,10 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, Str
 /// Do what `--scratchpad` asks that has to happen before the overlay, and say whether
 /// that was the whole run.
 fn scratchpad_settled(mode: ScratchpadArg, opts: &mut Options) -> Result<bool, String> {
-    let backend = focus::detect().ok_or_else(|| tr!("scratchpad-unsupported"))?;
+    let backend = focus::detect().ok_or_else(|| tr!("scratchpad-unsupported", doctor = DOCTOR))?;
     let aside = backend
         .scratchpad()
-        .ok_or_else(|| tr!("scratchpad-unsupported"))?;
+        .ok_or_else(|| tr!("scratchpad-unsupported", doctor = DOCTOR))?;
     let out_on_loan = backend
         .focus_order()
         .and_then(|o| o.focused)
@@ -426,11 +431,13 @@ fn scratchpad_settled(mode: ScratchpadArg, opts: &mut Options) -> Result<bool, S
 /// of showing an empty dimmed overlay (issue #1).
 fn preflight(opts: &mut Options) -> Result<(), String> {
     match wl::Client::connect() {
-        Ok(client) if !client.can_capture_windows() => Err(tr!("capture-no-window")),
+        Ok(client) if !client.can_capture_windows() => {
+            Err(tr!("capture-no-window", doctor = DOCTOR))
+        }
         Ok(client) => {
             // A --pid filter has to be settled here too: it rests on a compositor IPC,
             // and a filter that cannot be applied must not be applied silently.
-            crate::require_window_pids(&mut opts.window_filters, client.toplevels())?;
+            crate::require_window_pids(&mut opts.window_filters, client.toplevels(), DOCTOR)?;
             // Same reasoning for a filter that names no open window: the switcher shows
             // windows and nothing else, so it would come up empty.
             crate::reject_empty_window_filter(client.toplevels(), &opts.window_filters)

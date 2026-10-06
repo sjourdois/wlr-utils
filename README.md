@@ -105,7 +105,7 @@ sid and 26.04 builds are experimental, and a release may lack them):
 | Ubuntu 24.04 (noble) / 26.04 | `…_amd64.noble.deb` / `…_amd64.ubuntu2604.deb` |
 
 ```sh
-sudo apt install ./wlr-utils_*_amd64.trixie.deb   # apt pulls the dependencies in
+sudo apt install ./wlr-utils_*_amd64.trixie.deb   # apt pulls the dependencies in, OCR data included
 ```
 
 Ubuntu 22.04's PipeWire / FFmpeg are too old to build the recorder, so that `.deb` omits

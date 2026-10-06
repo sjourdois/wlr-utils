@@ -9,15 +9,15 @@ loading = …
 preview-unavailable = Voorbeeld niet beschikbaar
 show-system = Systeemvensters
 error = wlr-chooser: { $error }
-capture-no-window = Deze compositor kan geen losse vensters vastleggen. Venstervastlegging vereist ext-image-copy-capture-v1 met de foreign-toplevel-bron (wlroots >= 0.20 / Sway >= 1.12). Voer `wlr-peek doctor` uit om te zien wat je compositor ondersteunt.
-focus-unsupported = Deze compositor kan het gekozen venster niet focussen. Een venster focussen vereist wlr-foreign-toplevel-management-v1, of cosmic-toplevel-management-v1 op COSMIC. Voer `wlr-peek doctor` uit om te zien wat je compositor ondersteunt.
+capture-no-window = Deze compositor kan geen losse vensters vastleggen. Venstervastlegging vereist ext-image-copy-capture-v1 met de foreign-toplevel-bron (wlroots >= 0.20 / Sway >= 1.12). Voer `{ $doctor }` uit om te zien wat je compositor ondersteunt.
+focus-unsupported = Deze compositor kan het gekozen venster niet focussen. Een venster focussen vereist wlr-foreign-toplevel-management-v1, of cosmic-toplevel-management-v1 op COSMIC. Voer `{ $doctor }` uit om te zien wat je compositor ondersteunt.
 mru-unmatched = De focusgeschiedenis van deze compositor benoemt geen van de getoonde vensters; --window-order mru valt terug op sorteren op naam.
 filter-no-match = Geen enkel geopend venster komt overeen met { $filter }. Niets te tonen.
-pid-unsupported = Deze compositor meldt niet welk proces bij een venster hoort, dus --pid kan niet worden toegepast. Daarvoor is de IPC van sway, Hyprland of niri nodig. Voer `wlr-peek doctor` uit om te zien of er een focus-backend is gevonden.
-scratchpad-unsupported = Deze compositor heeft geen scratchpad om tussen de vensters van te wisselen, dus --scratchpad kan niet worden toegepast. Daarvoor is de IPC van sway nodig ($SWAYSOCK). Voer `wlr-peek doctor` uit om te zien of er een focus-backend is gevonden.
+pid-unsupported = Deze compositor meldt niet welk proces bij een venster hoort, dus --pid kan niet worden toegepast. Daarvoor is de IPC van sway, Hyprland of niri nodig. Voer `{ $doctor }` uit om te zien of er een focus-backend is gevonden.
+scratchpad-unsupported = Deze compositor heeft geen scratchpad om tussen de vensters van te wisselen, dus --scratchpad kan niet worden toegepast. Daarvoor is de IPC van sway nodig ($SWAYSOCK). Voer `{ $doctor }` uit om te zien of er een focus-backend is gevonden.
 scratchpad-empty = Het scratchpad bevat geen enkel venster. Niets te tonen.
 scratchpad-not-put-aside = De compositor heeft het gefocuste venster niet teruggezet in het scratchpad.
-move-unsupported = Het gekozen venster is gefocust waar het staat: deze compositor kan niet worden gevraagd het naar de huidige werkruimte te verplaatsen. --move vereist sway, Hyprland of cosmic-comp. Voer `wlr-peek doctor` uit om te zien of er een focus-backend is gevonden.
+move-unsupported = Het gekozen venster is gefocust waar het staat: deze compositor kan niet worden gevraagd het naar de huidige werkruimte te verplaatsen. --move vereist sway, Hyprland of cosmic-comp. Voer `{ $doctor }` uit om te zien of er een focus-backend is gevonden.
 move-failed = Het gekozen venster is gefocust waar het staat: de compositor heeft het niet naar de huidige werkruimte verplaatst.
 hints-need-keyboard = --hints vereist een weergave zonder filterveld: gebruik --layout strip of --layout grid.
 grid-needs-card = --grid bepaalt de grootte van de kaart en vereist dus --layout card (de standaard). De exposé en de strip delen zichzelf in.

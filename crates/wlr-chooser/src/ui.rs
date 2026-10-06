@@ -726,7 +726,10 @@ pub fn bench_capture(secs: u64, mut filters: WindowFilters) {
 
     let _ = client.refresh();
     if !filters.refresh_pids(client.toplevels()) {
-        eprintln!("{}", tr!("pid-unsupported"));
+        eprintln!(
+            "{}",
+            tr!("pid-unsupported", doctor = "wlr-chooser --doctor")
+        );
         return;
     }
     let admitted = |c: &wl::Client, f: &WindowFilters| -> Vec<wl::Toplevel> {

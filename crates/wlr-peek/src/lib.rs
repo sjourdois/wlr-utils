@@ -336,9 +336,9 @@ fn mirror(args: MirrorArgs) -> Result<()> {
         None => {
             match capture::WindowFilter::from_flags(args.app_id.as_deref(), args.title.as_deref()) {
                 Some(filter) => resolve_window_id(filter)?,
-                None => match pick_via_chooser() {
+                None => match pick_via_chooser()? {
                     Some(id) => id,
-                    None => std::process::exit(1), // cancelled or chooser unavailable
+                    None => std::process::exit(1), // cancelled
                 },
             }
         }
@@ -561,7 +561,7 @@ fn region_source(
 
 /// Launch `wlr-chooser --windows` to pick a window; parse its `Window: <id>` stdout
 /// contract. Prefers a `wlr-chooser` next to our own binary, else one on `PATH`.
-fn pick_via_chooser() -> Option<String> {
+fn pick_via_chooser() -> Result<Option<String>> {
     let sibling = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|d| d.join("wlr-chooser")))
@@ -570,14 +570,20 @@ fn pick_via_chooser() -> Option<String> {
         Some(p) => std::process::Command::new(p),
         None => std::process::Command::new("wlr-chooser"),
     };
-    let out = cmd.arg("--windows").output().ok()?;
+    let out = match cmd.arg("--windows").output() {
+        Ok(out) => out,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            anyhow::bail!(crate::tr!("chooser-missing"))
+        }
+        Err(e) => return Err(anyhow::Error::new(e).context("launching wlr-chooser")),
+    };
     if !out.status.success() {
-        return None;
+        return Ok(None);
     }
-    String::from_utf8_lossy(&out.stdout)
+    Ok(String::from_utf8_lossy(&out.stdout)
         .lines()
         .find_map(|l| l.strip_prefix("Window: ").map(|id| id.trim().to_string()))
-        .filter(|id| !id.is_empty())
+        .filter(|id| !id.is_empty()))
 }
 
 /// Acquire the single-instance advisory lock for this window's mirror; the held file
@@ -671,7 +677,7 @@ struct OcrArgs {
     /// its own or together with `--app-id`.
     #[arg(long, value_name = "TEXT", conflicts_with = "source")]
     title: Option<String>,
-    /// OCR the active (focused) window — needs compositor focus info.
+    /// OCR the screen area the focused window covers — needs compositor focus info.
     #[arg(short = 'a', long, group = "source")]
     active_window: bool,
     /// OCR the focused output — needs compositor focus info.
@@ -774,8 +780,9 @@ fn ocr_engine(img: &wl::CapturedImage, lang: &str) -> Result<leptess::LepTess> {
         .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
         .context("encoding image for OCR")?;
 
+    // libtesseract has already said on stderr which file it could not open.
     let mut lt = leptess::LepTess::new(None, lang)
-        .map_err(|e| anyhow::anyhow!("Tesseract init (language '{lang}'): {e:?}"))?;
+        .map_err(|_| anyhow::anyhow!(crate::tr!("ocr-no-language", lang = lang)))?;
     lt.set_image_from_mem(&png)
         .map_err(|e| anyhow::anyhow!("loading image into Tesseract: {e:?}"))?;
     // Screen captures carry no DPI metadata; set one (after the image) so Tesseract
@@ -804,7 +811,7 @@ struct GrepArgs {
     /// Search this whole named output (e.g. `DP-4`).
     #[arg(short = 'o', long, value_name = "NAME", group = "source")]
     output: Option<String>,
-    /// Search the active (focused) window — needs compositor focus info.
+    /// Search the screen area the focused window covers — needs compositor focus info.
     #[arg(short = 'a', long, group = "source")]
     active_window: bool,
     /// Search the focused output — needs compositor focus info.
@@ -1233,7 +1240,7 @@ mod watch_impl {
             ))
         } else if args.pick_window {
             Ok(Target::Window(
-                pick_via_chooser().context("no window picked")?,
+                pick_via_chooser()?.context("no window picked")?,
             ))
         } else {
             let name = if args.current_output {

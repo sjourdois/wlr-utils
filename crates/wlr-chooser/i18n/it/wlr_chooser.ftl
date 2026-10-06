@@ -9,15 +9,15 @@ loading = …
 preview-unavailable = Anteprima non disponibile
 show-system = Finestre di sistema
 error = wlr-chooser: { $error }
-capture-no-window = Questo compositor non può catturare singole finestre. La cattura delle finestre richiede ext-image-copy-capture-v1 con la sorgente foreign-toplevel (wlroots >= 0.20 / Sway >= 1.12). Esegui `wlr-peek doctor` per vedere cosa supporta il tuo compositor.
-focus-unsupported = Questo compositor non può dare il focus alla finestra scelta. Dare il focus a una finestra richiede wlr-foreign-toplevel-management-v1, o cosmic-toplevel-management-v1 su COSMIC. Esegui `wlr-peek doctor` per vedere cosa supporta il tuo compositor.
+capture-no-window = Questo compositor non può catturare singole finestre. La cattura delle finestre richiede ext-image-copy-capture-v1 con la sorgente foreign-toplevel (wlroots >= 0.20 / Sway >= 1.12). Esegui `{ $doctor }` per vedere cosa supporta il tuo compositor.
+focus-unsupported = Questo compositor non può dare il focus alla finestra scelta. Dare il focus a una finestra richiede wlr-foreign-toplevel-management-v1, o cosmic-toplevel-management-v1 su COSMIC. Esegui `{ $doctor }` per vedere cosa supporta il tuo compositor.
 mru-unmatched = La cronologia del focus di questo compositor non nomina nessuna delle finestre elencate, quindi --window-order mru ripiega sull'ordinamento per nome.
 filter-no-match = Nessuna finestra aperta corrisponde a { $filter }. Niente da mostrare.
-pid-unsupported = Questo compositor non indica il processo a cui appartiene una finestra, quindi --pid non può essere applicato. Richiede l’IPC di sway, Hyprland o niri. Esegui `wlr-peek doctor` per vedere se è stato rilevato un backend di focus.
-scratchpad-unsupported = Questo compositor non ha uno scratchpad tra le cui finestre passare, quindi --scratchpad non può essere applicato. Richiede l’IPC di sway ($SWAYSOCK). Esegui `wlr-peek doctor` per vedere se è stato rilevato un backend di focus.
+pid-unsupported = Questo compositor non indica il processo a cui appartiene una finestra, quindi --pid non può essere applicato. Richiede l’IPC di sway, Hyprland o niri. Esegui `{ $doctor }` per vedere se è stato rilevato un backend di focus.
+scratchpad-unsupported = Questo compositor non ha uno scratchpad tra le cui finestre passare, quindi --scratchpad non può essere applicato. Richiede l’IPC di sway ($SWAYSOCK). Esegui `{ $doctor }` per vedere se è stato rilevato un backend di focus.
 scratchpad-empty = Lo scratchpad non contiene alcuna finestra. Niente da mostrare.
 scratchpad-not-put-aside = Il compositor non ha rimesso la finestra con il focus nello scratchpad.
-move-unsupported = La finestra scelta ha ricevuto il focus dove si trova: a questo compositor non si può chiedere di spostarla nell’area di lavoro corrente. --move richiede sway, Hyprland o cosmic-comp. Esegui `wlr-peek doctor` per vedere se è stato rilevato un backend di focus.
+move-unsupported = La finestra scelta ha ricevuto il focus dove si trova: a questo compositor non si può chiedere di spostarla nell’area di lavoro corrente. --move richiede sway, Hyprland o cosmic-comp. Esegui `{ $doctor }` per vedere se è stato rilevato un backend di focus.
 move-failed = La finestra scelta ha ricevuto il focus dove si trova: il compositor non l’ha spostata nell’area di lavoro corrente.
 hints-need-keyboard = --hints richiede una presentazione senza campo di filtro: usa --layout strip o --layout grid.
 grid-needs-card = --grid dimensiona la scheda, quindi richiede --layout card (il valore predefinito). L’exposé e la striscia si dispongono da soli.

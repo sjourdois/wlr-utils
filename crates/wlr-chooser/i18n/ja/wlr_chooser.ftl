@@ -9,15 +9,15 @@ loading = …
 preview-unavailable = プレビューを利用できません
 show-system = システムウィンドウ
 error = wlr-chooser: { $error }
-capture-no-window = このコンポジタは個別のウィンドウをキャプチャできません。ウィンドウキャプチャには ext-image-copy-capture-v1 と foreign-toplevel ソース (wlroots >= 0.20 / Sway >= 1.12) が必要です。`wlr-peek doctor` を実行して、お使いのコンポジタが対応している機能を確認してください。
-focus-unsupported = このコンポジタは選択したウィンドウをフォーカスできません。ウィンドウのフォーカスには wlr-foreign-toplevel-management-v1、COSMIC では cosmic-toplevel-management-v1 が必要です。`wlr-peek doctor` を実行して、お使いのコンポジタが対応している機能を確認してください。
+capture-no-window = このコンポジタは個別のウィンドウをキャプチャできません。ウィンドウキャプチャには ext-image-copy-capture-v1 と foreign-toplevel ソース (wlroots >= 0.20 / Sway >= 1.12) が必要です。`{ $doctor }` を実行して、お使いのコンポジタが対応している機能を確認してください。
+focus-unsupported = このコンポジタは選択したウィンドウをフォーカスできません。ウィンドウのフォーカスには wlr-foreign-toplevel-management-v1、COSMIC では cosmic-toplevel-management-v1 が必要です。`{ $doctor }` を実行して、お使いのコンポジタが対応している機能を確認してください。
 mru-unmatched = このコンポジタのフォーカス履歴は、表示中のどのウィンドウとも対応しないため、--window-order mru は名前順にフォールバックします。
 filter-no-match = { $filter } に一致する開いているウィンドウがありません。表示するものがありません。
-pid-unsupported = このコンポジタはウィンドウの所属プロセスを報告しないため、--pid は適用できません。sway、Hyprland、niri のいずれかの IPC が必要です。`wlr-peek doctor` を実行して、フォーカスバックエンドが検出されたか確認してください。
-scratchpad-unsupported = このコンポジタには切り替え対象となる scratchpad がないため、--scratchpad は適用できません。sway の IPC（$SWAYSOCK）が必要です。`wlr-peek doctor` を実行して、フォーカスバックエンドが検出されたか確認してください。
+pid-unsupported = このコンポジタはウィンドウの所属プロセスを報告しないため、--pid は適用できません。sway、Hyprland、niri のいずれかの IPC が必要です。`{ $doctor }` を実行して、フォーカスバックエンドが検出されたか確認してください。
+scratchpad-unsupported = このコンポジタには切り替え対象となる scratchpad がないため、--scratchpad は適用できません。sway の IPC（$SWAYSOCK）が必要です。`{ $doctor }` を実行して、フォーカスバックエンドが検出されたか確認してください。
 scratchpad-empty = scratchpad にウィンドウがありません。表示するものがありません。
 scratchpad-not-put-aside = コンポジタがフォーカス中のウィンドウを scratchpad に戻しませんでした。
-move-unsupported = 選択したウィンドウは元の場所でフォーカスされました。このコンポジタには、ウィンドウを現在のワークスペースへ移動させる手段がありません。--move には sway、Hyprland、cosmic-comp のいずれかが必要です。`wlr-peek doctor` を実行して、フォーカスバックエンドが検出されたか確認してください。
+move-unsupported = 選択したウィンドウは元の場所でフォーカスされました。このコンポジタには、ウィンドウを現在のワークスペースへ移動させる手段がありません。--move には sway、Hyprland、cosmic-comp のいずれかが必要です。`{ $doctor }` を実行して、フォーカスバックエンドが検出されたか確認してください。
 move-failed = 選択したウィンドウは元の場所でフォーカスされました。コンポジタがウィンドウを現在のワークスペースへ移動しませんでした。
 hints-need-keyboard = --hints はフィルター入力欄のないレイアウトを必要とします。--layout strip または --layout grid を使ってください。
 grid-needs-card = --grid はカードの大きさを決めるため、--layout card（既定）が必要です。エクスポゼとストリップは自動で配置されます。

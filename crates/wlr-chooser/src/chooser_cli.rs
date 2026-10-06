@@ -15,6 +15,9 @@ use clap::{Parser, ValueEnum};
 use std::time::Instant;
 use wlr_capture::focus;
 
+/// What a message sends the user to, to see what the compositor supports.
+const DOCTOR: &str = "wlr-chooser --doctor";
+
 /// Graphical window & screen picker for xdg-desktop-portal-wlr.
 ///
 /// Prints the chosen source to stdout (`Window: <id>` / `Monitor: <name>`); exits
@@ -290,7 +293,7 @@ fn preflight(opts: &mut Options, mode: Mode) -> Result<(), String> {
     }
     match wlr_capture::wl::Client::connect() {
         Ok(client) => {
-            crate::require_window_pids(&mut opts.window_filters, client.toplevels())?;
+            crate::require_window_pids(&mut opts.window_filters, client.toplevels(), DOCTOR)?;
             if mode == Mode::Windows {
                 crate::reject_empty_window_filter(client.toplevels(), &opts.window_filters)?;
             }

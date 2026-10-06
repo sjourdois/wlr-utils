@@ -9,15 +9,15 @@ loading = …
 preview-unavailable = Podgląd niedostępny
 show-system = Okna systemowe
 error = wlr-chooser: { $error }
-capture-no-window = Ten kompozytor nie może przechwytywać pojedynczych okien. Przechwytywanie okien wymaga ext-image-copy-capture-v1 ze źródłem foreign-toplevel (wlroots >= 0.20 / Sway >= 1.12). Uruchom `wlr-peek doctor`, aby zobaczyć, co obsługuje twój kompozytor.
-focus-unsupported = Ten kompozytor nie może aktywować wybranego okna. Aktywacja okna wymaga wlr-foreign-toplevel-management-v1 lub cosmic-toplevel-management-v1 w systemie COSMIC. Uruchom `wlr-peek doctor`, aby zobaczyć, co obsługuje twój kompozytor.
+capture-no-window = Ten kompozytor nie może przechwytywać pojedynczych okien. Przechwytywanie okien wymaga ext-image-copy-capture-v1 ze źródłem foreign-toplevel (wlroots >= 0.20 / Sway >= 1.12). Uruchom `{ $doctor }`, aby zobaczyć, co obsługuje twój kompozytor.
+focus-unsupported = Ten kompozytor nie może aktywować wybranego okna. Aktywacja okna wymaga wlr-foreign-toplevel-management-v1 lub cosmic-toplevel-management-v1 w systemie COSMIC. Uruchom `{ $doctor }`, aby zobaczyć, co obsługuje twój kompozytor.
 mru-unmatched = Historia fokusu tego kompozytora nie wskazuje żadnego z wypisanych okien, więc --window-order mru wraca do sortowania według nazwy.
 filter-no-match = Żadne otwarte okno nie pasuje do { $filter }. Nie ma nic do pokazania.
-pid-unsupported = Ten kompozytor nie podaje procesu, do którego należy okno, więc nie można zastosować --pid. Wymaga to IPC sway, Hyprland lub niri. Uruchom `wlr-peek doctor`, aby sprawdzić, czy wykryto backend fokusu.
-scratchpad-unsupported = Ten kompozytor nie ma scratchpada, między którego oknami można by się przełączać, więc nie można zastosować --scratchpad. Wymaga to IPC sway ($SWAYSOCK). Uruchom `wlr-peek doctor`, aby sprawdzić, czy wykryto backend fokusu.
+pid-unsupported = Ten kompozytor nie podaje procesu, do którego należy okno, więc nie można zastosować --pid. Wymaga to IPC sway, Hyprland lub niri. Uruchom `{ $doctor }`, aby sprawdzić, czy wykryto backend fokusu.
+scratchpad-unsupported = Ten kompozytor nie ma scratchpada, między którego oknami można by się przełączać, więc nie można zastosować --scratchpad. Wymaga to IPC sway ($SWAYSOCK). Uruchom `{ $doctor }`, aby sprawdzić, czy wykryto backend fokusu.
 scratchpad-empty = Scratchpad nie zawiera żadnego okna. Nie ma nic do pokazania.
 scratchpad-not-put-aside = Kompozytor nie odłożył aktywnego okna z powrotem do scratchpada.
-move-unsupported = Wybrane okno zostało aktywowane tam, gdzie jest: tego kompozytora nie można poprosić o przeniesienie go na bieżący obszar roboczy. --move wymaga sway, Hyprland lub cosmic-comp. Uruchom `wlr-peek doctor`, aby sprawdzić, czy wykryto backend fokusu.
+move-unsupported = Wybrane okno zostało aktywowane tam, gdzie jest: tego kompozytora nie można poprosić o przeniesienie go na bieżący obszar roboczy. --move wymaga sway, Hyprland lub cosmic-comp. Uruchom `{ $doctor }`, aby sprawdzić, czy wykryto backend fokusu.
 move-failed = Wybrane okno zostało aktywowane tam, gdzie jest: kompozytor nie przeniósł go na bieżący obszar roboczy.
 hints-need-keyboard = --hints wymaga układu bez pola filtra: użyj --layout strip lub --layout grid.
 grid-needs-card = --grid ustala rozmiar karty, więc wymaga --layout card (domyślnie). Ekspozycja i pasek układają się same.
