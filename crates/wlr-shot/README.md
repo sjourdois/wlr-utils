@@ -9,7 +9,8 @@ Screen capture for **wlroots and derivatives**, built on the shared
 strides, occlusion-independent).
 
 It captures an output, the whole layout, a region (interactive `-s` or `-g`/slurp),
-or a window — as a screenshot (PNG/JPEG/PPM) or an H.264 recording / timelapse.
+or a window — as a screenshot (PNG, JPEG, PPM or PAM) or a recording: H.264 video,
+timelapse, or an animated GIF/WebP.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/sjourdois/wlr-utils/main/docs/assets/wlr-shot/select.gif"
@@ -23,18 +24,22 @@ or a window — as a screenshot (PNG/JPEG/PPM) or an H.264 recording / timelapse
 ```sh
 wlr-shot screenshot [-s | -o NAME | --all | -g GEOM | -w ID | --app-id ID | --title TEXT
                      | --pick-window | -a | --current-output]
-                    [--cursor] [-t png|jpeg|ppm|pam] [-q QUALITY] [-c] [FILE|-]
+                    [--cursor] [-t png|jpeg|ppm|pam] [-q QUALITY]
+                    [-c [--clipboard-foreground]] [FILE|-]
 wlr-shot screenshot --list-outputs | --list-windows
 wlr-shot record [-s | -o NAME | -g GEOM | -w ID | --app-id ID | --title TEXT
                  | --pick-window | -a | --current-output]
-                [--cursor] [--encoder auto|nvenc|vaapi|software] [--crf N] [--fps N]
-                [--timelapse INTERVAL] [-d SECS] FILE
+                [--cursor] [--encoder auto|nvenc|vaapi|software] [--device PATH]
+                [--crf N] [--fps N] [--timelapse INTERVAL] [-d SECS]
+                [--no-audio | --audio-source NODE] FILE
+wlr-shot doctor
 ```
 
 Source (pick one; defaults to the sole output):
 
 - `-s, --select` — **interactively** drag a region on a frozen overlay (spans all
-  outputs; `Esc` or `Ctrl+[` cancels, `Enter` confirms). No external tool needed.
+  outputs; releasing the button takes it, `Esc` or `Ctrl+[` cancels). No external tool
+  needed.
 - `-o, --output NAME` — a whole output (e.g. `DP-4`).
 - `--all` — the whole layout: every output combined into one image.
 - `-g, --geometry "X,Y WxH"` — a logical region (the format **slurp** prints),
@@ -49,13 +54,15 @@ Source (pick one; defaults to the sole output):
   candidates rather than picking one arbitrarily — narrow it down, or use the
   `-w ID` it prints.
 - `--pick-window` — launch `wlr-chooser` to choose the window interactively.
-- `-a, --active-window` — the focused window.
+- `-a, --active-window` — the screen area the focused window covers (a region, not the
+  window itself).
 - `--current-output` — the focused output.
 
 The last two need the compositor's focus info. Wayland exposes no portable way to
 query focus, so these go through a per-compositor backend: **Sway** (`$SWAYSOCK`),
-**Hyprland** (`hyprctl`), **niri** (`niri msg`) and **cosmic-comp**
-(`zcosmic_toplevel_info_v1`, a Wayland protocol — COSMIC has no IPC socket).
+**Hyprland** (`hyprctl`), **niri** (`niri msg`, `--current-output` only: it gives no
+window position) and **cosmic-comp** (`zcosmic_toplevel_info_v1`, a Wayland protocol —
+COSMIC has no IPC socket).
 Elsewhere they error with a hint (use `--pick-window` / `-o NAME` instead).
 
 Contents:
@@ -103,11 +110,12 @@ resolution.
 
 Stream a source to a file whose **format follows the extension**: `.mp4`/`.mkv` for
 H.264 video, or **`.gif`/`.webp`** for an animated image (downscaled — GIF to 800 px,
-WebP to 1280 px on the long side — and best used on a **region**, since per-frame GIF
-quantization on a full 4K output is slow). The same source flags as `screenshot` apply — `-o`/sole output,
+WebP to 1280 px on the long side). Keep those to short clips of a **region**: every frame
+stays in memory until the file is written, and per-frame GIF quantization on a full 4K
+output is slow. The same source flags as `screenshot` apply — `-o`/sole output,
 `--current-output`, `-w ID`/`--app-id`/`--title`/`--pick-window`, `-a`, `-g`, and `-s` —
-except a region (`-g`/`-s`) records a **single** output for now (the one its top-left
-corner sits on). Recording a **window** follows it across workspaces and even while
+except a region (`-g`, `-s`, `-a`) records a **single** output for now (the one its
+top-left corner sits on). Recording a **window** follows it across workspaces and even while
 occluded; `--app-id`/`--title` resolve to an identifier once, at start, so a window
 opened later can't steal the recording.
 
@@ -157,8 +165,8 @@ FFmpeg libraries. A screenshots-only build drops it: `cargo build -p wlr-shot
 ## Install
 
 > **Want the whole suite?** Install the bundle instead — `cargo install wlr-utils` gets
-> every tool (`wlr-chooser`, `wlr-switcher`, `wlr-peek`, `wlr-shot`, `wlr-draw`) in one
-> go. The single-tool install below is the lighter, à-la-carte option.
+> every tool (`wlr-chooser`, `wlr-switcher`, `wlr-overlayd`, `wlr-peek`, `wlr-shot`,
+> `wlr-draw`) in one go. The single-tool install below is the lighter, à-la-carte option.
 
 ```sh
 cargo install wlr-shot
@@ -180,14 +188,16 @@ A wlroots compositor exposing a capture protocol. Output/region screenshots and
 recording need `ext-image-copy-capture-v1` with the
 `ext-output-image-capture-source-manager-v1` source — **Sway ≥ 1.11 / wlroots ≥ 0.19** —
 or `zwlr_screencopy_manager_v1`; capturing a **window** (`-w`/`--pick-window`) needs
-`ext-foreign-toplevel-image-capture-source-manager-v1` — **Sway ≥ 1.12 / wlroots ≥ 0.20**,
-which `zwlr_screencopy_manager_v1` does not stand in for.
+`ext-foreign-toplevel-list-v1` and `ext-foreign-toplevel-image-capture-source-manager-v1` —
+**Sway ≥ 1.12 / wlroots ≥ 0.20**, which `zwlr_screencopy_manager_v1` does not stand in
+for.
 `xdg-output` is used for accurate logical geometry when present, and the clipboard (`-c`)
 needs `zwlr_data_control_manager_v1`. Run `wlr-shot doctor` to see what your compositor
 exposes; see [COMPATIBILITY.md](../../COMPATIBILITY.md) for the full matrix.
 
-The interactive region selector (`-s`) renders a frozen overlay through EGL/GLES, so
-**every build** needs a working GL stack (`libegl1`) at runtime. The default build also
+The interactive region selector (`-s`) renders a frozen overlay through EGL/GLES — its
+layer is named `wlr-shot`, for [compositor rules](../../README.md#compositor-rules) — so
+**every build** needs a working GL stack (`libegl1`) and `libfontconfig1` at runtime. The default build also
 links `libgbm` for the zero-copy dma-buf path used by `record`; screenshots themselves are
 captured through shared memory. `--no-gpu` (or `WLR_NO_GPU=1`) forces the shm path
 everywhere, and `wlr-shot doctor` reports whether the dma-buf path actually works here.
@@ -198,13 +208,15 @@ libavformat-dev libavutil-dev libavfilter-dev libavdevice-dev libswscale-dev
 libswresample-dev libva-dev` (and `clang` for the bindings). Hardware encoding needs
 the matching runtime: NVIDIA's `libnvidia-encode` for NVENC, or a VAAPI driver for
 your GPU. The default `audio` feature records system sound through **PipeWire**, linking
-`libpipewire-0.3` (and `clang` to build); drop it with `--features video` (video only) or
-build screenshots-only (`--no-default-features --features i18n`) to need none of this.
+`libpipewire-0.3` (and `clang` to build); drop it with `--no-default-features --features
+i18n,video,gpu` (video only), or build screenshots-only (`--no-default-features --features
+i18n`) to need none of this.
 
 ## Uninstall
 
 ```sh
-cargo uninstall wlr-shot          # crates.io install; or: rm -f ~/.local/bin/wlr-shot
+cargo uninstall wlr-shot          # crates.io install
+rm -f ~/.local/bin/wlr-shot       # manual install from source
 ```
 
 wlr-shot writes no config or state files — removing the binary is enough.

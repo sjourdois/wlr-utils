@@ -21,7 +21,7 @@ const LAYER_NAMESPACE: &str = "wlr-peek";
 #[command(
     name = "wlr-peek",
     version = wlr_capture::version!(),
-    about = "Inspect the screen on wlroots (colour picker, OCR)"
+    about = "Inspect the screen on wlroots (colour picker, loupe, mirror, OCR, watch)"
 )]
 struct Cli {
     /// Capture through shared memory instead of the zero-copy dma-buf path.
@@ -1009,7 +1009,8 @@ mod watch_impl {
         #[arg(long, value_enum, default_value_t = Trigger::Change)]
         on: Trigger,
         /// Ignore changes smaller than this percentage of the watched pixels
-        /// (default 0 = any change). Only meaningful with `--on change`.
+        /// (default 0 = any change). With `--on idle`, it is also what counts as
+        /// still.
         #[arg(long, value_name = "PCT", default_value_t = 0.0)]
         threshold: f64,
         /// How long with no change counts as "idle" (e.g. `3s`). Only with `--on idle`.

@@ -62,7 +62,8 @@ mirror `wlr-shot`: `-g "X,Y WxH"`, `-o NAME`, `--app-id`/`--title`, `-a/--active
 window that is occluded or on another workspace — unlike `-a`, which captures the screen
 area the focused window occupies.
 `-l/--lang` picks the Tesseract language(s) (default `eng`; the matching
-`tesseract-ocr-<lang>` data pack must be installed).
+`tesseract-ocr-<lang>` data pack must be installed). `-c` copies the text instead, like
+`color --clipboard`; `--clipboard-foreground` keeps that server in the foreground.
 
 OCR is behind the `ocr` Cargo feature (**on by default**); it links system
 `libtesseract`/`libleptonica`. Build without it for a binary with no native OCR
@@ -98,17 +99,18 @@ $ wlr-peek mirror -a               # the active window's area (needs focus info)
 $ wlr-peek mirror -g "100,200 640x480" --zoom 4   # a fixed region, magnified
 ```
 
-It takes the **same source flags as the rest of wlr-utils**: a window (`id`,
-`--app-id`/`--title`, `-w`/`--pick-window`, `-a`/`--active-window`), or a region/output
-mirrored as a live loupe (`-s`, `-g "X,Y WxH"`, `-o NAME`, `--current-output`), magnified by
-`--zoom` (default ×2). Region/output mode is mono-output for now (clipped to the output
+It mirrors a window (`ID`, `--app-id`/`--title`, or `-w`/`--pick-window`, which here
+picks one through the chooser), or a region/output as a live loupe (`-s`, `-g "X,Y WxH"`,
+`-o NAME`, `--current-output`, and `-a`, the area the focused window covers), magnified
+by `--zoom` (default ×2). Region/output mode is mono-output for now (clipped to the output
 its top-left corner sits on). Keep the window outside the mirrored region to avoid
 feedback.
 
 For a region, **`--follow`** chooses what it tracks: `output` (default — shows whatever
 workspace is on that screen) or `window` — captures the **window under the region** and
-crops to it, so the loupe follows that window across moves and workspaces (needs
-compositor focus info; falls back to `output` if no window is under the region).
+crops to it, so the loupe follows that window across moves and workspaces. Only Sway
+says which window is under a region; elsewhere, and with no window there, it falls back
+to `output`.
 
 ```console
 $ wlr-peek mirror -s --follow window   # loupe that sticks to the window you picked
@@ -116,8 +118,9 @@ $ wlr-peek mirror -s --follow window   # loupe that sticks to the window you pic
 
 Drag to move, the bottom-right grip to resize, the toolbar to collapse to a badge or
 close; **Space** freezes, **c** collapses, **+/-** or the wheel set opacity, **r**
-re-picks (window mode), **Esc** closes. Pair with sway rules `floating enable, sticky
-enable` for always-on-top across workspaces.
+re-picks (window mode), **Esc** or **q** closes. One mirror per window: a second one
+of the same window exits quietly. Pair with sway rules `floating enable, sticky enable`
+for always-on-top across workspaces.
 
 ### `region` — select a region/point, print its geometry (slurp replacement)
 
@@ -145,12 +148,14 @@ $ wlr-peek watch --app-id thunderbird --on idle --for 5s     # wake when the win
 $ wlr-peek watch -o DP-4 --on change --threshold 2 --repeat --exec 'mpc next'
 ```
 
-- `--on change` (default) fires when the content changes; `--on idle` fires once it
-  has been stable for `--for` (e.g. `5s`).
+- `--on change` (default) fires when the content changes, printing `change N.N%`;
+  `--on idle` fires once it has been stable for `--for` (default `2s`), printing `idle`.
 - `--threshold PCT` ignores changes smaller than that percentage of the watched
-  pixels (default 0 = any change) — raise it to skip a blinking cursor or clock.
+  pixels (default 0 = any change) — raise it to skip a blinking cursor or clock. It
+  also decides what counts as stable for `--on idle`.
 - By default it prints one line and exits 0 on the first trigger (composes with
-  `&&`); `--repeat` keeps watching and fires every time. `--exec CMD` runs a shell
+  `&&`); `--repeat` keeps watching and fires every time (with `--on idle`, again
+  after each further `--for` of stillness). `--exec CMD` runs a shell
   command on each trigger. `--timeout DUR` gives up (exit 2) if nothing fires. If the
   watched window closes or the output goes away, it exits 3.
 
@@ -169,8 +174,9 @@ $ wlr-peek grep -g "$(slurp)" -i error      # case-insensitive, in a region
 ```
 
 Sources: `-g`, `-o`, `-a`, `--current-output`, or (default) an interactive region.
-Matching is a substring (`-i` for case-insensitive); coordinates map back to a single
-output. Exits 1 when nothing matches, like `grep`.
+Matching is a substring of each recognised word, so a pattern with a space matches
+nothing (`-i` for case-insensitive, `-l` for the Tesseract language as in `ocr`). Exits 1
+when nothing matches — and on a cancelled selection or an error.
 
 Unlike the other subcommands, `grep` has **no `--app-id`/`--title` window source** — by
 design. Its output is a position in the global logical space, and a foreign-toplevel
@@ -186,13 +192,15 @@ source — **Sway ≥ 1.11 / wlroots ≥ 0.19** — or `wlr-screencopy`; targeti
 (`-w`, window mirror) needs the **foreign-toplevel** source +
 `ext-foreign-toplevel-list-v1` — **Sway ≥ 1.12 / wlroots ≥ 0.20** — which
 `wlr-screencopy` does not stand in for. The frozen overlays (`color`, `loupe`, `region`)
-use `zwlr-layer-shell`, `mirror` uses `xdg-shell`, and `color --clipboard` needs
+use `zwlr-layer-shell`, with their layer named `wlr-peek` for
+[compositor rules](../../README.md#compositor-rules); `mirror` uses `xdg-shell`, with the
+app id `wlr-peek-mirror`; `color --clipboard` and `ocr -c` need
 `zwlr_data_control_manager_v1`. `wlr-peek doctor` prints exactly what your compositor
 advertises; see [COMPATIBILITY.md](../../COMPATIBILITY.md) for the full matrix.
 
-- **GL stack** — `libegl1` at runtime (the overlays render through EGL/GLES), plus
-  `libgbm` for the zero-copy dma-buf path `mirror` streams through (the `gpu` feature, on
-  by default). One-shot reads (`color`, `ocr`) capture through shared memory regardless.
+- **GL stack** — `libegl1` and `libfontconfig1` at runtime (the overlays render
+  through EGL/GLES), plus `libgbm` for the zero-copy dma-buf path `mirror` and `watch`
+  stream through (the `gpu` feature, on by default). One-shot reads (`color`, `ocr`) capture through shared memory regardless.
   `--no-gpu` (or `WLR_NO_GPU=1`) forces the shm path; `wlr-peek doctor` reports whether the
   dma-buf path works here.
 - **OCR** (`ocr`, `grep`; on by default) — links the system `libtesseract`/`libleptonica`
@@ -200,14 +208,15 @@ advertises; see [COMPATIBILITY.md](../../COMPATIBILITY.md) for the full matrix.
   data pack must be installed at runtime (default `eng`). Without the feature the binary
   needs none of these.
 - **Focus backend** — `--active-window` / `--current-output` ask the compositor: Sway,
-  Hyprland and niri over their IPC, cosmic-comp over `zcosmic_toplevel_info_v1`.
+  Hyprland and niri over their IPC (niri: `--current-output` only), cosmic-comp over
+  `zcosmic_toplevel_info_v1`.
   Elsewhere, use an explicit source instead.
 
 ## Install
 
 > **Want the whole suite?** Install the bundle instead — `cargo install wlr-utils` gets
-> every tool (`wlr-chooser`, `wlr-switcher`, `wlr-peek`, `wlr-shot`, `wlr-draw`) in one
-> go. The single-tool install below is the lighter, à-la-carte option.
+> every tool (`wlr-chooser`, `wlr-switcher`, `wlr-overlayd`, `wlr-peek`, `wlr-shot`,
+> `wlr-draw`) in one go. The single-tool install below is the lighter, à-la-carte option.
 
 ```sh
 cargo install wlr-peek
@@ -220,17 +229,20 @@ cargo build --release -p wlr-peek
 ```
 
 The default features are `ocr`, `watch`, `gpu` and `i18n`; `--no-default-features` drops
-all four, so the binary loses OCR (`ocr`, `grep`), the `watch` subcommand, the dma-buf
+all four, so the binary loses OCR (`ocr`, `grep`), the `watch` subcommand, the
+focus-based sources (`mirror -a`/`--current-output`, `--follow window`), the dma-buf
 capture path and the Fluent catalog. Pick the ones you want with `--features` — see
 **Requirements** above for what each pulls in.
 
 ## Uninstall
 
 ```sh
-cargo uninstall wlr-peek          # crates.io install; or: rm -f ~/.local/bin/wlr-peek
+cargo uninstall wlr-peek          # crates.io install
+rm -f ~/.local/bin/wlr-peek       # manual install from source
 ```
 
-wlr-peek writes no config or state files, so removing the binary is all it takes.
+wlr-peek writes no config files; `mirror` only leaves a lock file per mirrored window in
+`$XDG_RUNTIME_DIR`.
 
 ## License
 
