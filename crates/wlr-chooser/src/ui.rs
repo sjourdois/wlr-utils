@@ -249,21 +249,24 @@ pub enum Msg {
 /// damage-driven, so this is a ceiling, not a forced rate). shm pays a full CPU
 /// readback+convert+downscale+upload per frame, so we keep it modest (~6 fps);
 /// the GPU dma-buf path is near-free per frame, so it runs much faster (~30 fps).
-#[cfg(not(feature = "gpu"))]
 const ROUND_SHM: Duration = Duration::from_millis(160);
-#[cfg(feature = "gpu")]
 const ROUND_GPU: Duration = Duration::from_millis(33);
 
-/// The round budget for this run: faster when built with the near-free GPU path.
-fn round_budget() -> Duration {
-    #[cfg(feature = "gpu")]
-    {
+/// The round budget for the path the frames take. They come through shm without the
+/// `gpu` feature, under `--no-gpu`, after a failed dma-buf import, or for a session gbm
+/// could not allocate for — so the frames decide, not the build.
+fn round_budget(via_shm: bool) -> Duration {
+    if via_shm || cfg!(not(feature = "gpu")) {
+        ROUND_SHM
+    } else {
         ROUND_GPU
     }
-    #[cfg(not(feature = "gpu"))]
-    {
-        ROUND_SHM
-    }
+}
+
+/// Whether a round's frames came through shm; `None` for a round without any, which
+/// says nothing about the path.
+fn frames_via_shm(frames: &[(wl::SessionId, wl::Frame)]) -> Option<bool> {
+    (!frames.is_empty()).then(|| frames.iter().any(|(_, f)| matches!(f, wl::Frame::Shm(_))))
 }
 
 /// A window as the command-line filter sees it.
@@ -529,7 +532,8 @@ pub(crate) fn capture_thread(
     let mut last_sent: Vec<Source> = Vec::new();
     // Whether the focus history has been confronted with a window list yet.
     let mut mru_checked = false;
-    let budget = round_budget();
+    // Until a frame says otherwise, the path the client starts on.
+    let mut via_shm = client.gpu_disabled();
 
     'outer: loop {
         // Pick up newly-opened / closed windows since the last round.
@@ -652,7 +656,8 @@ pub(crate) fn capture_thread(
         // Drive all sessions for one round: this blocks up to the round budget
         // waiting for damage, so an idle desktop costs ~one syscall, while updating
         // windows stream frames. Only sources that produced new content come back.
-        let (frames, failed) = client.poll(budget);
+        let (frames, failed) = client.poll(round_budget(via_shm));
+        via_shm = frames_via_shm(&frames).unwrap_or(via_shm);
         for (id, frame) in frames {
             let Some(key) = by_id.get(&id) else { continue };
             let msg = match frame {
@@ -738,6 +743,7 @@ pub fn bench_capture(secs: u64, mut filters: WindowFilters) {
 
     let deadline = Instant::now() + Duration::from_secs(secs);
     let mut rounds = 0u32;
+    let mut via_shm = client.gpu_disabled();
     while Instant::now() < deadline {
         let _ = client.refresh();
         let _ = filters.refresh_pids(client.toplevels());
@@ -770,7 +776,8 @@ pub fn bench_capture(secs: u64, mut filters: WindowFilters) {
             }
         }
 
-        let (frames, failed) = client.poll(round_budget());
+        let (frames, failed) = client.poll(round_budget(via_shm));
+        via_shm = frames_via_shm(&frames).unwrap_or(via_shm);
         for (id, frame) in frames {
             if let Some(key) = by_id.get(&id) {
                 // shm carries pixels (hashable); dma-buf is GPU-only here, so we

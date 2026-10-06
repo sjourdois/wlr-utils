@@ -17,6 +17,9 @@ All notable changes to this project are documented here. The format is based on
 
 - **`systemctl --user reload wlr-draw` reloads instead of stopping the daemon** — it
   now re-reads `keys.toml` and the theme and keeps the drawing.
+- **Less CPU for live thumbnails without the GPU path** — with `--no-gpu`, or where the
+  GPU path is unavailable, `wlr-chooser` and `wlr-switcher` refreshed them at about
+  30 fps. They now stay at about 6 fps.
 - **A non-ASCII colour in `theme.toml` no longer crashes the overlays** — a value such
   as `"#éa"` made the theme loader panic, taking down `wlr-chooser`, `wlr-switcher`,
   `wlr-draw`, the `wlr-peek` mirror and the `wlr-overlayd` daemon. It is now ignored
