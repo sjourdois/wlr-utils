@@ -65,7 +65,7 @@ swayipc = "4.0.0"
 smithay-client-toolkit = "0.21.1"
 wayland-egl = "0.32.11"
 # Maintained fork of the unmaintained khronos-egl; same dynamic API, tracks libloading 0.9.
-edgefirst-egl = { version = "0.32.1", features = ["dynamic"] }
+edgefirst-egl = { version = "0.33.0", features = ["dynamic"] }
 glow = "0.17" # must match the glow version egui_glow uses (0.36 is still on 0.17)
 egui_glow = "0.36"
 libloading = "0.9.0"
