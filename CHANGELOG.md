@@ -23,6 +23,8 @@ All notable changes to this project are documented here. The format is based on
 - **Less CPU for live thumbnails without the GPU path** — with `--no-gpu`, or where the
   GPU path is unavailable, `wlr-chooser` and `wlr-switcher` refreshed them at about
   30 fps. They now stay at about 6 fps.
+- **Screens carry the screen icon in `wlr-chooser --layout grid`** — they had the
+  window one.
 - **A non-ASCII colour in `theme.toml` no longer crashes the overlays** — a value such
   as `"#éa"` made the theme loader panic, taking down `wlr-chooser`, `wlr-switcher`,
   `wlr-draw`, the `wlr-peek` mirror and the `wlr-overlayd` daemon. It is now ignored

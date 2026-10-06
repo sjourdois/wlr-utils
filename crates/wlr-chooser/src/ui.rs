@@ -1667,21 +1667,7 @@ impl App {
             egui::pos2(rect.min.x + 8.0, rect.max.y - 21.0),
             egui::vec2(icon_sz, icon_sz),
         );
-        if !s.is_window {
-            draw_monitor_glyph(p, icon_rect, t.screen_accent);
-        } else if let Some(ic) = self.icons.get(&s.key) {
-            let ts = ic.size_vec2();
-            let scale = (icon_rect.width() / ts.x).min(icon_rect.height() / ts.y);
-            let draw = egui::Rect::from_center_size(icon_rect.center(), ts * scale);
-            p.image(
-                ic.id(),
-                draw,
-                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
-                egui::Color32::WHITE,
-            );
-        } else {
-            draw_window_glyph(p, icon_rect, t.window_accent);
-        }
+        self.paint_label_icon(p, s, icon_rect, 1.0);
 
         let text_x = icon_rect.max.x + 6.0;
         let label = if s.subtitle.is_empty() {
@@ -1835,19 +1821,7 @@ impl App {
             egui::pos2(strip.left() + 6.0, strip.center().y - icon_sz / 2.0),
             egui::vec2(icon_sz, icon_sz),
         );
-        if let Some(ic) = self.icons.get(&s.key) {
-            let isz = ic.size_vec2();
-            let sc = (icon_rect.width() / isz.x).min(icon_rect.height() / isz.y);
-            let d = egui::Rect::from_center_size(icon_rect.center(), isz * sc);
-            p.image(
-                ic.id(),
-                d,
-                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
-                white,
-            );
-        } else {
-            draw_window_glyph(p, icon_rect, fade(t.window_accent));
-        }
+        self.paint_label_icon(p, s, icon_rect, a);
         let label = if s.subtitle.is_empty() {
             s.title.clone()
         } else {
@@ -2059,6 +2033,27 @@ impl App {
             egui::FontId::proportional(size * 0.62),
             self.theme.accent.gamma_multiply(a),
         );
+    }
+
+    /// Draw the icon of a tile's label, which tells screens from windows: the monitor
+    /// glyph for a screen, else the window's app icon, else the window glyph. `a` is
+    /// the tile's opacity.
+    fn paint_label_icon(&self, p: &egui::Painter, s: &Source, rect: egui::Rect, a: f32) {
+        let t = &self.theme;
+        if !s.is_window {
+            draw_monitor_glyph(p, rect, t.screen_accent.gamma_multiply(a));
+        } else if let Some(ic) = self.icons.get(&s.key) {
+            let sz = ic.size_vec2();
+            let scale = (rect.width() / sz.x).min(rect.height() / sz.y);
+            p.image(
+                ic.id(),
+                egui::Rect::from_center_size(rect.center(), sz * scale),
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                egui::Color32::WHITE.gamma_multiply(a),
+            );
+        } else {
+            draw_window_glyph(p, rect, t.window_accent.gamma_multiply(a));
+        }
     }
 
     /// Draw a source's app icon filling `rect` (contain). Falls back to its live
