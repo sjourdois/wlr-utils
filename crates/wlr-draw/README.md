@@ -49,6 +49,7 @@ wlr-draw tool  <pen|rect|mask|arrow|text|eraser|move>   # mask = solid box to re
 wlr-draw color <name|#rrggbb[aa]>     # red green blue yellow orange cyan magenta white black
 wlr-draw width <px>
 wlr-draw save [path]     # write the annotated screen to a PNG (Pictures dir by default)
+wlr-draw reload          # re-read keys.toml and the theme, keeping the drawing
 wlr-draw quit            # stop the daemon
 ```
 
@@ -235,21 +236,20 @@ non-zero with `no wlr-draw daemon listening on … ; start one with wlr-draw`.
 
 ```sh
 wlr-draw quit                                     # stop the daemon
+wlr-draw reload                                   # re-read the configuration
 journalctl --user -t wlr-draw -f                  # its output, however it was started
 systemctl --user restart 'app-wlr\x2ddraw@autostart.service'   # after a new build
-systemctl --user kill -s HUP 'app-wlr\x2ddraw@autostart.service' # reload the config
 ```
 
 Filtering the journal by the **binary name** rather than the unit works whichever way you
-started it, which is why it is the one to remember. The restart and reload lines are only
-for the default XDG-autostart launch: systemd names that unit after the desktop file and
-escapes the dash as `\x2d`, so the quotes matter. Started from the systemd unit above
-instead, they are plain `systemctl --user restart wlr-draw` and
-`systemctl --user reload wlr-draw`.
+started it, which is why it is the one to remember. The restart line is only for the
+default XDG-autostart launch: systemd names that unit after the desktop file and escapes
+the dash as `\x2d`, so the quotes matter. Started from the systemd unit above instead,
+it is plain `systemctl --user restart wlr-draw`.
 
 A reload re-reads `keys.toml` and the theme (`~/.config/wlr-chooser/theme.toml`) and
-keeps the drawing, the tool, the colour and the width. It is a plain `SIGHUP`, so
-`kill -HUP` on the daemon does the same.
+keeps the drawing, the tool, the colour and the width. `kill -HUP` on the daemon does the
+same, and so does `systemctl --user reload wlr-draw` with the systemd unit above.
 
 ### Tray icon
 

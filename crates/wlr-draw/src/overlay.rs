@@ -788,7 +788,7 @@ impl State {
         (e * FLASH_CYCLES * std::f32::consts::PI).sin().abs() * (1.0 - e)
     }
 
-    /// Re-read `keys.toml` and the theme (SIGHUP, i.e. `systemctl --user reload`). The
+    /// Re-read `keys.toml` and the theme (`wlr-draw reload`, or SIGHUP). The
     /// drawing and what was changed at runtime — tool, colour, width, snapping toggled by
     /// `snap` — are kept. Held roles are released, since their trigger may have moved.
     fn reload_config(&mut self) {
@@ -950,6 +950,7 @@ impl State {
                 self.dirty = true;
             }
             Cmd::Save(path) => self.save_screenshot(path),
+            Cmd::Reload => self.reload_config(),
             Cmd::Quit => self.quit = true,
         }
     }

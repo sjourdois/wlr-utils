@@ -12,6 +12,8 @@ All notable changes to this project are documented here. The format is based on
   ([#21](https://github.com/sjourdois/wlr-utils/pull/21), by
   [@bR3iN](https://github.com/bR3iN)) — brings the picked window onto the current
   workspace, on sway, Hyprland and cosmic-comp.
+- **`wlr-draw reload`** — re-reads `keys.toml` and the theme and keeps the drawing,
+  however the daemon was started.
 
 ### Changed
 

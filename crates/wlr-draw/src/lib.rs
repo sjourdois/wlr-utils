@@ -78,6 +78,8 @@ enum Ctl {
         /// Destination path; omit for a timestamped file in your Pictures directory
         path: Option<String>,
     },
+    /// Re-read keys.toml and the theme, keeping the drawing
+    Reload,
     /// Stop the running daemon
     Quit,
     /// Report which capture protocols the current compositor supports
@@ -115,6 +117,7 @@ fn ctl_to_cmd(ctl: Ctl) -> anyhow::Result<Cmd> {
         Ctl::Redo => Cmd::Redo,
         Ctl::Visibility => Cmd::Visibility,
         Ctl::Snap => Cmd::Snap,
+        Ctl::Reload => Cmd::Reload,
         Ctl::Quit => Cmd::Quit,
         Ctl::Tool { name } => Cmd::Tool(
             Tool::from_name(&name).ok_or_else(|| anyhow::anyhow!("unknown tool: {name}"))?,

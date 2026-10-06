@@ -1,10 +1,10 @@
 //! The control protocol carried over the daemon's Unix socket.
 //!
 //! One command per line, a verb plus an optional argument: `toggle`, `clear`, `undo`,
-//! `redo`, `visibility`, `snap`, `tool pen`, `color #ff0000`, `width 6`, `quit`. The client
-//! ([`crate::ipc::send`]) serializes a [`Cmd`] with [`Cmd::to_line`]; the daemon's
-//! socket thread parses each line with [`Cmd::parse`] and feeds the [`Cmd`] into the
-//! event loop. Text, not a binary format — trivial to send by hand (`socat`, `echo`)
+//! `redo`, `visibility`, `snap`, `tool pen`, `color #ff0000`, `width 6`, `reload`,
+//! `quit`. The client ([`crate::ipc::send`]) serializes a [`Cmd`] with
+//! [`Cmd::to_line`]; the daemon's socket thread parses each line with [`Cmd::parse`]
+//! and feeds the [`Cmd`] into the event loop. Text, not a binary format — trivial to send by hand (`socat`, `echo`)
 //! and to read in logs.
 
 use crate::model::{Color, Tool, parse_color};
@@ -35,6 +35,8 @@ pub enum Cmd {
     /// Save the annotated screen (the output under the cursor) to a PNG. With no path,
     /// a timestamped file in the user's Pictures directory.
     Save(Option<String>),
+    /// Re-read `keys.toml` and the theme, keeping the drawing.
+    Reload,
     /// Stop the daemon.
     Quit,
 }
@@ -65,6 +67,7 @@ impl Cmd {
                 let rest = line[verb.len()..].trim_start();
                 Cmd::Save((!rest.is_empty()).then(|| rest.to_string()))
             }
+            "reload" => Cmd::Reload,
             "quit" | "exit" => Cmd::Quit,
             "tool" => {
                 let a = need("a tool name")?;
@@ -93,6 +96,7 @@ impl Cmd {
             Cmd::Redo => "redo".into(),
             Cmd::Visibility => "visibility".into(),
             Cmd::Snap => "snap".into(),
+            Cmd::Reload => "reload".into(),
             Cmd::Quit => "quit".into(),
             Cmd::Tool(t) => format!("tool {}", t.name()),
             Cmd::Color([r, g, b, a]) => format!("color #{r:02x}{g:02x}{b:02x}{a:02x}"),
@@ -118,6 +122,7 @@ mod tests {
             Cmd::Redo,
             Cmd::Visibility,
             Cmd::Snap,
+            Cmd::Reload,
             Cmd::Quit,
             Cmd::Tool(Tool::Arrow),
             Cmd::Color([0xff, 0x3b, 0x30, 0xff]),
