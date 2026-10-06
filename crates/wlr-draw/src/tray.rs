@@ -29,9 +29,9 @@ pub struct DrawTray {
     pub color: Color,
     pub tool: Tool,
     autostart: bool,
-    /// The resolved shortcut cheat-sheet (grouped rows), computed once from the keymap at
-    /// spawn — shown in the Shortcuts submenu.
-    shortcuts: Vec<HelpRow>,
+    /// The resolved shortcut cheat-sheet (grouped rows), computed from the keymap at spawn
+    /// and on every reload — shown in the Shortcuts submenu.
+    pub shortcuts: Vec<HelpRow>,
 }
 
 /// Side of the generated tray icon (px).

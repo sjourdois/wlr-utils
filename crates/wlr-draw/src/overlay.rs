@@ -27,7 +27,8 @@ use smithay_client_toolkit::{
     delegate_dispatch2, delegate_registry,
     output::{OutputHandler, OutputState},
     reexports::calloop::channel::{Channel, Event as ChannelEvent, channel},
-    reexports::calloop::{EventLoop, LoopHandle},
+    reexports::calloop::generic::Generic,
+    reexports::calloop::{EventLoop, Interest, LoopHandle, Mode, PostAction},
     reexports::calloop_wayland_source::WaylandSource,
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
@@ -44,6 +45,8 @@ use smithay_client_toolkit::{
         },
     },
 };
+use std::io::Read;
+use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use wayland_client::{
@@ -785,6 +788,24 @@ impl State {
         (e * FLASH_CYCLES * std::f32::consts::PI).sin().abs() * (1.0 - e)
     }
 
+    /// Re-read `keys.toml` and the theme (SIGHUP, i.e. `systemctl --user reload`). The
+    /// drawing and what was changed at runtime — tool, colour, width, snapping toggled by
+    /// `snap` — are kept. Held roles are released, since their trigger may have moved.
+    fn reload_config(&mut self) {
+        self.theme = Theme::load();
+        self.keymap = Keymap::load();
+        self.set_constrain(false);
+        self.set_spotlight(false);
+        self.set_snap_invert(false);
+        #[cfg(feature = "tray")]
+        if let Some(h) = &self.tray {
+            let shortcuts = shortcut_rows(&self.keymap, self.capture_available);
+            h.update(move |t| t.shortcuts = shortcuts);
+        }
+        self.dirty = true;
+        eprintln!("wlr-draw: configuration reloaded");
+    }
+
     /// Push the current draw-mode / colour / tool to the tray icon (no-op without it).
     fn sync_tray(&self) {
         #[cfg(feature = "tray")]
@@ -1472,6 +1493,25 @@ pub fn run() -> anyhow::Result<()> {
         }
     })
     .map_err(|e| anyhow::anyhow!("calloop channel source: {e}"))?;
+
+    // SIGHUP reloads the configuration. The handler only writes a byte to this socket
+    // pair, whichever thread the signal lands on; the reload itself runs on the loop.
+    let (hup_rx, hup_tx) = UnixStream::pair()?;
+    hup_rx.set_nonblocking(true)?;
+    signal_hook::low_level::pipe::register(signal_hook::consts::SIGHUP, hup_tx)?;
+    lh.insert_source(
+        Generic::new(hup_rx, Interest::READ, Mode::Level),
+        |_, rx, state: &mut State| {
+            // Drain before reloading, so a signal arriving during the reload wakes the
+            // loop again instead of being swallowed.
+            let mut rx: &UnixStream = rx;
+            let mut buf = [0u8; 32];
+            while matches!(rx.read(&mut buf), Ok(n) if n > 0) {}
+            state.reload_config();
+            Ok(PostAction::Continue)
+        },
+    )
+    .map_err(|e| anyhow::anyhow!("calloop signal source: {e}"))?;
 
     // A startup line so `journalctl --user -t wlr-draw` shows the daemon came up (and its
     // capture verdict) — otherwise the log stays silent until the first error.

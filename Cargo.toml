@@ -74,6 +74,8 @@ tempfile = "3"
 # sway/Hyprland `bindsym`). Already linked transitively via smithay-client-toolkit, so
 # no new system dependency (libxkbcommon is required either way).
 xkbcommon = "0.9"
+# SIGHUP handler that wakes wlr-draw's event loop to reload its configuration.
+signal-hook = { version = "0.4.5", default-features = false }
 
 [profile.release]
 opt-level = 2

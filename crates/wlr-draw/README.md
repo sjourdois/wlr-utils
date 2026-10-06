@@ -111,7 +111,8 @@ how snapping is switched off.
 
 A commented example listing every binding with its default is at
 [`docs/wlr-draw-keys.toml`](../../docs/wlr-draw-keys.toml) — copy it to
-`~/.config/wlr-draw/keys.toml` and edit.
+`~/.config/wlr-draw/keys.toml` and edit. A [reload](#stopping-restarting-logs) applies
+your changes without losing the drawing.
 
 Fixed (not rebindable): `Esc` and its alias `Ctrl+[` (always back out), the arrow-key
 nudge, and the spotlight size/dim cluster (`i`/`j`/`k`/`l` + wheel, live only while
@@ -236,13 +237,19 @@ non-zero with `no wlr-draw daemon listening on … ; start one with wlr-draw`.
 wlr-draw quit                                     # stop the daemon
 journalctl --user -t wlr-draw -f                  # its output, however it was started
 systemctl --user restart 'app-wlr\x2ddraw@autostart.service'   # after a new build
+systemctl --user kill -s HUP 'app-wlr\x2ddraw@autostart.service' # reload the config
 ```
 
 Filtering the journal by the **binary name** rather than the unit works whichever way you
-started it, which is why it is the one to remember. The restart line is only for the
-default XDG-autostart launch: systemd names that unit after the desktop file and escapes
-the dash as `\x2d`, so the quotes matter. Started from the systemd unit above instead, it
-is plain `systemctl --user restart wlr-draw`.
+started it, which is why it is the one to remember. The restart and reload lines are only
+for the default XDG-autostart launch: systemd names that unit after the desktop file and
+escapes the dash as `\x2d`, so the quotes matter. Started from the systemd unit above
+instead, they are plain `systemctl --user restart wlr-draw` and
+`systemctl --user reload wlr-draw`.
+
+A reload re-reads `keys.toml` and the theme (`~/.config/wlr-chooser/theme.toml`) and
+keeps the drawing, the tool, the colour and the width. It is a plain `SIGHUP`, so
+`kill -HUP` on the daemon does the same.
 
 ### Tray icon
 

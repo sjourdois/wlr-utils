@@ -43,6 +43,9 @@ egui.workspace = true
 toml.workspace = true
 serde.workspace = true
 xkbcommon.workspace = true
+# SIGHUP (`systemctl --user reload`) re-reads keys.toml and the theme: the handler only
+# writes to a socket the calloop loop watches, so the reload runs on the loop.
+signal-hook.workspace = true
 # Layer-shell windowing + the calloop event loop (reused via sctk's reexports), so the
 # control socket and Wayland events drive one loop together.
 smithay-client-toolkit.workspace = true

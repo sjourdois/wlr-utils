@@ -15,6 +15,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Fixed
 
+- **`systemctl --user reload wlr-draw` reloads instead of stopping the daemon** — it
+  now re-reads `keys.toml` and the theme and keeps the drawing.
 - **A non-ASCII colour in `theme.toml` no longer crashes the overlays** — a value such
   as `"#éa"` made the theme loader panic, taking down `wlr-chooser`, `wlr-switcher`,
   `wlr-draw`, the `wlr-peek` mirror and the `wlr-overlayd` daemon. It is now ignored
