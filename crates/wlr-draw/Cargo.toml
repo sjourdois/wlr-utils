@@ -42,6 +42,7 @@ egui.workspace = true
 # xkbcommon is already linked transitively via smithay-client-toolkit (no new system dep).
 toml.workspace = true
 serde.workspace = true
+serde_ignored.workspace = true
 xkbcommon.workspace = true
 # SIGHUP (`systemctl --user reload`) re-reads keys.toml and the theme: the handler only
 # writes to a socket the calloop loop watches, so the reload runs on the loop.

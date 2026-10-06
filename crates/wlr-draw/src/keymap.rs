@@ -234,8 +234,13 @@ impl Keymap {
         let mut km = Keymap::default();
         let Some(raw) = config_path()
             .and_then(|p| std::fs::read_to_string(&p).ok())
-            .and_then(|s| match toml::from_str::<RawConfig>(&s) {
-                Ok(r) => Some(r),
+            .and_then(|s| match parse_config(&s) {
+                Ok((r, unknown)) => {
+                    for entry in unknown {
+                        eprintln!("wlr-draw: keys.toml: unknown entry `{entry}`");
+                    }
+                    Some(r)
+                }
                 Err(e) => {
                     eprintln!("wlr-draw: ignoring keys.toml ({e})");
                     None
@@ -428,6 +433,16 @@ fn config_path() -> Option<PathBuf> {
 }
 
 /// A binding value: one trigger name or a list of them.
+/// Parse `keys.toml`, with the entries the schema does not know: a misspelled name would
+/// otherwise be dropped without a word.
+fn parse_config(s: &str) -> Result<(RawConfig, Vec<String>), toml::de::Error> {
+    let mut unknown = Vec::new();
+    let raw = serde_ignored::deserialize(toml::de::Deserializer::parse(s)?, |path| {
+        unknown.push(path.to_string())
+    })?;
+    Ok((raw, unknown))
+}
+
 /// Parse every name of a config value, reporting (and dropping) the ones that don't.
 fn parse_triggers(o: OneOrMany, name: &str) -> Vec<Trigger> {
     o.into_vec()
@@ -583,6 +598,16 @@ mod tests {
         assert!(!km.snap_on_dwell);
         assert_eq!(km.dwell, Duration::from_millis(1200));
         assert_eq!(km.snap_invert, Role::one(Trigger::Mod(ModKind::Logo)));
+    }
+
+    /// A misspelled entry is named, and the rest of the file still applies.
+    #[test]
+    fn unknown_entries_are_named() {
+        let (raw, unknown) = parse_config("widht-inc = \"x\"\npen = \"b\"").unwrap();
+        assert_eq!(unknown, ["widht-inc"]);
+        let mut km = Keymap::default();
+        km.apply(raw);
+        assert_eq!(km.action_for_key(Keysym::from_char('b')), Some(Action::Pen));
     }
 
     /// A held role takes a list like an action does, and the rest of the file still

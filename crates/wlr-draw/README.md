@@ -120,12 +120,12 @@ your changes without losing the drawing.
 Fixed (not rebindable): `Esc` and its alias `Ctrl+[` (always back out), the arrow-key
 nudge, and the spotlight size/dim cluster (`i`/`j`/`k`/`l` + wheel, live only while
 spotlighting). The nudge step size still reads the physical `Shift` (1px) / `Ctrl` (big)
-keys. A bad name is reported on stderr, and that entry keeps its default. A key or
-modifier you bind goes where you put it: the action or held control that had it by
-default gives it up and keeps its other ones, or shows as unassigned. Two entries of your
-file on one key or modifier are reported; the first in the example's order wins, a held
-control wins over an action, and two held controls both engage. The on-screen `h`
-legend and the tray's Shortcuts menu reflect your bindings.
+keys. A bad key name or a misspelled entry is reported on stderr, and the binding keeps
+its default. A key or modifier you bind goes where you put it: the action or held control
+that had it by default gives it up and keeps its other ones, or shows as unassigned. Two
+entries of your file on one key or modifier are reported; the first in the example's
+order wins, a held control wins over an action, and two held controls both engage. The
+on-screen `h` legend and the tray's Shortcuts menu reflect your bindings.
 
 ## Drawing
 
