@@ -19,7 +19,7 @@ path = "src/main.rs"
 default = ["i18n", "video", "audio", "gpu"]
 # Localised UI (the overlay hint) via Fluent. On by default; `--no-default-features`
 # builds English-only with no Fluent dependency.
-i18n = ["wlr-i18n/i18n", "dep:rust-embed"]
+i18n = ["wlr-i18n/i18n", "wlr-config/i18n", "dep:rust-embed"]
 # Zero-copy dma-buf capture (links gbm). On by default, and on in practice anyway:
 # a bundle build enables it through Cargo feature unification with wlr-chooser, so
 # leaving it out of the defaults only made the declared build differ from the
@@ -46,6 +46,8 @@ audio-fallback = ["audio", "wlr-capture/audio-fallback"]
 wlr-capture = { path = "../wlr-capture", version = "1.10.0", default-features = false, features = ["overlay", "focus"] }
 # This crate owns its localised catalog (`i18n/`); wlr-i18n is the shared loader plumbing.
 wlr-i18n = { path = "../wlr-i18n", version = "1.10.0", default-features = false }
+# config.toml: the theme, and the migration from the old files.
+wlr-config = { path = "../wlr-config", version = "1.10.0", default-features = false }
 # For `#[derive(RustEmbed)]` over `i18n/` (the `i18n` feature).
 rust-embed = { workspace = true, optional = true }
 anyhow.workspace = true

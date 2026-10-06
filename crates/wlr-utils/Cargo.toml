@@ -87,6 +87,7 @@ assets = [
     ["../wlr-draw/contrib/wlr-draw.service", "usr/lib/systemd/user/", "644"],
     ["../../docs/themes/*.toml", "usr/share/wlr-utils/themes/", "644"],
     ["README.md", "usr/share/doc/wlr-utils/README.md", "644"],
+    ["../../docs/config.toml", "usr/share/doc/wlr-utils/config.toml", "644"],
 ]
 
 # Screenshots-only build for hosts whose FFmpeg/PipeWire are too old to build the encoder

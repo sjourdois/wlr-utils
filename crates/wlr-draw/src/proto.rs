@@ -35,7 +35,7 @@ pub enum Cmd {
     /// Save the annotated screen (the output under the cursor) to a PNG. With no path,
     /// a timestamped file in the user's Pictures directory.
     Save(Option<String>),
-    /// Re-read `keys.toml` and the theme, keeping the drawing.
+    /// Re-read the configuration, keeping the drawing.
     Reload,
     /// Stop the daemon.
     Quit,

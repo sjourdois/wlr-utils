@@ -45,7 +45,7 @@ use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::{
 use wlr_capture::keys::{KeyPress, is_cancel};
 use wlr_capture::pointer::Pointer;
 use wlr_capture::render::Gpu;
-use wlr_capture::theme;
+use wlr_capture::theme::{self, ApplyTheme};
 use xkbcommon::xkb;
 
 struct State {

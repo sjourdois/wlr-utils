@@ -58,6 +58,13 @@ enum Cmd {
     Grep(GrepArgs),
     /// Report which capture protocols the current compositor supports.
     Doctor,
+    /// Move the old theme.toml and keys.toml into ~/.config/wlr-utils/config.toml, then
+    /// delete them
+    MigrateConfig {
+        /// `-` prints the new file instead, and touches nothing
+        #[arg(value_parser = ["-"])]
+        output: Option<String>,
+    },
     /// Internal: serve a clipboard selection read from stdin. Spawned detached by
     /// `color --clipboard`; not meant to be run by hand.
     #[command(hide = true)]
@@ -95,6 +102,7 @@ enum Format {
 
 pub fn main() {
     crate::i18n::init();
+    wlr_config::set_migrate_command("wlr-peek migrate-config");
     let cli = Cli::parse();
     if cli.no_gpu {
         wlr_capture::wl::disable_gpu_globally();
@@ -112,6 +120,10 @@ pub fn main() {
         Cmd::Grep(args) => grep(args),
         Cmd::Doctor => {
             wlr_capture::doctor::report("wlr-peek", wlr_capture::version!()).map_err(Into::into)
+        }
+        Cmd::MigrateConfig { output } => {
+            let output = wlr_config::migrate::Output::from_arg(output.as_deref());
+            wlr_config::migrate::run(output).map_err(Into::into)
         }
         Cmd::ClipboardServe { mime } => clipboard_serve(&mime),
     };

@@ -2532,6 +2532,7 @@ dependencies = [
  "indexmap",
  "toml_datetime",
  "toml_parser",
+ "toml_writer",
  "winnow",
 ]
 
@@ -3084,19 +3085,18 @@ dependencies = [
  "pipewire",
  "resvg",
  "rustix 1.1.5",
- "serde",
  "serde_json",
  "smithay-client-toolkit",
  "swayipc",
  "tempfile",
  "thiserror 2.0.21",
- "toml 1.1.6+spec-1.1.0",
  "wayland-backend",
  "wayland-client",
  "wayland-egl",
  "wayland-protocols",
  "wayland-protocols-wlr",
  "wayland-scanner",
+ "wlr-config",
 ]
 
 [[package]]
@@ -3114,8 +3114,23 @@ dependencies = [
  "wayland-client",
  "wayland-protocols",
  "wlr-capture",
+ "wlr-config",
  "wlr-i18n",
  "xkbcommon 0.9.0",
+]
+
+[[package]]
+name = "wlr-config"
+version = "1.10.0"
+dependencies = [
+ "ecolor",
+ "rust-embed",
+ "serde",
+ "serde_ignored",
+ "tempfile",
+ "toml 1.1.6+spec-1.1.0",
+ "toml_edit",
+ "wlr-i18n",
 ]
 
 [[package]]
@@ -3128,13 +3143,14 @@ dependencies = [
  "ksni",
  "rust-embed",
  "serde",
- "serde_ignored",
  "signal-hook",
  "smithay-client-toolkit",
+ "tempfile",
  "toml 1.1.6+spec-1.1.0",
  "wayland-client",
  "wayland-protocols",
  "wlr-capture",
+ "wlr-config",
  "wlr-i18n",
  "xkbcommon 0.9.0",
 ]
@@ -3159,6 +3175,7 @@ dependencies = [
  "rust-embed",
  "rustix 1.1.5",
  "wlr-capture",
+ "wlr-config",
  "wlr-i18n",
 ]
 
@@ -3173,6 +3190,7 @@ dependencies = [
  "rust-embed",
  "webp",
  "wlr-capture",
+ "wlr-config",
  "wlr-i18n",
 ]
 

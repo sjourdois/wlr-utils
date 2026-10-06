@@ -496,15 +496,18 @@ one JSON object instead of the line (see [`--format`](#output----format)).
 
 ## Theming
 
-Colours and fonts come from `~/.config/wlr-chooser/theme.toml` (`$XDG_CONFIG_HOME` is
-honoured), with sensible dark defaults. The same file themes `wlr-switcher`, `wlr-draw`
-and the `wlr-peek` mirror. Colours are `#rgb`, `#rrggbb` or `#rrggbbaa`:
+Colours and fonts come from the `[theme]` section of
+[`config.toml`](../../README.md#configuration), with sensible dark defaults. The same
+section themes `wlr-switcher`, `wlr-draw` and the `wlr-peek` mirror. Colours are `#rgb`,
+`#rrggbb` or `#rrggbbaa`:
 
 ```toml
+[theme]
+name = "catppuccin-mocha"    # an installed theme, set under the keys below
 accent        = "#89b4fa"
-screen-accent = "#74c7ec"   # screen tiles
-window-accent = "#cba6f7"   # window tiles
-backdrop      = "#11111baa" # dimmed overlay
+screen-accent = "#74c7ec"    # screen tiles
+window-accent = "#cba6f7"    # window tiles
+backdrop      = "#11111baa"  # dimmed overlay
 
 font      = "JetBrains Mono" # UI font family (via fontconfig)
 # font-path = "/path/to/Font.ttf"
@@ -512,14 +515,9 @@ font      = "JetBrains Mono" # UI font family (via fontconfig)
 font-size = 15.0             # the card's text: tabs and filter
 ```
 
-Ready-made themes, which set every colour key, live in
-[`docs/themes/`](../../docs/themes/): Catppuccin (Mocha, Macchiato, Frappé, Latte), Nord,
-Gruvbox, Dracula, Tokyo Night. Symlink one so it tracks updates:
-
-```sh
-mkdir -p ~/.config/wlr-chooser
-ln -sf "$PWD/docs/themes/catppuccin-mocha.toml" ~/.config/wlr-chooser/theme.toml
-```
+The ready-made themes set every colour key: Catppuccin (Mocha, Macchiato, Frappé,
+Latte), Nord, Gruvbox, Dracula, Tokyo Night. A theme file holds the keys of `[theme]`
+without its header; yours go in `~/.config/wlr-utils/themes`.
 
 ## Localisation
 

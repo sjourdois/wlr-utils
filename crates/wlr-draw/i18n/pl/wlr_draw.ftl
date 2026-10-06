@@ -50,6 +50,11 @@ draw-help-key-type = Pisz
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
 draw-help-key-unassigned = <nieprzypisany>
+draw-config-bad-key-name = nieznana nazwa klawisza `{ $name }`
+draw-config-dwell-zero = musi wynosić co najmniej 1; `dwell = false` wyłącza dopasowanie
+draw-config-two-actions = `{ $key }` jest przypisany do dwóch akcji
+draw-config-role-and-tool = `{ $key }` jest przypisany jednocześnie do przytrzymywanej kontrolki i do narzędzia
+draw-config-two-roles = `{ $key }` jest przypisany do dwóch przytrzymywanych kontrolek
 tray-status-drawing = Rysowanie
 tray-status-idle = Bezczynny (klikanie przez warstwę)
 tray-toggle = Przełącz tryb rysowania

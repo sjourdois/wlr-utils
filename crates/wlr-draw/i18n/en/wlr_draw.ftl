@@ -50,6 +50,11 @@ draw-help-key-type = Type
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
 draw-help-key-unassigned = <unassigned>
+draw-config-bad-key-name = unknown key name `{ $name }`
+draw-config-dwell-zero = must be at least 1; `dwell = false` turns snapping off
+draw-config-two-actions = `{ $key }` is bound to two actions
+draw-config-role-and-tool = `{ $key }` is bound to both a held control and a tool
+draw-config-two-roles = `{ $key }` is bound to two held controls
 tray-status-drawing = Drawing
 tray-status-idle = Idle (click-through)
 tray-toggle = Toggle draw mode

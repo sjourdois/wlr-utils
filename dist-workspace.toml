@@ -17,6 +17,7 @@ include = [
     "crates/wlr-chooser/contrib/wlr-overlayd.service",
     "crates/wlr-draw/contrib/wlr-draw.service",
     "docs/themes",
+    "docs/config.toml",
 ]
 # Build on 24.04, not the cargo-dist default 22.04: the pipewire 0.10 crate needs a
 # libpipewire newer than 22.04 ships (libspa-sys fails to bind spa_meta_first / the

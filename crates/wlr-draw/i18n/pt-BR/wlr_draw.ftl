@@ -50,6 +50,11 @@ draw-help-key-type = Digitar
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
 draw-help-key-unassigned = <não atribuído>
+draw-config-bad-key-name = nome de tecla desconhecido `{ $name }`
+draw-config-dwell-zero = deve ser pelo menos 1; `dwell = false` desativa o ajuste
+draw-config-two-actions = `{ $key }` está atribuída a duas ações
+draw-config-role-and-tool = `{ $key }` está atribuída ao mesmo tempo a um controle mantido e a uma ferramenta
+draw-config-two-roles = `{ $key }` está atribuída a dois controles mantidos
 tray-status-drawing = Desenhando
 tray-status-idle = Ocioso (clique passa direto)
 tray-toggle = Alternar modo desenho

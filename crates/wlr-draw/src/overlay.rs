@@ -342,7 +342,7 @@ struct State {
     /// A pre-made empty region: set as the input region for click-through.
     empty_region: Region,
     theme: Theme,
-    /// Resolved keybindings (`~/.config/wlr-draw/keys.toml`, or the built-in defaults).
+    /// Resolved keybindings (`[draw.keys]` in config.toml, or the built-in defaults).
     keymap: Keymap,
 
     doc: Document,
@@ -816,14 +816,16 @@ impl State {
         (e * FLASH_CYCLES * std::f32::consts::PI).sin().abs() * (1.0 - e)
     }
 
-    /// Re-read `keys.toml` and the theme (`wlr-draw reload`, or SIGHUP). The
-    /// drawing and what was changed at runtime — tool, colour, width, snapping toggled by
-    /// `snap` — are kept, unless the file changed `dwell` itself. Held roles are released,
-    /// since their triggers may have moved; those on a modifier still active re-engage
-    /// from it.
-    fn reload_config(&mut self) {
-        self.theme = Theme::load();
-        let previous = std::mem::replace(&mut self.keymap, Keymap::load());
+    /// Re-read the configuration (`wlr-draw reload`, or SIGHUP), returning what was wrong
+    /// with it. The drawing and what was changed at runtime — tool, colour, width,
+    /// snapping toggled by `snap` — are kept, unless the file changed `dwell` itself. Held
+    /// roles are released, since their triggers may have moved; those on a modifier still
+    /// active re-engage from it.
+    fn reload_config(&mut self) -> Vec<String> {
+        let mut config = wlr_config::load();
+        self.theme = config.theme().clone();
+        let previous = std::mem::replace(&mut self.keymap, Keymap::from_config(&mut config));
+        config.report();
         if self.keymap.snap_on_dwell != previous.snap_on_dwell {
             self.snap_on_dwell = self.keymap.snap_on_dwell;
         }
@@ -837,6 +839,7 @@ impl State {
         }
         self.dirty = true;
         eprintln!("wlr-draw: configuration reloaded");
+        config.warnings().to_vec()
     }
 
     /// Push the current draw-mode / colour / tool to the tray icon (no-op without it).
@@ -926,7 +929,7 @@ impl State {
         self.gesture = Gesture::None;
     }
 
-    /// Apply a control command from the socket.
+    /// Apply a control command, from the socket, the tray or a key.
     fn apply_cmd(&mut self, cmd: Cmd) {
         match cmd {
             Cmd::Toggle => self.set_draw_mode(!self.draw_mode),
@@ -983,8 +986,25 @@ impl State {
                 self.dirty = true;
             }
             Cmd::Save(path) => self.save_screenshot(path),
-            Cmd::Reload => self.reload_config(),
+            Cmd::Reload => {
+                self.reload_config();
+            }
             Cmd::Quit => self.quit = true,
+        }
+    }
+
+    /// Apply a command from the socket or the tray, and answer whoever waits for it with
+    /// what it found wrong: only `reload` finds anything, in the configuration.
+    fn apply_request(&mut self, ipc::Request { cmd, reply }: ipc::Request) {
+        let warnings = match cmd {
+            Cmd::Reload => self.reload_config(),
+            cmd => {
+                self.apply_cmd(cmd);
+                Vec::new()
+            }
+        };
+        if let Some(reply) = reply {
+            let _ = reply.send(warnings);
         }
     }
 
@@ -1412,8 +1432,10 @@ pub fn run() -> anyhow::Result<()> {
     let mut event_loop: EventLoop<State> = EventLoop::try_new()?;
     let lh = event_loop.handle();
 
-    let theme = Theme::load();
-    let keymap = Keymap::load();
+    let mut config = wlr_config::load();
+    let theme = config.theme().clone();
+    let keymap = Keymap::from_config(&mut config);
+    config.report();
     let snap_on_dwell = keymap.snap_on_dwell;
     let mut state = State {
         registry_state: RegistryState::new(&globals),
@@ -1503,7 +1525,7 @@ pub fn run() -> anyhow::Result<()> {
         .insert(lh.clone())
         .map_err(|e| anyhow::anyhow!("calloop wayland source: {e}"))?;
 
-    let (tx, ch): (_, Channel<Cmd>) = channel();
+    let (tx, ch): (_, Channel<ipc::Request>) = channel();
     // The tray sends menu actions over the same channel as the socket, and reflects the
     // daemon's status (icon + colour) back through its handle.
     #[cfg(feature = "tray")]
@@ -1515,8 +1537,8 @@ pub fn run() -> anyhow::Result<()> {
     #[cfg(not(feature = "tray"))]
     ipc::serve(listener, tx);
     lh.insert_source(ch, |event, _, state: &mut State| {
-        if let ChannelEvent::Msg(cmd) = event {
-            state.apply_cmd(cmd);
+        if let ChannelEvent::Msg(request) = event {
+            state.apply_request(request);
         }
     })
     .map_err(|e| anyhow::anyhow!("calloop channel source: {e}"))?;
@@ -2316,8 +2338,8 @@ fn paint_palette(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
     }
 }
 
-/// A binding's label for the key column, or the unassigned marker when `keys.toml` gave
-/// all its triggers to something else.
+/// A binding's label for the key column, or the unassigned marker when the configuration
+/// gave all its triggers to something else.
 fn key_label(label: Option<String>) -> String {
     label.unwrap_or_else(|| tr!("draw-help-key-unassigned"))
 }

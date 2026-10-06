@@ -50,6 +50,11 @@ draw-help-key-type = Saisir
 draw-help-key-text-end = Entrée / Échap
 draw-help-key-esc = Échap / Ctrl+[
 draw-help-key-unassigned = <non affecté>
+draw-config-bad-key-name = nom de touche inconnu `{ $name }`
+draw-config-dwell-zero = doit valoir au moins 1 ; `dwell = false` désactive l'alignement
+draw-config-two-actions = `{ $key }` est affecté à deux actions
+draw-config-role-and-tool = `{ $key }` est affecté à la fois à un contrôle maintenu et à un outil
+draw-config-two-roles = `{ $key }` est affecté à deux contrôles maintenus
 tray-status-drawing = Dessin
 tray-status-idle = Inactif (clic à travers)
 tray-toggle = Activer/désactiver le dessin

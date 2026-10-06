@@ -50,6 +50,11 @@ draw-help-key-type = Ввод
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
 draw-help-key-unassigned = <не назначено>
+draw-config-bad-key-name = неизвестное имя клавиши `{ $name }`
+draw-config-dwell-zero = должно быть не меньше 1; `dwell = false` отключает привязку
+draw-config-two-actions = `{ $key }` назначена двум действиям
+draw-config-role-and-tool = `{ $key }` назначена одновременно удерживаемому управлению и инструменту
+draw-config-two-roles = `{ $key }` назначена двум удерживаемым управлениям
 tray-status-drawing = Рисование
 tray-status-idle = Ожидание (сквозной клик)
 tray-toggle = Переключить режим рисования

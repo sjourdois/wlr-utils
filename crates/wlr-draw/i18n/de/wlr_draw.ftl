@@ -50,6 +50,11 @@ draw-help-key-type = Tippen
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
 draw-help-key-unassigned = <nicht belegt>
+draw-config-bad-key-name = unbekannter Tastenname `{ $name }`
+draw-config-dwell-zero = muss mindestens 1 sein; `dwell = false` schaltet das Einrasten aus
+draw-config-two-actions = `{ $key }` ist zwei Aktionen zugewiesen
+draw-config-role-and-tool = `{ $key }` ist zugleich einer gehaltenen Steuerung und einem Werkzeug zugewiesen
+draw-config-two-roles = `{ $key }` ist zwei gehaltenen Steuerungen zugewiesen
 tray-status-drawing = Zeichnen
 tray-status-idle = Inaktiv (Klick durchreichen)
 tray-toggle = Zeichenmodus umschalten

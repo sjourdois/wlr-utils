@@ -50,6 +50,11 @@ draw-help-key-type = 入力
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
 draw-help-key-unassigned = <未割り当て>
+draw-config-bad-key-name = 不明なキー名 `{ $name }`
+draw-config-dwell-zero = 1 以上にしてください。補正を切るには `dwell = false` を使います
+draw-config-two-actions = `{ $key }` が 2 つの操作に割り当てられています
+draw-config-role-and-tool = `{ $key }` が押し続ける操作とツールの両方に割り当てられています
+draw-config-two-roles = `{ $key }` が 2 つの押し続ける操作に割り当てられています
 tray-status-drawing = 描画中
 tray-status-idle = 待機中（クリックスルー）
 tray-toggle = 描画モードを切替

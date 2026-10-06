@@ -50,6 +50,11 @@ draw-help-key-type = Typen
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
 draw-help-key-unassigned = <niet toegewezen>
+draw-config-bad-key-name = onbekende toetsnaam `{ $name }`
+draw-config-dwell-zero = moet minstens 1 zijn; `dwell = false` zet uitlijnen uit
+draw-config-two-actions = `{ $key }` is aan twee acties gekoppeld
+draw-config-role-and-tool = `{ $key }` is zowel aan een ingedrukt gehouden bediening als aan een gereedschap gekoppeld
+draw-config-two-roles = `{ $key }` is aan twee ingedrukt gehouden bedieningen gekoppeld
 tray-status-drawing = Aan het tekenen
 tray-status-idle = Inactief (klik-door)
 tray-toggle = Tekenmodus wisselen

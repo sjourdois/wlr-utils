@@ -1,0 +1,35 @@
+[package]
+name = "wlr-config"
+description = "The configuration of the wlr-utils tools: one config.toml, its themes, and the migration from the old files."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+
+[lib]
+name = "wlr_config"
+path = "src/lib.rs"
+
+[features]
+default = ["i18n"]
+# Localised warnings via Fluent. Off (`--no-default-features`), they are in English, from
+# a table generated at build time, with no Fluent dependency.
+i18n = ["wlr-i18n/i18n", "dep:rust-embed"]
+
+[dependencies]
+wlr-i18n = { path = "../wlr-i18n", version = "1.10.0", default-features = false }
+rust-embed = { workspace = true, optional = true }
+ecolor.workspace = true
+serde.workspace = true
+serde_ignored.workspace = true
+toml.workspace = true
+toml_edit.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[build-dependencies]
+wlr-i18n = { path = "../wlr-i18n", version = "1.10.0", default-features = false }

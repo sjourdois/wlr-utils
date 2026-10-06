@@ -49,9 +49,10 @@ wlr-draw tool  <pen|rect|mask|arrow|text|eraser|move>   # mask = solid box to re
 wlr-draw color <name|#rgb|#rrggbb[aa]>   # red green blue yellow orange cyan magenta white black
 wlr-draw width <px>
 wlr-draw save [path]     # write the annotated screen to a PNG (Pictures dir by default)
-wlr-draw reload          # re-read keys.toml and the theme, keeping the drawing
+wlr-draw reload          # re-read the configuration, keeping the drawing
 wlr-draw quit            # stop the daemon
 wlr-draw doctor          # what the compositor supports (needs no daemon)
+wlr-draw migrate-config  # move the old keys.toml and theme.toml into config.toml
 ```
 
 In **draw mode** the overlay grabs the pointer and keyboard; in **click-through** mode
@@ -93,11 +94,18 @@ the colour — and it **pulses** a few times when you enter draw mode on an empt
 
 ### Customising shortcuts
 
-The shortcuts above are rebindable from **`~/.config/wlr-draw/keys.toml`** (honours
-`$XDG_CONFIG_HOME`), except the fixed ones listed below. Key names are the same **XKB
-keysym names** sway/Hyprland use in `bindsym` (`a`, `space`, `plus`, `F5`…), matched
-case-insensitively. Each binding is a single name or a list; missing entries keep their
-default, so a partial file is fine and no config at all means the defaults above.
+The shortcuts above are rebindable in the **`[draw.keys]`** section of
+[`config.toml`](../../README.md#configuration), except the fixed ones listed below. Key
+names are the same **XKB keysym names** sway/Hyprland use in `bindsym` (`a`, `space`,
+`plus`, `F5`…), matched case-insensitively. Each binding is a single name or a list;
+missing entries keep their default, so a partial section is fine and none at all means
+the defaults above.
+
+```toml
+[draw.keys]
+undo = ["u", "z"]
+passthrough = "alt"
+```
 
 The four held controls — `passthrough` (click-through), `constrain`, `spotlight`,
 `snap-invert` — take **a modifier** (`caps`, `ctrl`, `shift`, `alt`, `super`), **a
@@ -107,15 +115,14 @@ or any key (`alt` takes it from `snap-invert`, which you can then move elsewhere
 modifier engages while held (Caps Lock latches); a regular key bound to
 `passthrough` toggles, and to `constrain`/`spotlight`/`snap-invert` engages while held.
 
-The same file carries the two settings the `snap` binding acts on: `dwell` (whether a
-pen stroke snaps on its own) and `dwell-ms` (how long it must hold still, 650 by
+The `[draw]` section holds the two settings the `snap` binding acts on: `dwell` (whether
+a pen stroke snaps on its own) and `dwell-ms` (how long it must hold still, 650 by
 default). `dwell-ms = 0` is refused — the delay stays a delay, and `dwell = false` is
 how snapping is switched off.
 
-A commented example listing every binding with its default is at
-[`docs/wlr-draw-keys.toml`](../../docs/wlr-draw-keys.toml) — copy it to
-`~/.config/wlr-draw/keys.toml` and edit. A [reload](#stopping-restarting-logs) applies
-your changes without losing the drawing.
+[`docs/config.toml`](../../docs/config.toml) lists every binding with its default. A
+[reload](#stopping-restarting-logs) applies your changes without losing the drawing, and
+names what it could not apply.
 
 Fixed (not rebindable): `Esc` and its alias `Ctrl+[` (always back out), the arrow-key
 nudge, and the spotlight size/dim cluster (`i`/`j`/`k`/`l` + wheel, live only while
@@ -164,7 +171,7 @@ on-screen `h` legend and the tray's Shortcuts menu reflect your bindings.
   without releasing the button*. The freehand blob snaps to a clean ellipse (a perfect
   circle when roughly round) or a straight line, which you then **resize live** by
   moving the mouse. Release to commit.
-  - The delay is `dwell-ms` in `keys.toml` (650 ms by default), and `dwell = false`
+  - The delay is `dwell-ms` in `[draw]` (650 ms by default), and `dwell = false`
     starts with snapping off.
   - **`d`** (or `wlr-draw snap`) turns it on and off while drawing. Outside the
     spotlight, the status chip says `snap off` when a pen stroke would not snap.
@@ -251,10 +258,11 @@ default XDG-autostart launch: systemd names that unit after the desktop file and
 the dash as `\x2d`, so the quotes matter. Started from the systemd unit above instead,
 it is plain `systemctl --user restart wlr-draw`.
 
-A reload re-reads `keys.toml` and the theme (`~/.config/wlr-chooser/theme.toml`) and
-keeps the drawing, the tool, the colour, the width, and snapping as `d` left it unless you
-changed `dwell`. `kill -HUP` on the daemon does the same, and so does
-`systemctl --user reload wlr-draw` with the systemd unit above.
+A reload re-reads the configuration and keeps the drawing, the tool, the colour, the
+width, and snapping as `d` left it unless you changed `dwell`. `wlr-draw reload` prints
+what it could not apply. `kill -HUP` on the daemon does the same reload, and so does
+`systemctl --user reload wlr-draw` with the systemd unit above; what they could not apply
+goes to the daemon's log.
 
 ### Tray icon
 

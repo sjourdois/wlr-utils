@@ -1,0 +1,64 @@
+# wlr-utils configuration, every setting at its default.
+#
+# Copy it to ~/.config/wlr-utils/config.toml and keep only what you change. The settings
+# without a default are commented out.
+
+[theme]
+# A theme file, by name or by path. The installed themes are in
+# /usr/share/wlr-utils/themes, and yours go in ~/.config/wlr-utils/themes. The keys
+# below set over it.
+# name = "nord"
+
+# Colours: #rgb, #rrggbb or #rrggbbaa.
+backdrop = "#0000008c"
+bg = "#1e2127"
+card = "#21252d"
+tile = "#181b22"
+tile-hover = "#262b33"
+tile-selected = "#3b4252"
+thumb = "#12141a"
+text = "#d8dee9"
+text-dim = "#7a8290"
+accent = "#88c0d0"
+screen-accent = "#81a1c1"
+window-accent = "#b48ead"
+
+# The UI font: a family name, or a font file. Japanese, Chinese and Korean text use the
+# CJK font, found on its own when unset.
+# font = "Inter"
+# font-path = "/usr/share/fonts/TTF/Inter.ttf"
+# cjk-font = "Noto Sans CJK JP"
+# font-size = 14.0
+
+[draw]
+# Whether a pen stroke held still snaps to a clean line or ellipse, and after how long.
+dwell = true
+dwell-ms = 650
+
+[draw.keys]
+# Key names are XKB keysym names, as in sway's bindsym: a, space, plus, F5. A binding
+# takes one name or a list.
+pen = "p"
+rect = "r"
+mask = "m"
+arrow = "a"
+text = "t"
+move = "s"
+eraser = "e"
+palette = "c"
+undo = "u"
+redo = "y"
+visibility = "v"
+save = "w"
+help = "h"
+clear = "Delete"
+width-inc = ["plus", "equal", "KP_Add"]
+width-dec = ["minus", "KP_Subtract"]
+freeze = ["space", "KP_Space"]
+snap = "d"
+
+# Held controls: a modifier (caps, ctrl, shift, alt, super), a key, or a list.
+passthrough = "caps"
+constrain = "ctrl"
+spotlight = "shift"
+snap-invert = "alt"

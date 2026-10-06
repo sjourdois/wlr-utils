@@ -1,5 +1,5 @@
 # Catppuccin Macchiato theme for wlr-utils.
-# Copy or symlink to ~/.config/wlr-chooser/theme.toml.
+# Set `name = "catppuccin-macchiato"` in the [theme] section of config.toml.
 backdrop       = "#181926cc"
 bg             = "#1e2030"
 card           = "#24273a"

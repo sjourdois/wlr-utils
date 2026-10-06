@@ -175,6 +175,10 @@ struct Cli {
     /// Report which capture protocols the current compositor supports, then exit.
     #[arg(long)]
     doctor: bool,
+    /// Move the old theme.toml and keys.toml into ~/.config/wlr-utils/config.toml, then
+    /// delete them; with `-`, print the new file instead and touch nothing.
+    #[arg(long, value_name = "-", num_args = 0..=1, value_parser = ["-"])]
+    migrate_config: Option<Option<String>>,
     /// Show the overlay in this process, even if a `wlr-overlayd` daemon is running —
     /// and without the notice that says none is.
     #[arg(long)]
@@ -201,6 +205,16 @@ pub fn main() {
         wlr_capture::wl::disable_gpu_globally();
     }
     i18n::init();
+    wlr_config::set_migrate_command("wlr-switcher --migrate-config");
+
+    if let Some(output) = cli.migrate_config {
+        let output = wlr_config::migrate::Output::from_arg(output.as_deref());
+        if let Err(e) = wlr_config::migrate::run(output) {
+            eprintln!("wlr-switcher: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
 
     if cli.doctor {
         if let Err(e) = wlr_capture::doctor::report("wlr-switcher", wlr_capture::version!()) {

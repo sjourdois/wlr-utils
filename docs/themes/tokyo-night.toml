@@ -1,5 +1,5 @@
 # Tokyo Night theme for wlr-utils.
-# Copy or symlink to ~/.config/wlr-chooser/theme.toml.
+# Set `name = "tokyo-night"` in the [theme] section of config.toml.
 backdrop       = "#16161ecc"
 bg             = "#1a1b26"
 card           = "#24283b"

@@ -11,6 +11,7 @@
 //!
 //! Runs on its own thread (ksni owns a D-Bus connection); a no-op without a session bus.
 
+use crate::ipc::Request;
 use crate::model::{Color, Tool};
 use crate::overlay::HelpRow;
 use crate::proto::Cmd;
@@ -24,7 +25,7 @@ use smithay_client_toolkit::reexports::calloop::channel::Sender;
 /// `autostart` mirrors whether the XDG autostart entry exists (toggled from the menu,
 /// independent of the daemon — see [`crate::autostart`]).
 pub struct DrawTray {
-    tx: Sender<Cmd>,
+    tx: Sender<Request>,
     pub active: bool,
     pub color: Color,
     pub tool: Tool,
@@ -64,7 +65,7 @@ impl Tray for DrawTray {
     }
 
     fn activate(&mut self, _x: i32, _y: i32) {
-        let _ = self.tx.send(Cmd::Toggle);
+        let _ = self.tx.send(Cmd::Toggle.into());
     }
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
@@ -72,7 +73,7 @@ impl Tray for DrawTray {
             StandardItem {
                 label: tr!("tray-toggle"),
                 activate: Box::new(|t: &mut DrawTray| {
-                    let _ = t.tx.send(Cmd::Toggle);
+                    let _ = t.tx.send(Cmd::Toggle.into());
                 }),
                 ..Default::default()
             }
@@ -80,7 +81,7 @@ impl Tray for DrawTray {
             StandardItem {
                 label: tr!("tray-clear"),
                 activate: Box::new(|t: &mut DrawTray| {
-                    let _ = t.tx.send(Cmd::Clear);
+                    let _ = t.tx.send(Cmd::Clear.into());
                 }),
                 ..Default::default()
             }
@@ -88,7 +89,7 @@ impl Tray for DrawTray {
             StandardItem {
                 label: tr!("tray-undo"),
                 activate: Box::new(|t: &mut DrawTray| {
-                    let _ = t.tx.send(Cmd::Undo);
+                    let _ = t.tx.send(Cmd::Undo.into());
                 }),
                 ..Default::default()
             }
@@ -126,7 +127,7 @@ impl Tray for DrawTray {
             StandardItem {
                 label: tr!("tray-quit"),
                 activate: Box::new(|t: &mut DrawTray| {
-                    let _ = t.tx.send(Cmd::Quit);
+                    let _ = t.tx.send(Cmd::Quit.into());
                 }),
                 ..Default::default()
             }
@@ -171,7 +172,7 @@ fn shortcut_items(rows: &[HelpRow]) -> Vec<MenuItem<DrawTray>> {
 /// Start the tray on its own thread, returning a handle for status updates. `None` if
 /// there is no D-Bus session bus (e.g. headless), so the daemon still runs.
 pub fn spawn(
-    tx: Sender<Cmd>,
+    tx: Sender<Request>,
     color: Color,
     tool: Tool,
     shortcuts: Vec<HelpRow>,

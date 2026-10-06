@@ -12,12 +12,18 @@ All notable changes to this project are documented here. The format is based on
   ([#21](https://github.com/sjourdois/wlr-utils/pull/21), by
   [@bR3iN](https://github.com/bR3iN)) — brings the picked window onto the current
   workspace, on sway, Hyprland and cosmic-comp.
-- **`wlr-draw reload`** — re-reads `keys.toml` and the theme and keeps the drawing,
-  however the daemon was started.
+- **One `config.toml` for every tool** — `~/.config/wlr-utils/config.toml` holds the
+  theme in `[theme]`, by `name` and with any of its keys set over it, and `wlr-draw`'s
+  settings in `[draw]` and `[draw.keys]`. `docs/config.toml` lists every setting at its
+  default. A mistake is named, with its file and key, on stderr and by `doctor`.
+- **`migrate-config`** — moves the old `theme.toml` and `keys.toml` into `config.toml`,
+  comments included, then deletes them; `-` prints the new file instead.
+- **`wlr-draw reload`** — re-reads the configuration and keeps the drawing, however the
+  daemon was started, and prints what it could not apply.
 - **An install script for packagers** — `packaging/install.sh` installs the binaries,
-  the systemd units, the themes, the README and the licences, and honours `DESTDIR` and
-  `PREFIX`. The release archive carries it, and the packages now ship the themes in
-  `/usr/share/wlr-utils/themes`.
+  the systemd units, the themes, the example configuration, the README and the
+  licences, and honours `DESTDIR` and `PREFIX`. The release archive carries it, and the
+  packages now ship the themes in `/usr/share/wlr-utils/themes`.
 
 ### Changed
 
@@ -87,14 +93,24 @@ All notable changes to this project are documented here. The format is based on
 - **The systemd units start a `cargo install`ed daemon** — systemd looked `wlr-draw` and
   `wlr-overlayd` up in `/usr/bin` and `/usr/local/bin` only; the units now go through the
   user manager's `PATH`.
+- **A theme that cannot be applied says so** — an unreadable theme file, a value that is
+  no colour or a misspelled key left the default colours without a word.
+- **Translated messages no longer wrap the values they insert in bidi isolation marks**
+  — every language had them, English included.
+
+### Deprecated
+
+- **`~/.config/wlr-chooser/theme.toml` and `~/.config/wlr-draw/keys.toml`** — still read,
+  with a warning, when there is no `config.toml`, until 2.0.
 
 ### Breaking
 
 - `wlr-capture`: the `overlay` functions (`select_region`, `pick_point`, `magnify` and
   their `_on` forms) take the layer-shell namespace to use, and
   `VideoEncoder::resolved_backend` is gone: with `Backend::Auto`, the encoder is only
-  known once the first frame opens it, and the engine logs it then. Shipped as a minor
-  version: the crate is published to let the binaries be.
+  known once the first frame opens it, and the engine logs it then. `Theme` comes from
+  the new `wlr-config` crate, and its `apply` from the `theme::ApplyTheme` trait. Shipped
+  as a minor version: the crate is published to let the binaries be.
 
 ## 1.10.0 — 2026-09-24
 

@@ -3,28 +3,7 @@
 //! SVG via `resvg`.
 
 use std::path::{Path, PathBuf};
-
-/// Base data directories, in XDG precedence order (`XDG_DATA_HOME` first, then
-/// `XDG_DATA_DIRS`): a user copy of an entry must win over the system one.
-fn data_dirs() -> Vec<PathBuf> {
-    let mut v = Vec::new();
-    match std::env::var("XDG_DATA_HOME") {
-        Ok(d) if !d.is_empty() => v.push(PathBuf::from(d)),
-        _ => {
-            if let Ok(home) = std::env::var("HOME") {
-                v.push(PathBuf::from(home).join(".local/share"));
-            }
-        }
-    }
-    let dirs = std::env::var("XDG_DATA_DIRS").unwrap_or_default();
-    let dirs = if dirs.is_empty() {
-        "/usr/local/share:/usr/share".to_string()
-    } else {
-        dirs
-    };
-    v.extend(dirs.split(':').filter(|d| !d.is_empty()).map(PathBuf::from));
-    v
-}
+use wlr_config::paths::data_dirs;
 
 fn app_dirs() -> Vec<PathBuf> {
     data_dirs()

@@ -52,6 +52,7 @@ pub fn main() {
     let t0 = Instant::now();
     let cli = Cli::parse();
     i18n::init();
+    wlr_config::set_migrate_command("wlr-chooser --migrate-config");
 
     if cli.quit {
         if let Err(e) = daemon::quit() {

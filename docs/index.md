@@ -106,7 +106,7 @@ wlr-shot record -o DP-1 --crf 18 --cursor out.mp4   # finer encoding, pointer in
 **Scribble over anything.** Arrows, shapes, dwell-snap and text on a transparent
 always-on-top overlay — plus a presenter **spotlight** to focus the room. Hold a
 freehand stroke still and it snaps to a clean line or ellipse; tune that delay in
-`keys.toml`, switch it off with a key, or hold Alt to invert it for one stroke.
+`config.toml`, switch it off with a key, or hold Alt to invert it for one stroke.
 
 <video src="assets/wlr-draw/annotate.mp4" autoplay loop muted playsinline width="900"></video>
 

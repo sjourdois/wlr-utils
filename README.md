@@ -231,6 +231,43 @@ systemctl --user disable --now wlr-overlayd.service
 rm -f ~/.config/systemd/user/wlr-overlayd.service   # only if you copied it there
 ```
 
+## Configuration
+
+Every tool reads one file, `~/.config/wlr-utils/config.toml` (`$XDG_CONFIG_HOME` is
+honoured). `~/.wlr-utils.toml` works too, and `/etc/xdg/wlr-utils/config.toml` is the
+system's default: the first one found is the only one read. Nothing in it is required.
+A mistake is reported on stderr and by `doctor`, and the rest still applies.
+
+```toml
+[theme]
+name = "catppuccin-mocha"   # a theme, by name or by path
+accent = "#89b4fa"          # …and any of its keys, set over it
+
+[draw]
+dwell-ms = 400
+
+[draw.keys]
+undo = ["u", "z"]
+```
+
+[`docs/config.toml`](docs/config.toml) lists every setting at its default; packages
+install it in `/usr/share/doc/wlr-utils`. They install the themes in
+`/usr/share/wlr-utils/themes`: Catppuccin (Mocha, Macchiato, Frappé, Latte), Nord,
+Gruvbox, Dracula and Tokyo Night. Yours go in `~/.config/wlr-utils/themes`, and that is
+also where to copy [`docs/themes`](docs/themes) after a `cargo install`, which installs
+none.
+
+Until wlr-utils 2.0, the old `~/.config/wlr-chooser/theme.toml` and
+`~/.config/wlr-draw/keys.toml` are still read when there is no `config.toml`, with a
+warning. One command moves them in, comments included, then deletes them; with `-`, it
+prints the new file instead and touches nothing, for a configuration kept in a dotfile
+manager:
+
+```sh
+wlr-draw migrate-config     # also wlr-shot and wlr-peek, or wlr-chooser --migrate-config
+wlr-draw migrate-config -
+```
+
 ## Compositor rules
 
 Each overlay is a `wlr-layer-shell` surface named after the command that shows it, so a
@@ -259,6 +296,8 @@ window rules.
 - **[wlr-draw README](crates/wlr-draw/README.md)** — the annotation overlay: daemon,
   control socket, tools and example key bindings.
 - **[wlr-capture README](crates/wlr-capture/README.md)** — the shared engine.
+- **[wlr-config README](crates/wlr-config/README.md)** — the configuration, its themes
+  and the migration from the old files.
 - **[wlr-i18n README](crates/wlr-i18n/README.md)** — the shared localisation plumbing.
 
 ## Contributing

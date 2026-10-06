@@ -64,9 +64,10 @@ egui_glow = { workspace = true, optional = true }
 wayland-egl = { workspace = true, optional = true }
 image = { workspace = true, optional = true }
 resvg = { workspace = true, optional = true }
-toml = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
 fontconfig = { workspace = true, optional = true }
+# The theme, read from the configuration; its warnings are localised when a tool turns
+# on `wlr-config/i18n`.
+wlr-config = { path = "../wlr-config", version = "1.10.0", default-features = false, optional = true }
 
 [dev-dependencies]
 # Private (0600), randomly-named, auto-removed temp output for the encoder round-trip test.
@@ -123,7 +124,6 @@ toolkit = [
     "dep:wayland-egl",
     "dep:image",
     "dep:resvg",
-    "dep:toml",
-    "dep:serde",
+    "dep:wlr-config",
     "dep:fontconfig",
 ]

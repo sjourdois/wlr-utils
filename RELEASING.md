@@ -33,9 +33,10 @@ skip and expensive to miss:
 - [ ] **Root [`README.md`](README.md)** — the tool table, the shared-library paragraph
       (which crates), Requirements, Install, the Documentation links.
 - [ ] **Every crate README** — one per crate, they must all exist and be current:
-      `crates/wlr-capture`, `crates/wlr-i18n`, `crates/wlr-chooser`, `crates/wlr-shot`,
-      `crates/wlr-peek`, `crates/wlr-draw`, `crates/wlr-utils`. A **new crate** needs its
-      own `README.md` *and* a `readme = "README.md"` line in its `Cargo.toml`.
+      `crates/wlr-capture`, `crates/wlr-config`, `crates/wlr-i18n`, `crates/wlr-chooser`,
+      `crates/wlr-shot`, `crates/wlr-peek`, `crates/wlr-draw`, `crates/wlr-utils`. A **new
+      crate** needs its own `README.md` *and* a `readme = "README.md"` line in its
+      `Cargo.toml`.
 - [ ] **A new binary** drifts in more places than a new crate, because nothing fails to
       build when one is missed: `[[bin]]` in its own crate *and* in the `wlr-utils`
       bundle (with the shim under `src/bin/`), the `assets` list of both `.deb`s, both
@@ -49,7 +50,7 @@ skip and expensive to miss:
       protocols between our releases, so a `❌` goes stale on its own. Check each
       project's current release notes, say which rows were verified at runtime and on
       which version, and leave the rest marked as inferred.
-- [ ] **`docs/`** — `wlr-draw-keys.toml`, `themes/`, `index.md` (the showcase site).
+- [ ] **`docs/`** — `config.toml`, `themes/`, `index.md` (the showcase site).
 
 Quick sanity greps (adjust to the change):
 
@@ -84,7 +85,7 @@ grep 'for pkg in' .github/workflows/publish.yml   # every crate in the publish o
    - The `publish` workflow publishes each crate to **crates.io** in dependency order
      (`for pkg in …` in `.github/workflows/publish.yml`: a crate before anything that
      depends on it — currently
-     `wlr-capture wlr-i18n wlr-chooser wlr-shot wlr-peek wlr-draw wlr-utils`).
+     `wlr-i18n wlr-config wlr-capture wlr-chooser wlr-shot wlr-peek wlr-draw wlr-utils`).
    - The cargo-dist `release` workflow builds the binaries + installer and creates
      the GitHub Release.
    - `deb` and `aur` are **chained to `release`** (a `workflow_run` trigger), because

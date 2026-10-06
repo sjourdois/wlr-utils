@@ -23,7 +23,7 @@ default = ["ocr", "watch", "i18n", "gpu"]
 gpu = ["wlr-capture/gpu"]
 # Localised UI (the overlay hint) via Fluent. On by default; `--no-default-features`
 # builds English-only with no Fluent dependency.
-i18n = ["wlr-i18n/i18n", "dep:rust-embed"]
+i18n = ["wlr-i18n/i18n", "wlr-config/i18n", "dep:rust-embed"]
 # The change monitor (`wlr-peek watch`): stream a source and fire on change / idle.
 # On by default; pulls no extra crate (the streaming + diff primitives live in the
 # engine core) but enables `focus` for the active-window / current-output sources.
@@ -43,6 +43,8 @@ ocr = ["dep:leptess", "dep:image", "wlr-capture/focus"]
 wlr-capture = { path = "../wlr-capture", version = "1.10.0", default-features = false, features = ["overlay", "mirror"] }
 # This crate owns its localised catalog (`i18n/`); wlr-i18n is the shared loader plumbing.
 wlr-i18n = { path = "../wlr-i18n", version = "1.10.0", default-features = false }
+# config.toml: the theme, and the migration from the old files.
+wlr-config = { path = "../wlr-config", version = "1.10.0", default-features = false }
 # For `#[derive(RustEmbed)]` over `i18n/` (the `i18n` feature).
 rust-embed = { workspace = true, optional = true }
 anyhow.workspace = true

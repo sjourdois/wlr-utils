@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use wlr_capture::capture::WindowFilter;
 use wlr_capture::keys::KeyPress;
 use wlr_capture::render::DmabufImporter;
-use wlr_capture::theme::Theme;
+use wlr_capture::theme::{ApplyTheme, Theme};
 use wlr_capture::{focus, icons, wl};
 
 /// Shared slot where the chosen source lands; read by `main` after the window closes.

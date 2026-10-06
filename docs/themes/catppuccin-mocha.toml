@@ -1,5 +1,5 @@
 # Catppuccin Mocha theme for wlr-utils.
-# Copy to ~/.config/wlr-chooser/theme.toml (or $XDG_CONFIG_HOME/wlr-chooser/theme.toml).
+# Set `name = "catppuccin-mocha"` in the [theme] section of config.toml.
 # Palette: https://github.com/catppuccin/catppuccin
 
 backdrop       = "#11111baa"  # crust, dimmed (overlay behind the card)

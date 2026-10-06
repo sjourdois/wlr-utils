@@ -77,12 +77,19 @@ enum Ctl {
         /// Destination path; omit for a timestamped file in your Pictures directory
         path: Option<String>,
     },
-    /// Re-read keys.toml and the theme, keeping the drawing
+    /// Re-read the configuration, keeping the drawing
     Reload,
     /// Stop the running daemon
     Quit,
     /// Report which capture protocols the current compositor supports
     Doctor,
+    /// Move the old theme.toml and keys.toml into ~/.config/wlr-utils/config.toml, then
+    /// delete them
+    MigrateConfig {
+        /// `-` prints the new file instead, and touches nothing
+        #[arg(value_parser = ["-"])]
+        output: Option<String>,
+    },
 }
 
 pub fn main() -> anyhow::Result<()> {
@@ -90,6 +97,7 @@ pub fn main() -> anyhow::Result<()> {
     // feature). Like every other binary in the workspace — without it the tray menu and
     // on-screen hints stay English regardless of `$LANG`.
     crate::i18n::init();
+    wlr_config::set_migrate_command("wlr-draw migrate-config");
     let cli = Cli::parse();
     if cli.no_gpu {
         wlr_capture::wl::disable_gpu_globally();
@@ -99,6 +107,10 @@ pub fn main() -> anyhow::Result<()> {
         // Doctor probes the compositor directly — it doesn't drive the daemon.
         Some(Ctl::Doctor) => {
             wlr_capture::doctor::report("wlr-draw", wlr_capture::version!()).map_err(Into::into)
+        }
+        Some(Ctl::MigrateConfig { output }) => {
+            let output = wlr_config::migrate::Output::from_arg(output.as_deref());
+            wlr_config::migrate::run(output).map_err(Into::into)
         }
         Some(ctl) => ipc::send(&ctl_to_cmd(ctl)?),
     }
@@ -128,8 +140,10 @@ fn ctl_to_cmd(ctl: Ctl) -> anyhow::Result<Cmd> {
         // The daemon writes the file from its own directory: a relative path has to
         // mean the caller's.
         Ctl::Save { path } => Cmd::Save(path.as_deref().map(absolute).transpose()?),
-        // Not a daemon command — handled directly in `main` before we get here.
-        Ctl::Doctor => unreachable!("Doctor is handled before ctl_to_cmd"),
+        // Not daemon commands — handled directly in `main` before we get here.
+        Ctl::Doctor | Ctl::MigrateConfig { .. } => {
+            unreachable!("handled before ctl_to_cmd")
+        }
     })
 }
 

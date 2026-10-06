@@ -62,9 +62,9 @@ The reusable bricks plus the overlay UI helpers they share:
   context bound to a `wl_surface`, reusing `gl`'s dma-buf import for live textures.
   Any windowing host binds a `Gpu` to its surface and drives one egui frame per
   repaint.
-- **`theme` / `icons`** *(toolkit)* — TOML theming and `.desktop`/icon-theme
-  app-icon resolution. On-screen text is passed in by the caller; each tool crate
-  owns its own Fluent catalog via the `wlr-i18n` crate.
+- **`theme` / `icons`** *(toolkit)* — applying the theme `wlr-config` reads to egui, and
+  `.desktop`/icon-theme app-icon resolution. On-screen text is passed in by the caller;
+  each tool crate owns its own Fluent catalog via the `wlr-i18n` crate.
 
 ## Status
 

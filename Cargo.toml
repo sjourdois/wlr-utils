@@ -2,6 +2,7 @@
 members = [
     "crates/wlr-capture",
     "crates/wlr-chooser",
+    "crates/wlr-config",
     "crates/wlr-draw",
     "crates/wlr-i18n",
     "crates/wlr-peek",
@@ -15,6 +16,7 @@ members = [
 default-members = [
     "crates/wlr-capture",
     "crates/wlr-chooser",
+    "crates/wlr-config",
     "crates/wlr-draw",
     "crates/wlr-i18n",
     "crates/wlr-peek",
@@ -35,6 +37,9 @@ homepage = "https://github.com/sjourdois/wlr-utils"
 [workspace.dependencies]
 anyhow = "1"
 egui = "0.36"
+# egui's colour type on its own, for the theme in wlr-config: must match egui's version,
+# so both crates name the same `Color32`.
+ecolor = "0.36"
 # Low-level Wayland client for toplevel capture (ext-image-copy-capture).
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["staging", "client"] }
@@ -52,6 +57,8 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1"
 # Names the entries a config file holds that its schema does not (a misspelled key).
 serde_ignored = "0.1.14"
+# Rewrites the old configuration files into config.toml, comments included.
+toml_edit = "0.25.15"
 swayipc = "4.0.0"
 smithay-client-toolkit = "0.21.1"
 wayland-egl = "0.32.11"

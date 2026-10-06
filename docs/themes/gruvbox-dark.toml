@@ -1,5 +1,5 @@
 # Gruvbox (dark) theme for wlr-utils.
-# Copy or symlink to ~/.config/wlr-chooser/theme.toml.
+# Set `name = "gruvbox-dark"` in the [theme] section of config.toml.
 backdrop       = "#1d2021cc"
 bg             = "#282828"
 card           = "#32302f"

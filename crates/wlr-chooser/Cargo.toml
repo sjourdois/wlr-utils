@@ -33,6 +33,8 @@ path = "src/bin/wlr-overlayd.rs"
 wlr-capture = { path = "../wlr-capture", version = "1.10.0", default-features = false, features = ["toolkit", "focus", "compose", "pointer", "keys"] }
 # This crate owns its localised catalog (`i18n/`); wlr-i18n is the shared loader plumbing.
 wlr-i18n = { path = "../wlr-i18n", version = "1.10.0", default-features = false }
+# config.toml: the theme, and the migration from the old files.
+wlr-config = { path = "../wlr-config", version = "1.10.0", default-features = false }
 # For `#[derive(RustEmbed)]` over `i18n/` (the `i18n` feature).
 rust-embed = { workspace = true, optional = true }
 anyhow.workspace = true
@@ -59,7 +61,7 @@ default = ["gpu", "i18n"]
 gpu = ["wlr-capture/gpu"]
 # Localised UI via Fluent. On by default; `--no-default-features` builds English-only
 # with no Fluent dependency.
-i18n = ["wlr-i18n/i18n", "dep:rust-embed"]
+i18n = ["wlr-i18n/i18n", "wlr-config/i18n", "dep:rust-embed"]
 
 [package.metadata.deb]
 maintainer = "Stéphane Jourdois <stephane@jourdois.fr>"
@@ -81,7 +83,7 @@ assets = [
     ["../../target/release/wlr-switcher", "usr/bin/", "755"],
     ["../../target/release/wlr-overlayd", "usr/bin/", "755"],
     ["README.md", "usr/share/doc/wlr-chooser/README.md", "644"],
-    ["../../docs/themes/*.toml", "usr/share/doc/wlr-chooser/themes/", "644"],
+    ["../../docs/themes/*.toml", "usr/share/wlr-utils/themes/", "644"],
 ]
 
 [package.metadata.dist]

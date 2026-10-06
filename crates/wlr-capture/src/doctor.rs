@@ -230,7 +230,36 @@ pub fn report(tool: &str, version: &str) -> Result<()> {
         None => println!("Focus IPC: none detected (-a / --current-output unavailable)."),
     }
 
+    #[cfg(feature = "toolkit")]
+    config_report();
+
     Ok(())
+}
+
+/// Where the configuration comes from, and what is wrong with it.
+#[cfg(feature = "toolkit")]
+fn config_report() {
+    use wlr_config::Source;
+
+    let home = std::env::var("HOME").ok().filter(|h| !h.is_empty());
+    let path = |p: &std::path::Path| redact_home(&p.display().to_string(), home.as_deref());
+    let config = wlr_config::load();
+    println!();
+    match config.source() {
+        Source::Defaults => println!("Configuration: none, every setting at its default."),
+        Source::File(file) => println!("Configuration: {}", path(file)),
+        Source::Legacy { theme, keys } => {
+            let files: Vec<String> = theme.iter().chain(keys).map(|f| path(f)).collect();
+            println!("Configuration: the old files {}", files.join(", "));
+        }
+    }
+    for warning in config.warnings() {
+        let warning = match &home {
+            Some(home) => warning.replace(home.as_str(), "~"),
+            None => warning.clone(),
+        };
+        println!("  ! {warning}");
+    }
 }
 
 /// Replace a leading `$HOME` in `path` with `~` so `doctor` output can be pasted into a

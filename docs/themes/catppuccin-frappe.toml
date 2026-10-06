@@ -1,5 +1,5 @@
 # Catppuccin Frappé theme for wlr-utils.
-# Copy or symlink to ~/.config/wlr-chooser/theme.toml.
+# Set `name = "catppuccin-frappe"` in the [theme] section of config.toml.
 backdrop       = "#232634cc"
 bg             = "#292c3c"
 card           = "#303446"

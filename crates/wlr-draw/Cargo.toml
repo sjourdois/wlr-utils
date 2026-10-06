@@ -19,7 +19,7 @@ path = "src/main.rs"
 default = ["i18n", "tray"]
 # Localised UI (the on-screen HUD hints) via Fluent. On by default; `--no-default-features`
 # builds English-only with no Fluent dependency.
-i18n = ["wlr-i18n/i18n", "dep:rust-embed"]
+i18n = ["wlr-i18n/i18n", "wlr-config/i18n", "dep:rust-embed"]
 # StatusNotifierItem tray icon (status + a click-to-toggle menu) via `ksni`, which talks
 # D-Bus through the pure-Rust zbus. On by default; `--no-default-features` drops it.
 tray = ["dep:ksni"]
@@ -32,19 +32,19 @@ tray = ["dep:ksni"]
 wlr-capture = { path = "../wlr-capture", version = "1.10.0", default-features = false, features = ["toolkit", "compose", "pointer", "keys"] }
 # This crate owns its own localised catalog (`i18n/`); wlr-i18n is the shared loader plumbing.
 wlr-i18n = { path = "../wlr-i18n", version = "1.10.0", default-features = false }
+# config.toml: the theme, the `[draw]` section, and the migration from keys.toml.
+wlr-config = { path = "../wlr-config", version = "1.10.0", default-features = false }
 # For the `#[derive(RustEmbed)]` over this crate's `i18n/` folder (the `i18n` feature).
 rust-embed = { workspace = true, optional = true }
 anyhow.workspace = true
 clap.workspace = true
 egui.workspace = true
-# Configurable keybindings (`~/.config/wlr-draw/keys.toml`): TOML + serde for the file,
+# Configurable keybindings (`[draw.keys]` in config.toml): serde for the section,
 # xkbcommon for XKB keysym <-> name parsing (the names sway/Hyprland `bindsym` use).
 # xkbcommon is already linked transitively via smithay-client-toolkit (no new system dep).
-toml.workspace = true
 serde.workspace = true
-serde_ignored.workspace = true
 xkbcommon.workspace = true
-# SIGHUP (`systemctl --user reload`) re-reads keys.toml and the theme: the handler only
+# SIGHUP (`systemctl --user reload`) re-reads the configuration: the handler only
 # writes to a socket the calloop loop watches, so the reload runs on the loop.
 signal-hook.workspace = true
 # Layer-shell windowing + the calloop event loop (reused via sctk's reexports), so the
@@ -65,6 +65,11 @@ ksni = { version = "0.3", optional = true, default-features = false, features = 
 # Generates the English fallback table for the `--no-default-features` (no-Fluent) build.
 [build-dependencies]
 wlr-i18n = { path = "../wlr-i18n", version = "1.10.0", default-features = false }
+
+[dev-dependencies]
+# The tests write sections as TOML, and whole configurations in a temporary home.
+toml.workspace = true
+tempfile.workspace = true
 
 [package.metadata.deb]
 maintainer = "Stéphane Jourdois <stephane@jourdois.fr>"

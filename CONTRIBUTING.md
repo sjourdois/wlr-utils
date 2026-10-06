@@ -10,6 +10,7 @@ welcome.
 | Crate | Binaries | What it is |
 |-------|----------|------------|
 | `wlr-capture` | — | the shared engine: wlroots capture (`ext-image-copy-capture-v1`, or `wlr-screencopy` for screens, dma-buf zero-copy + shm fallback) and the egui/EGL overlay toolkit |
+| `wlr-config` | — | `config.toml`: finding and reading it, the themes, the migration from the old files |
 | `wlr-i18n` | — | shared Fluent localisation plumbing; each tool builds its own catalog on it |
 | `wlr-chooser` | `wlr-chooser`, `wlr-switcher`, `wlr-overlayd` | screen-share picker + Alt-Tab/exposé switcher, and the daemon that keeps their overlay warm |
 | `wlr-shot` | `wlr-shot` | screenshots & recording |
@@ -76,9 +77,9 @@ renders via an auto-detected CJK font. CLI `--help` text stays English by design
 
 ## Themes
 
-A theme is a `theme.toml` of colours (and optional fonts), shared by the
-overlays. Add new palettes to `docs/themes/`; the keys are documented in
-`crates/wlr-capture/src/theme.rs`.
+A theme is a file of colours (and optional fonts) shared by the overlays: the keys of
+the `[theme]` section, without its header. Add new palettes to `docs/themes/`; the keys
+are listed in [`docs/config.toml`](docs/config.toml).
 
 ## Commit messages & license
 

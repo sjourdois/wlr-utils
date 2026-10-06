@@ -50,6 +50,11 @@ draw-help-key-type = 입력
 draw-help-key-text-end = Enter / Esc
 draw-help-key-esc = Esc / Ctrl+[
 draw-help-key-unassigned = <할당 안 됨>
+draw-config-bad-key-name = 알 수 없는 키 이름 `{ $name }`
+draw-config-dwell-zero = 1 이상이어야 합니다. 맞춤을 끄려면 `dwell = false`를 쓰세요
+draw-config-two-actions = `{ $key }` 키가 두 동작에 할당되어 있습니다
+draw-config-role-and-tool = `{ $key }` 키가 누르고 있는 조작과 도구에 모두 할당되어 있습니다
+draw-config-two-roles = `{ $key }` 키가 누르고 있는 조작 두 개에 할당되어 있습니다
 tray-status-drawing = 그리는 중
 tray-status-idle = 대기 (클릭 통과)
 tray-toggle = 그리기 모드 전환

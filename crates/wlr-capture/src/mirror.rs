@@ -17,7 +17,7 @@ use crate::keys::is_cancel;
 use crate::pointer::{Pointer, Shape};
 use crate::render::{DmabufImporter, Gpu};
 use crate::stream;
-use crate::theme::Theme;
+use crate::theme::{ApplyTheme, Theme};
 use crate::wl;
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
