@@ -2155,7 +2155,8 @@ fn paint_hud(p: &egui::Painter, ui: &egui::Ui, frame: &Frame) {
     );
     let info_text = if in_spotlight {
         let pct = (frame.spotlight_dim as f32 / 255.0 * 100.0).round();
-        format!("◯ {:.0}px · {pct:.0}%  ·  {hint}", frame.spotlight_radius)
+        // `○`, not `◯`: egui's built-in fonts have no glyph for the latter.
+        format!("○ {:.0}px · {pct:.0}%  ·  {hint}", frame.spotlight_radius)
     } else if frame.tool == Tool::Pen && !frame.snap_active {
         // Only the pen dwells, and only the off state is worth a word: the chip then
         // shows the toggle took effect and stays that way until it is turned back on.
