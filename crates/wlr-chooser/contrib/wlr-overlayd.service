@@ -17,6 +17,8 @@ Type=simple
 # work once the session imports it (uwsm does). env execs the daemon, which stays the
 # main PID.
 ExecStart=/usr/bin/env wlr-overlayd
+# The journal would tag the output after env, the program systemd starts.
+SyslogIdentifier=wlr-overlayd
 Restart=on-failure
 RestartSec=2
 
