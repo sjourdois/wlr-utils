@@ -16,6 +16,10 @@ All notable changes to this project are documented here. The format is based on
 - **`wlr-switcher` and `wlr-chooser` draw once a frame** — they drew three times, and
   once more with every screen change while they were up: a dozen times a frame after
   a monitor woke, a quarter of a CPU core for as long as the overlay stayed open.
+- **An old `theme.toml` link to a moved theme still applies it** — a link left
+  pointing at a theme's old place gave "cannot read", then the offer to migrate, and
+  the default theme. It now applies the installed theme of that name, as the migration
+  does; a link to nothing is said once, without the offer the migration would refuse.
 
 ## 1.11.0 — 2026-10-06
 

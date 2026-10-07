@@ -129,15 +129,19 @@ impl Config {
             let target = dirs.config_file().unwrap_or_default();
             let command = MIGRATE_COMMAND.get().copied().unwrap_or("migrate-config");
             let mut table = toml::Table::new();
-            if let Some(file) = &legacy_theme {
-                let theme = read_table(file, &mut warnings);
+            let mut migratable = Vec::new();
+            if let Some(file) = &legacy_theme
+                && let Some(theme) = legacy::theme_section(dirs, file, &mut warnings)
+            {
                 table.insert("theme".into(), toml::Value::Table(theme));
+                migratable.push(file);
             }
             if let Some(file) = &legacy_keys {
                 let draw = legacy::draw_section(read_table(file, &mut warnings));
                 table.insert("draw".into(), toml::Value::Table(draw));
+                migratable.push(file);
             }
-            for old in legacy_theme.iter().chain(&legacy_keys) {
+            for old in migratable {
                 warnings.push(tr!(
                     "config-legacy",
                     file = old.display(),

@@ -36,6 +36,15 @@ impl Home {
         file
     }
 
+    /// Link `path` to `target`, both relative to the temporary root; the target may
+    /// not exist.
+    fn link(&self, path: &str, target: &str) {
+        let root = self.dirs.home.as_ref().unwrap().parent().unwrap();
+        let link = root.join(path);
+        fs::create_dir_all(link.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(root.join(target), link).unwrap();
+    }
+
     fn load(&self) -> Config {
         Config::load(&self.dirs)
     }
@@ -142,6 +151,40 @@ fn the_first_file_found_is_the_only_one_read() {
     assert_warns(&config, &[".wlr-utils.toml"]);
     assert_warns(&config, &["wlr-chooser/theme.toml"]);
     assert_warns(&config, &["wlr-draw/keys.toml"]);
+}
+
+#[test]
+fn an_old_theme_link_to_a_moved_theme_still_applies_it() {
+    // How a theme was picked before config.toml, and the link outlives the tree it
+    // pointed into: it still names the installed theme, as the migration reads it.
+    let home = Home::new();
+    home.write(
+        "usr/share/wlr-utils/themes/catppuccin-mocha.toml",
+        "bg = \"#1e1e2e\"\n",
+    );
+    home.link(
+        "home/.config/wlr-chooser/theme.toml",
+        "src/gone/docs/themes/catppuccin-mocha.toml",
+    );
+    let config = home.load();
+    assert_eq!(config.theme().bg, Color32::from_rgb(0x1e, 0x1e, 0x2e));
+    // Only the offer to migrate, which would succeed: no unreadable file.
+    assert_eq!(config.warnings().len(), 1, "{:?}", config.warnings());
+    assert_warns(
+        &config,
+        &["wlr-chooser/theme.toml", "wlr-utils/config.toml"],
+    );
+}
+
+#[test]
+fn an_old_theme_link_to_nothing_is_said_once() {
+    let home = Home::new();
+    home.link("home/.config/wlr-chooser/theme.toml", "gone/solarized.toml");
+    let config = home.load();
+    assert_eq!(config.theme(), &Theme::default());
+    // The broken link, and no offer to migrate: the migration would refuse it.
+    assert_eq!(config.warnings().len(), 1, "{:?}", config.warnings());
+    assert_warns(&config, &["wlr-chooser/theme.toml", "gone/solarized.toml"]);
 }
 
 #[test]

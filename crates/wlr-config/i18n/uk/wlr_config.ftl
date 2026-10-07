@@ -3,6 +3,7 @@
 config-shadowed = { $file } не враховується: замість нього читається { $used }
 config-legacy-ignored = { $file } не враховується, бо існує { $used }: видаліть його
 config-legacy = { $file } — старий файл конфігурації, він читається до wlr-utils 2.0: `{ $command }` переносить його до { $target }
+config-broken-link = { $file } посилається на { $target }, якого більше немає, і жодна встановлена тема не має такої назви: використовується тема за замовчуванням
 config-unreadable = не вдається прочитати { $file }: { $error }
 config-invalid = { $file }, рядок { $line }: { $error }
 config-unknown-key = { $file }: невідомий ключ `{ $key }`

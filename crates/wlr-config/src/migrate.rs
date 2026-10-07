@@ -8,9 +8,8 @@
 //! else `name` with the path the link pointed to.
 
 use crate::i18n::tr;
-use crate::legacy::DRAW_SETTINGS;
+use crate::legacy::{self, DRAW_SETTINGS, ThemeLink};
 use crate::paths::Dirs;
-use crate::theme;
 use std::fmt;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -219,24 +218,13 @@ fn theme_table(dirs: &Dirs, file: &Path) -> Result<(Table, String), Error> {
         file: file.to_path_buf(),
         error: e.to_string(),
     };
-    if !file.symlink_metadata().map_err(unreadable)?.is_symlink() {
-        let doc = read_doc(file)?;
-        return flat_table(&doc, file, |_| true).map(|(table, _)| (table, trailing(&doc)));
-    }
-    let target = file
-        .parent()
-        .unwrap_or(Path::new(""))
-        .join(std::fs::read_link(file).map_err(unreadable)?);
-    let installed = target
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .and_then(|stem| Some((stem, theme::find(dirs, Path::new(""), stem).ok()?)));
-    let name = match installed {
-        Some((stem, found)) if !target.exists() || same_content(&target, &found) => {
-            stem.to_string()
+    let name = match legacy::theme_link(dirs, file).map_err(unreadable)? {
+        ThemeLink::File => {
+            let doc = read_doc(file)?;
+            return flat_table(&doc, file, |_| true).map(|(table, _)| (table, trailing(&doc)));
         }
-        _ if target.exists() => target.to_string_lossy().into_owned(),
-        _ => {
+        ThemeLink::Name(name) => name,
+        ThemeLink::Broken(target) => {
             return Err(Error::BrokenLink {
                 file: file.to_path_buf(),
                 target,
@@ -308,10 +296,6 @@ fn prepend(decor: &mut toml_edit::Decor, text: &str) {
         .unwrap_or_default()
         .to_string();
     decor.set_prefix(format!("{text}{before}"));
-}
-
-fn same_content(a: &Path, b: &Path) -> bool {
-    matches!((std::fs::read(a), std::fs::read(b)), (Ok(a), Ok(b)) if a == b)
 }
 
 /// Write `text` to `target` atomically, and only if `target` does not exist: a link from

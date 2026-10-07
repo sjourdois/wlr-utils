@@ -3,6 +3,7 @@
 config-shadowed = { $file } は無視されます: 代わりに { $used } を読み込みます
 config-legacy-ignored = { $used } があるため { $file } は無視されます: 削除してください
 config-legacy = { $file } は古い設定ファイルで、wlr-utils 2.0 まで読み込まれます: `{ $command }` で { $target } に移せます
+config-broken-link = { $file } のリンク先 { $target } は存在せず、その名前のテーマもインストールされていません: 既定のテーマを使います
 config-unreadable = { $file } を読み込めません: { $error }
 config-invalid = { $file } の { $line } 行目: { $error }
 config-unknown-key = { $file }: 不明なキー `{ $key }`

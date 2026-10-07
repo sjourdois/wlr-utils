@@ -3,6 +3,7 @@
 config-shadowed = 忽略 { $file }：改为读取 { $used }
 config-legacy-ignored = 由于 { $used } 已存在，忽略 { $file }：请删除它
 config-legacy = { $file } 是旧的配置文件，在 wlr-utils 2.0 之前仍会读取：`{ $command }` 会把它移到 { $target }
+config-broken-link = { $file } 指向的 { $target } 已不存在，也没有已安装的同名主题：将使用默认主题
 config-unreadable = 无法读取 { $file }：{ $error }
 config-invalid = { $file }，第 { $line } 行：{ $error }
 config-unknown-key = { $file }：未知的键 `{ $key }`

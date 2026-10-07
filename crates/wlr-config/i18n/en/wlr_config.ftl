@@ -3,6 +3,7 @@
 config-shadowed = { $file } is ignored: { $used } is read instead
 config-legacy-ignored = { $file } is ignored since { $used } exists: delete it
 config-legacy = { $file } is an old configuration file, read until wlr-utils 2.0: `{ $command }` moves it to { $target }
+config-broken-link = { $file } links to { $target }, which is gone, and no installed theme has that name: the default theme is used
 config-unreadable = cannot read { $file }: { $error }
 config-invalid = { $file }, line { $line }: { $error }
 config-unknown-key = { $file }: unknown key `{ $key }`

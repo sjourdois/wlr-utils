@@ -3,6 +3,7 @@
 config-shadowed = { $file } 파일은 무시됩니다: 대신 { $used } 파일을 읽습니다
 config-legacy-ignored = { $used } 파일이 있으므로 { $file } 파일은 무시됩니다: 삭제하세요
 config-legacy = { $file } 파일은 이전 설정 파일로, wlr-utils 2.0까지 읽습니다: `{ $command }` 명령으로 { $target } 파일로 옮길 수 있습니다
+config-broken-link = { $file } 파일이 가리키는 { $target }이(가) 없고, 그 이름의 테마도 설치되어 있지 않습니다: 기본 테마를 사용합니다
 config-unreadable = { $file } 파일을 읽을 수 없습니다: { $error }
 config-invalid = { $file }, { $line }번째 줄: { $error }
 config-unknown-key = { $file }: 알 수 없는 키 `{ $key }`

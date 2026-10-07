@@ -3,6 +3,7 @@
 config-shadowed = { $file } jest pomijany: zamiast niego czytany jest { $used }
 config-legacy-ignored = { $file } jest pomijany, bo istnieje { $used }: usuń go
 config-legacy = { $file } to stary plik konfiguracji, czytany do wlr-utils 2.0: `{ $command }` przenosi go do { $target }
+config-broken-link = { $file } wskazuje na { $target }, który już nie istnieje, a żaden zainstalowany motyw nie ma tej nazwy: używany jest motyw domyślny
 config-unreadable = nie można odczytać { $file }: { $error }
 config-invalid = { $file }, wiersz { $line }: { $error }
 config-unknown-key = { $file }: nieznany klucz `{ $key }`
