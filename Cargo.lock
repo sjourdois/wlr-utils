@@ -676,9 +676,9 @@ dependencies = [
 
 [[package]]
 name = "edgefirst-egl"
-version = "0.33.0"
+version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6c7d09d2842838d0a2458f67160c69807d94f6670cdaa91239d79b61c8abd06"
+checksum = "e6340e47a4acd7c02e25ea6602c6b47aa8212f571090e7ebad8b9193f4fe0575"
 dependencies = [
  "libc",
  "libloading 0.9.0",
