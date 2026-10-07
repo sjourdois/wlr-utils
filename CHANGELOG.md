@@ -13,6 +13,9 @@ All notable changes to this project are documented here. The format is based on
   holding the keyboard until they were killed. They now take the keyboard and the
   pointer back whenever the compositor hands them out again; the `wlr-peek` mirror
   and the region picker too.
+- **`wlr-switcher` and `wlr-chooser` draw once a frame** — they drew three times, and
+  once more with every screen change while they were up: a dozen times a frame after
+  a monitor woke, a quarter of a CPU core for as long as the overlay stayed open.
 
 ## 1.11.0 — 2026-10-06
 

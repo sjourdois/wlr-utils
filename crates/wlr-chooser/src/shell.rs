@@ -89,6 +89,9 @@ struct State {
     width: u32,
     height: u32,
     scale: u32,
+    /// A frame callback is on its way, and it will ask for the next one: a draw made
+    /// in between — on a configure — must not ask too.
+    frame_pending: bool,
 
     start: Instant,
     events: Vec<egui::Event>,
@@ -211,6 +214,7 @@ impl Host {
             width: 0,
             height: 0,
             scale: 1,
+            frame_pending: false,
             start: Instant::now(),
             events: Vec::new(),
             modifiers: egui::Modifiers::default(),
@@ -386,6 +390,8 @@ impl State {
         // A new surface starts at buffer scale 1; the compositor says if its output
         // wants another.
         self.scale = 1;
+        // The previous overlay's callback went with its surface.
+        self.frame_pending = false;
         self.start = Instant::now();
         self.events.clear();
         self.modifiers = egui::Modifiers::default();
@@ -509,8 +515,14 @@ impl State {
             return;
         };
         self.ensure_gpu(conn, &surface);
-        // ask for the next frame so we keep draining the capture channel.
-        surface.frame(qh, FrameCallbackData(surface.clone()));
+        // Ask for the next frame so we keep draining the capture channel — once: each
+        // callback asks for the next, so a second ask, from a configure, would start a
+        // second chain drawing every frame alongside the first. A screen change brings
+        // a few configures, and the overlay drew a dozen times a frame.
+        if !self.frame_pending {
+            surface.frame(qh, FrameCallbackData(surface.clone()));
+            self.frame_pending = true;
+        }
         self.render();
         surface.commit();
         if !self.first_paint_logged {
@@ -581,6 +593,7 @@ impl CompositorHandler for State {
         _: &wl_surface::WlSurface,
         _: u32,
     ) {
+        self.frame_pending = false;
         self.draw_frame(conn, qh);
     }
 
