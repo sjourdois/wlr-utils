@@ -20,6 +20,9 @@ All notable changes to this project are documented here. The format is based on
   pointing at a theme's old place gave "cannot read", then the offer to migrate, and
   the default theme. It now applies the installed theme of that name, as the migration
   does; a link to nothing is said once, without the offer the migration would refuse.
+- **`wlr-draw` still starts on login after a Nix upgrade** — its autostart entry
+  named the binary's store path, gone once the old generation was collected. It now
+  names the `wlr-draw` on `PATH` that leads to it, such as the profile's.
 
 ## 1.11.0 — 2026-10-06
 

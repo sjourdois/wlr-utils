@@ -10,8 +10,9 @@
 //! presence is the sole source of truth, so a later manual launch never resurrects an
 //! entry the user deliberately removed from the tray.
 
+use std::ffi::OsStr;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// `$XDG_CONFIG_HOME` or `~/.config`.
 fn config_dir() -> Option<PathBuf> {
@@ -91,11 +92,13 @@ pub fn ensure_initialized() {
     }
 }
 
-/// The desktop entry written to `autostart/`. `Exec` points at the actual running
-/// binary, so it works whether installed in `~/.local/bin` or `/usr/bin`.
+/// The desktop entry written to `autostart/`. `Exec` names the running binary by
+/// [`launcher`], so it works whether installed in `~/.local/bin`, `/usr/bin` or a Nix
+/// profile.
 fn desktop_entry() -> String {
     let exec = std::env::current_exe()
         .ok()
+        .map(|exe| launcher(&exe, &std::env::var_os("PATH").unwrap_or_default()))
         .and_then(|p| p.to_str().map(str::to_owned))
         .unwrap_or_else(|| "wlr-draw".to_string());
     format!(
@@ -109,4 +112,81 @@ fn desktop_entry() -> String {
          Categories=Utility;\n\
          X-GNOME-Autostart-enabled=true\n"
     )
+}
+
+/// The path that launches `exe`: the `wlr-draw` on `path` that leads to it, so the entry
+/// follows an upgrade that moves the binary — a Nix profile points at a new store path
+/// on each one, and the old one is gone once collected — or `exe` itself, off `path`.
+/// A `wlr-draw` leads to `exe` when, links followed, it sits in the same directory: a
+/// wrapper script next to the binary it wraps is the one to run.
+fn launcher(exe: &Path, path: &OsStr) -> PathBuf {
+    let home = exe
+        .canonicalize()
+        .ok()
+        .and_then(|exe| Some(exe.parent()?.to_path_buf()));
+    std::env::split_paths(path)
+        .map(|dir| dir.join("wlr-draw"))
+        .find(|candidate| {
+            let real = candidate.canonicalize().ok();
+            home.is_some() && real.as_deref().and_then(Path::parent) == home.as_deref()
+        })
+        .unwrap_or_else(|| exe.to_path_buf())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::launcher;
+    use std::ffi::OsString;
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use std::path::Path;
+
+    fn file(path: &Path) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, "").unwrap();
+    }
+
+    fn link(path: &Path, target: &Path) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        symlink(target, path).unwrap();
+    }
+
+    #[test]
+    fn a_profile_link_is_preferred_to_the_store_path() {
+        // A Nix profile: the store path changes with every upgrade, the profile's
+        // link does not.
+        let tmp = tempfile::tempdir().unwrap();
+        let store = tmp.path().join("store/abc-wlr-utils/bin/wlr-draw");
+        file(&store);
+        let profile = tmp.path().join("profile/bin/wlr-draw");
+        link(&profile, &store);
+        let path =
+            std::env::join_paths([tmp.path().join("elsewhere"), tmp.path().join("profile/bin")])
+                .unwrap();
+        assert_eq!(launcher(&store, &path), profile);
+    }
+
+    #[test]
+    fn a_wrapper_next_to_the_binary_is_the_launcher() {
+        let tmp = tempfile::tempdir().unwrap();
+        let wrapped = tmp.path().join("store/abc-wlr-utils/bin/.wlr-draw-wrapped");
+        file(&wrapped);
+        let wrapper = tmp.path().join("store/abc-wlr-utils/bin/wlr-draw");
+        file(&wrapper);
+        let profile = tmp.path().join("profile/bin/wlr-draw");
+        link(&profile, &wrapper);
+        let path = OsString::from(tmp.path().join("profile/bin"));
+        assert_eq!(launcher(&wrapped, &path), profile);
+    }
+
+    #[test]
+    fn another_install_on_the_path_is_not_taken() {
+        // The one running is not the one PATH would start: name the running one.
+        let tmp = tempfile::tempdir().unwrap();
+        let running = tmp.path().join("build/wlr-draw");
+        file(&running);
+        file(&tmp.path().join("usr/bin/wlr-draw"));
+        let path = OsString::from(tmp.path().join("usr/bin"));
+        assert_eq!(launcher(&running, &path), running);
+    }
 }
