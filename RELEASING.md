@@ -8,7 +8,9 @@ The whole workspace is versioned as one block: every crate shares the
 ## One-time setup
 
 ```sh
-cargo install cargo-dist cargo-deb
+# cargo-edit from crates.io: Debian's package cannot reach the crates.io index over
+# HTTPS, so its `cargo upgrade` fails.
+cargo install cargo-dist cargo-deb cargo-edit
 
 # Generate the release workflow (.github/workflows/release.yml) from the [dist]
 # config in dist-workspace.toml; commit it.
