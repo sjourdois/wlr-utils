@@ -26,7 +26,7 @@ resolver = "3"
 
 # Shared package metadata for every crate in the wlr-utils workspace.
 [workspace.package]
-version = "1.11.0"
+version = "1.11.1"
 edition = "2024"
 # The highest rust-version among the dependencies (egui); RELEASING says how to measure it.
 rust-version = "1.95"

@@ -67,7 +67,7 @@ resvg = { workspace = true, optional = true }
 fontconfig = { workspace = true, optional = true }
 # The theme, read from the configuration; its warnings are localised when a tool turns
 # on `wlr-config/i18n`.
-wlr-config = { path = "../wlr-config", version = "1.11.0", default-features = false, optional = true }
+wlr-config = { path = "../wlr-config", version = "1.11.1", default-features = false, optional = true }
 
 [dev-dependencies]
 # Private (0600), randomly-named, auto-removed temp output for the encoder round-trip test.
