@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- **The daemons no longer go deaf after a suspend** — once the computer had slept,
+  `wlr-overlayd` and `wlr-draw` showed their overlay but took no key and no click,
+  holding the keyboard until they were killed. They now take the keyboard and the
+  pointer back whenever the compositor hands them out again; the `wlr-peek` mirror
+  and the region picker too.
+
 ## 1.11.0 — 2026-10-06
 
 ### Added

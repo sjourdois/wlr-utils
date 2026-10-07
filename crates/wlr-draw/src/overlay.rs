@@ -2723,13 +2723,25 @@ impl SeatHandler for State {
             self.pointer.create(&mut self.seat_state, &seat, qh);
         }
     }
+    /// The compositor stops sending to a keyboard or pointer whose capability went —
+    /// all of them, across a suspend — so they are let go of here, and
+    /// [`new_capability`](SeatHandler::new_capability) makes new ones when it returns.
+    /// The daemon that kept the old ones came back from a suspend deaf to both.
     fn remove_capability(
         &mut self,
         _: &Connection,
         _: &QueueHandle<Self>,
         _: wl_seat::WlSeat,
-        _: Capability,
+        cap: Capability,
     ) {
+        if cap == Capability::Keyboard
+            && let Some(keyboard) = self.keyboard.take()
+        {
+            keyboard.release();
+        }
+        if cap == Capability::Pointer {
+            self.pointer.release();
+        }
     }
     fn remove_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, seat: wl_seat::WlSeat) {
         if let Some(i) = self.tablet_seats.iter().position(|(s, _)| *s == seat) {

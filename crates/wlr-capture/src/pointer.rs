@@ -72,6 +72,19 @@ impl Pointer {
         });
     }
 
+    /// Let go of the pointer when the seat loses the capability, so [`create`](Self::create)
+    /// makes a fresh one when it comes back. The compositor stops sending to the old
+    /// one for good — across a suspend, say — and a host that kept it would never see
+    /// the pointer again.
+    pub fn release(&mut self) {
+        if let Some(bound) = self.pointer.take() {
+            if let Some(device) = bound.cursor_shape {
+                device.destroy();
+            }
+            bound.pointer.release();
+        }
+    }
+
     /// The image to show from here on, sent right away if the pointer is over one of
     /// our surfaces. It can be set before the pointer exists — and before any enter —
     /// since [`on_event`](Self::on_event) re-sends it on each one.
