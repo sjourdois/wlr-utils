@@ -11,6 +11,10 @@ All notable changes to this project are documented here. The format is based on
 - **`animations = false` under `[chooser]`** turns off the motion of `wlr-switcher` and
   `wlr-chooser`: the exposé's tiles no longer grow in, and hovered tiles change colour
   at once (#27).
+- **`wlr-switcher --cycle next|prev`** cycles on compositors that keep `Alt+Tab` for
+  themselves while the overlay is up (no `keyboard-shortcuts-inhibit`): bound to the
+  cycle keys, it opens the switcher or, through `wlr-overlayd`, moves the highlight of
+  the one up. Idea and first take by ArijanJ (#26).
 
 ### Changed
 

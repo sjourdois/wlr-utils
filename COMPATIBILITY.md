@@ -138,7 +138,7 @@ For reference: what the tools ask a compositor for, and why.
 | `cosmic-toplevel-management` (`zcosmic_toplevel_manager_v1`) + `cosmic-toplevel-info` v2+ | focusing the picked window on COSMIC, which has no `wlr-foreign-toplevel-management` | `wlr-switcher` on cosmic-comp |
 | `wlr-layer-shell` (`zwlr_layer_shell_v1`) | full-screen overlays | the region selector (`-s`), `wlr-peek loupe`/`color`, `wlr-switcher`, `wlr-chooser`, `wlr-draw` |
 | `wlr-data-control` (`zwlr_data_control_manager_v1`) | clipboard copy | `-c`/`--clipboard` |
-| `keyboard-shortcuts-inhibit` (`zwp_keyboard_shortcuts_inhibit_manager_v1`) | grabbing keys under a layer-shell grab | `wlr-chooser` and `wlr-switcher` (so `Alt+Tab` reaches the switcher) |
+| `keyboard-shortcuts-inhibit` (`zwp_keyboard_shortcuts_inhibit_manager_v1`) | grabbing keys under a layer-shell grab | `wlr-chooser` and `wlr-switcher` (so `Alt+Tab` reaches the switcher; without it, `wlr-switcher --cycle` cycles through `wlr-overlayd`) |
 | `linux-dmabuf` (`zwp_linux_dmabuf_v1`) | zero-copy GPU capture (CPU `wl_shm` is the fallback) | live previews: `wlr-chooser`, `wlr-switcher`, `wlr-peek mirror`/`watch`, `wlr-shot record` |
 | `xdg-output` (`zxdg_output_manager_v1`) | accurate logical geometry (fractional scale, positions) | recommended; falls back to `wl_output` |
 | `cursor-shape-v1` (`wp_cursor_shape_manager_v1`) | an overlay setting its own cursor | recommended, every overlay; without it the overlay shows whatever cursor the last client left — none, if that one hid it |

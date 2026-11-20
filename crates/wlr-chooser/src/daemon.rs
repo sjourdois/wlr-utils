@@ -18,18 +18,24 @@
 //! and a GPU context, nothing else.
 //!
 //! The protocol is one line of text, like `wlr-draw`'s: `switch` or `choose` followed
-//! by the invocation's arguments, `ping`, or `quit`. The daemon answers one line —
-//! `ok`, `ok <stdout line>`, `cancel`, `busy` or `err <reason>` — which the client
-//! turns back into its own output and exit status.
+//! by the invocation's arguments, `step next|prev` followed by them, `ping`, or `quit`.
+//! The daemon answers one line — `ok`, `ok <stdout line>`, `cancel`, `busy` or
+//! `err <reason>` — which the client turns back into its own output and exit status.
+//!
+//! `step` is `wlr-switcher --cycle`: with a switcher overlay up it moves its highlight
+//! and answers `ok` at once, and with none it is a `switch`. It is how a compositor
+//! that keeps its own bindings while the overlay holds the keyboard — one without
+//! `keyboard-shortcuts-inhibit` — still cycles: the binding runs again, and reaches
+//! the overlay through here.
 
 use crate::shell::{Host, tlog};
 use rustix::event::{EventfdFlags, eventfd};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::os::fd::{AsFd, OwnedFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// Separates the arguments inside a `show` line.
@@ -70,10 +76,38 @@ impl Tool {
     }
 }
 
+/// Which way a `step` moves the switcher's highlight.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Step {
+    Next,
+    Prev,
+}
+
+impl Step {
+    /// The word that names this direction on the wire.
+    fn word(self) -> &'static str {
+        match self {
+            Step::Next => "next",
+            Step::Prev => "prev",
+        }
+    }
+
+    /// How far it moves the highlight.
+    fn delta(self) -> isize {
+        match self {
+            Step::Next => 1,
+            Step::Prev => -1,
+        }
+    }
+}
+
 /// What a client asked for.
 enum Request {
     /// Show the overlay for these arguments, as this front-end.
     Run(Tool, Vec<String>),
+    /// Move the switcher overlay's highlight, or show one for these arguments if none
+    /// is up.
+    Step(Step, Vec<String>),
     /// Is anyone there?
     Ping,
     /// Stop the daemon.
@@ -85,10 +119,18 @@ impl Request {
         let line = line.trim_end_matches(['\r', '\n']);
         let mut fields = line.split(SEP);
         let verb = fields.next().unwrap_or("").trim();
-        let args = || fields.map(str::to_string).collect();
+        let args = |fields: std::str::Split<'_, char>| fields.map(str::to_string).collect();
         Ok(match verb {
-            "switch" => Request::Run(Tool::Switch, args()),
-            "choose" => Request::Run(Tool::Choose, args()),
+            "switch" => Request::Run(Tool::Switch, args(fields)),
+            "choose" => Request::Run(Tool::Choose, args(fields)),
+            "step" => {
+                let step = match fields.next().map(str::trim) {
+                    Some("next") => Step::Next,
+                    Some("prev") => Step::Prev,
+                    _ => return Err("step: expected next or prev".into()),
+                };
+                Request::Step(step, args(fields))
+            }
             "ping" => Request::Ping,
             "quit" | "exit" => Request::Quit,
             "" => return Err("empty command".into()),
@@ -172,8 +214,22 @@ pub fn can_encode(args: &[String]) -> bool {
 /// `None` means there is no daemon listening, and the caller should show the overlay
 /// itself. Anything else is the daemon's answer to act on.
 pub fn request(tool: Tool, args: &[String]) -> Option<Reply> {
+    send(tool.verb(), args)
+}
+
+/// Move the highlight of the switcher overlay a running daemon shows, or have it show
+/// one for these arguments if it shows none.
+///
+/// `None` means there is no daemon listening. A moved highlight is answered `ok` at
+/// once; otherwise the answer is the run's, as [`request`] gives it.
+pub fn request_step(step: Step, args: &[String]) -> Option<Reply> {
+    send(&format!("step{SEP}{}", step.word()), args)
+}
+
+/// Send one request line, the arguments after `head`, and wait for the answer.
+fn send(head: &str, args: &[String]) -> Option<Reply> {
     let mut stream = UnixStream::connect(socket_path()).ok()?;
-    let mut line = String::from(tool.verb());
+    let mut line = String::from(head);
     for a in args {
         line.push(SEP);
         line.push_str(a);
@@ -205,13 +261,100 @@ pub fn quit() -> anyhow::Result<()> {
 
 // --- daemon side -------------------------------------------------------------
 
-/// Raised for exactly as long as an overlay is on screen.
+/// The overlay the daemon shows, as the accept thread and the main thread both see it.
 ///
-/// Read by the accept thread, which is the whole point: a client that arrives while
-/// one is up must be told *at once*. Told when the overlay finally closes — whenever
-/// the user is done with it — a portal picker has long since given up, and a
-/// keybinding pressed twice has left a process hanging around in the meantime.
-static SHOWING: AtomicBool = AtomicBool::new(false);
+/// Raised by the accept thread the moment it hands a run over, and lowered by the main
+/// thread once the overlay is down. The accept thread reads it, which is the whole
+/// point: a client that arrives while one is up must be told *at once*. Told when the
+/// overlay finally closes — whenever the user is done with it — a portal picker has
+/// long since given up, and a keybinding pressed twice has left a process hanging
+/// around in the meantime. Raised before the hand-over rather than after, a `step`
+/// sent while the overlay is still being built finds it and is kept for it.
+pub struct Stage {
+    state: Mutex<StageState>,
+    /// Readable while steps wait for the overlay (see [`Stage::take_steps`]).
+    wake: OwnedFd,
+}
+
+#[derive(Default)]
+struct StageState {
+    /// Which front-end's overlay is up, or on its way.
+    showing: Option<Tool>,
+    /// How far `step` requests have moved the switcher's highlight since the overlay
+    /// last took them.
+    steps: isize,
+}
+
+/// What the accept thread does with a request, given what is on screen.
+#[derive(Debug, PartialEq)]
+enum Admission {
+    /// Hand it to the main thread.
+    Forward,
+    /// The switcher overlay up took it as a step: answer `ok`.
+    Stepped,
+    /// Another overlay is up: answer `busy`.
+    Busy,
+}
+
+impl Stage {
+    fn new() -> std::io::Result<Self> {
+        Ok(Stage {
+            state: Mutex::default(),
+            // Non-blocking: the stage drains it whether or not a step is waiting.
+            wake: eventfd(0, EventfdFlags::NONBLOCK)?,
+        })
+    }
+
+    /// Settle `request` against the overlay on screen, raising the stage for a run
+    /// that will show one.
+    fn admit(&self, request: &Request) -> Admission {
+        let mut state = self.state.lock().unwrap();
+        let tool = match request {
+            Request::Ping | Request::Quit => return Admission::Forward,
+            Request::Run(tool, _) => *tool,
+            Request::Step(..) => Tool::Switch,
+        };
+        match (state.showing, request) {
+            (Some(Tool::Switch), Request::Step(step, _)) => {
+                state.steps += step.delta();
+                let _ = rustix::io::write(&self.wake, &1u64.to_ne_bytes());
+                Admission::Stepped
+            }
+            (Some(_), _) => Admission::Busy,
+            (None, _) => {
+                state.showing = Some(tool);
+                Admission::Forward
+            }
+        }
+    }
+
+    /// The overlay is down: what comes next is a new run, and no step left over from
+    /// this one may move the next one's highlight.
+    fn lower(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.showing = None;
+        state.steps = 0;
+        drain(&self.wake);
+    }
+
+    /// The descriptor that is readable while steps wait to be taken.
+    pub fn wake_fd(&self) -> BorrowedFd<'_> {
+        self.wake.as_fd()
+    }
+
+    /// Take the steps sent since the last call: how far to move the highlight.
+    pub fn take_steps(&self) -> isize {
+        let mut state = self.state.lock().unwrap();
+        drain(&self.wake);
+        std::mem::take(&mut state.steps)
+    }
+}
+
+/// Reset an eventfd's counter, so the next wait on it sleeps again.
+fn drain(fd: &OwnedFd) {
+    let mut ticks = [0u8; 8];
+    let _ = rustix::io::read(fd, &mut ticks);
+}
 
 /// Run the daemon until it is asked to stop (or the compositor goes away).
 ///
@@ -252,6 +395,8 @@ fn serve(
     host: &mut Host,
     show: &mut impl FnMut(&mut Host, Tool, Vec<String>) -> Reply,
 ) -> anyhow::Result<()> {
+    let stage = Arc::new(Stage::new()?);
+    host.steer_with(Some(stage.clone()));
     // Accepting has to keep working while the main thread is busy holding an overlay
     // — that is where `busy` answers come from — so it runs on its own thread and
     // hands the runs it cannot answer itself over, waking us on an eventfd. Same
@@ -259,7 +404,8 @@ fn serve(
     let (tx, rx) = mpsc::channel::<(Request, UnixStream)>();
     let wake = eventfd(0, EventfdFlags::empty())?;
     let thread_wake = wake.try_clone()?;
-    std::thread::spawn(move || accept_loop(listener, &tx, &thread_wake));
+    let thread_stage = stage.clone();
+    std::thread::spawn(move || accept_loop(listener, &tx, &thread_wake, &thread_stage));
 
     loop {
         // Idle: nothing of ours is on screen, and the only thing worth waking for is
@@ -267,43 +413,45 @@ fn serve(
         // drained in the same wait.
         host.idle_until_readable(wake.as_fd())?;
         // The counter, so the next wait sleeps again rather than spinning.
-        let mut ticks = [0u8; 8];
-        let _ = rustix::io::read(&wake, &mut ticks);
+        drain(&wake);
 
         while let Ok((request, mut stream)) = rx.try_recv() {
-            match request {
-                Request::Ping => answer(&mut stream, &Reply::Done(String::new())),
+            let (tool, args) = match request {
+                Request::Ping => {
+                    answer(&mut stream, &Reply::Done(String::new()));
+                    continue;
+                }
                 Request::Quit => {
                     answer(&mut stream, &Reply::Done(String::new()));
                     return Ok(());
                 }
-                Request::Run(tool, args) => {
-                    SHOWING.store(true, Ordering::Relaxed);
-                    // A client killed while its overlay is up leaves no one to answer:
-                    // the overlay goes with it instead of holding the keyboard.
-                    host.cancel_on_hangup(stream.try_clone().ok().map(OwnedFd::from));
-                    let reply = show(host, tool, args);
-                    host.cancel_on_hangup(None);
-                    // Whatever slipped into the queue in the moment before the flag
-                    // went up was a keybinding pressed twice, not a second picker.
-                    // Drained with the flag still up, so that once the queue is empty
-                    // it stays empty — the accept thread is answering `busy` itself
-                    // meanwhile — and the next request, which really did arrive after
-                    // the overlay closed, is served rather than refused.
-                    while let Ok((_, mut queued)) = rx.try_recv() {
-                        answer(&mut queued, &Reply::Busy);
-                    }
-                    SHOWING.store(false, Ordering::Relaxed);
-                    answer(&mut stream, &reply);
-                }
-            }
+                Request::Run(tool, args) => (tool, args),
+                // With no overlay up, a step is the run that opens one; its arguments
+                // say which way the highlight starts.
+                Request::Step(_, args) => (Tool::Switch, args),
+            };
+            // A client killed while its overlay is up leaves no one to answer: the
+            // overlay goes with it instead of holding the keyboard.
+            host.cancel_on_hangup(stream.try_clone().ok().map(OwnedFd::from));
+            let reply = show(host, tool, args);
+            host.cancel_on_hangup(None);
+            // The accept thread raised the stage before handing this run over, and
+            // answered every run since itself; what is still queued is a ping or a
+            // quit, served on the next round.
+            stage.lower();
+            answer(&mut stream, &reply);
         }
     }
 }
 
 /// Accept clients and read their requests, answering the ones that need no overlay
 /// and handing the rest to the main thread.
-fn accept_loop(listener: UnixListener, tx: &Sender<(Request, UnixStream)>, wake: &OwnedFd) {
+fn accept_loop(
+    listener: UnixListener,
+    tx: &Sender<(Request, UnixStream)>,
+    wake: &OwnedFd,
+    stage: &Stage,
+) {
     for conn in listener.incoming() {
         let Ok(mut stream) = conn else { continue };
         let request = match read_request(&mut stream) {
@@ -316,15 +464,18 @@ fn accept_loop(listener: UnixListener, tx: &Sender<(Request, UnixStream)>, wake:
         // One daemon shows one overlay at a time. Said now, the client can do
         // something about it: the switcher shrugs — pressing the keybinding twice
         // has always been a no-op — and the chooser shows its own overlay rather
-        // than answer the portal nothing.
-        if SHOWING.load(Ordering::Relaxed) && matches!(request, Request::Run(..)) {
-            answer(&mut stream, &Reply::Busy);
-            continue;
+        // than answer the portal nothing. A step is no second overlay but a move of
+        // the switcher's highlight, done by the time it is answered.
+        match stage.admit(&request) {
+            Admission::Busy => answer(&mut stream, &Reply::Busy),
+            Admission::Stepped => answer(&mut stream, &Reply::Done(String::new())),
+            Admission::Forward => {
+                if tx.send((request, stream)).is_err() {
+                    return; // the main loop is gone
+                }
+                let _ = rustix::io::write(wake, &1u64.to_ne_bytes());
+            }
         }
-        if tx.send((request, stream)).is_err() {
-            return; // the main loop is gone
-        }
-        let _ = rustix::io::write(wake, &1u64.to_ne_bytes());
     }
 }
 
@@ -386,6 +537,59 @@ mod tests {
         assert!(matches!(Request::parse("quit").unwrap(), Request::Quit));
         assert!(Request::parse("").is_err());
         assert!(Request::parse("frobnicate").is_err());
+    }
+
+    #[test]
+    fn a_step_line_names_its_direction_before_the_arguments() {
+        match Request::parse(&format!("step{SEP}prev{SEP}--hold")).unwrap() {
+            Request::Step(Step::Prev, args) => assert_eq!(args, ["--hold"]),
+            _ => panic!("not a step back"),
+        }
+        assert!(matches!(
+            Request::parse("step\x1fnext").unwrap(),
+            Request::Step(Step::Next, args) if args.is_empty()
+        ));
+        assert!(Request::parse("step").is_err());
+        assert!(Request::parse("step\x1fsideways").is_err());
+    }
+
+    #[test]
+    fn a_step_moves_the_switcher_up_and_opens_one_otherwise() {
+        let stage = Stage::new().unwrap();
+        let step = |s| Request::Step(s, Vec::new());
+        // Nothing on screen: the step is the run that opens the switcher.
+        assert_eq!(stage.admit(&step(Step::Next)), Admission::Forward);
+        // From then on, steps move its highlight, kept until the overlay takes them,
+        // and a second overlay is refused.
+        assert_eq!(stage.admit(&step(Step::Next)), Admission::Stepped);
+        assert_eq!(stage.admit(&step(Step::Next)), Admission::Stepped);
+        assert_eq!(stage.admit(&step(Step::Prev)), Admission::Stepped);
+        assert_eq!(
+            stage.admit(&Request::Run(Tool::Switch, Vec::new())),
+            Admission::Busy
+        );
+        assert_eq!(stage.admit(&Request::Ping), Admission::Forward);
+        assert_eq!(stage.take_steps(), 1);
+        assert_eq!(stage.take_steps(), 0);
+        // Steps the overlay never took do not reach the next one.
+        assert_eq!(stage.admit(&step(Step::Prev)), Admission::Stepped);
+        stage.lower();
+        assert_eq!(stage.admit(&step(Step::Prev)), Admission::Forward);
+        assert_eq!(stage.take_steps(), 0);
+    }
+
+    #[test]
+    fn a_step_leaves_the_chooser_alone() {
+        let stage = Stage::new().unwrap();
+        assert_eq!(
+            stage.admit(&Request::Run(Tool::Choose, Vec::new())),
+            Admission::Forward
+        );
+        assert_eq!(
+            stage.admit(&Request::Step(Step::Next, Vec::new())),
+            Admission::Busy
+        );
+        assert_eq!(stage.take_steps(), 0);
     }
 
     #[test]

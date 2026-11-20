@@ -263,6 +263,7 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Option<S
         cycle: CycleKeys::default(),
         namespace: "wlr-chooser",
         leave_current: false,
+        start_backward: false,
     };
     preflight(&mut opts, mode)?;
 

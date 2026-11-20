@@ -28,5 +28,6 @@ daemon-not-running = wlr-overlayd のデーモンが実行されていないた�
 daemon-busy = wlr-overlayd のデーモンはすでに別のオーバーレイを表示しているため、こちらはこのプロセスで表示し、起動処理をすべて負担します。
 daemon-bypassed = この実行はデーモンを経由しません。--no-gpu はプロセス全体の動作を変えるためで、起動処理をすべて負担します。
 daemon-cannot-serve = この実行はデーモンでは扱えません。--no-gpu と --doctor はプロセス全体の動作を変えるためです。--no-daemon を付けて実行してください。
+cycle-needs-daemon = --cycle は wlr-overlayd を通じてオーバーレイに届きます。この実行は自前のオーバーレイを表示するため、開いている間にもう一度ショートカットを押しても選択は動きません。セッションと一緒に `wlr-overlayd` を起動してください。
 hold-no-modifier = ホールド切り替えが有効です。Alt または Super キーが押されていない瞬間に切り替わります。開いた時点でどちらも押されていなければ、何も表示せずにすぐ切り替わります。どちらも押されていないときにオーバーレイを待機させるには、--hold を外してください。
 chooser-config-min = { $min } 以上にしてください

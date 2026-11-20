@@ -10,6 +10,7 @@
 //! ([`run`]) builds one, shows one overlay and drops it, while the switcher's daemon
 //! keeps one for the whole session and shows every overlay on it.
 
+use crate::daemon::Stage;
 use crate::ui::{App, Hold};
 use rustix::event::{PollFd, PollFlags, poll};
 use smithay_client_toolkit::{
@@ -32,6 +33,7 @@ use smithay_client_toolkit::{
     },
 };
 use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+use std::sync::Arc;
 use std::time::Instant;
 use wayland_client::{
     Connection, Dispatch, EventQueue, Proxy, QueueHandle,
@@ -176,6 +178,8 @@ pub struct Host {
     conn: Connection,
     /// Whoever asked for the next overlay, set by [`Host::cancel_on_hangup`].
     requester: Option<OwnedFd>,
+    /// Where steps for the overlay come from, set by [`Host::steer_with`].
+    stage: Option<Arc<Stage>>,
 }
 
 impl Host {
@@ -235,6 +239,7 @@ impl Host {
             queue,
             conn,
             requester: None,
+            stage: None,
         })
     }
 
@@ -275,7 +280,7 @@ impl Host {
     /// and it pings — and a connection left unread fills its buffer and wedges, so
     /// the two are waited on together rather than the socket alone.
     pub fn idle_until_readable(&mut self, other: BorrowedFd<'_>) -> anyhow::Result<()> {
-        while !wait(&mut self.queue, &mut self.state, &self.conn, Some(other))? {}
+        while !wait(&mut self.queue, &mut self.state, &self.conn, &[other])?[0] {}
         Ok(())
     }
 
@@ -289,6 +294,14 @@ impl Host {
         self.requester = requester;
     }
 
+    /// Move each overlay's highlight by the steps `stage` hands over while it is up.
+    ///
+    /// For the daemon, whose `wlr-switcher --cycle` clients send steps rather than
+    /// keystrokes (see [`crate::daemon`]).
+    pub fn steer_with(&mut self, stage: Option<Arc<Stage>>) {
+        self.stage = stage;
+    }
+
     /// Show one overlay: build its surface, run until the user picks or cancels,
     /// then take it down and hand the host back for the next one. `t0` is the start
     /// of *this* overlay, for timing (see [`tlog`]).
@@ -300,14 +313,28 @@ impl Host {
             layer.commit();
         }
         let requester = self.requester.take();
+        let stage = self.stage.clone();
         while !self.state.closing() {
-            let watched = requester.as_ref().map(|fd| fd.as_fd());
-            if wait(&mut self.queue, &mut self.state, &self.conn, watched)?
-                && let Some(fd) = watched
-                && hung_up(fd)
-                && let Some(app) = self.state.app.as_mut()
+            let watched: Vec<BorrowedFd<'_>> = requester
+                .iter()
+                .map(|fd| fd.as_fd())
+                .chain(stage.iter().map(|s| s.wake_fd()))
+                .collect();
+            let mut ready =
+                wait(&mut self.queue, &mut self.state, &self.conn, &watched)?.into_iter();
+            let Some(app) = self.state.app.as_mut() else {
+                continue;
+            };
+            if let Some(fd) = requester.as_ref()
+                && ready.next() == Some(true)
+                && hung_up(fd.as_fd())
             {
                 app.cancel();
+            }
+            if let Some(stage) = stage.as_ref()
+                && ready.next() == Some(true)
+            {
+                app.step(stage.take_steps());
             }
         }
         self.state.end();
@@ -318,8 +345,8 @@ impl Host {
     }
 }
 
-/// Wait until the Wayland connection or `other` has something to read, handing the
-/// compositor's events over on the way. Returns whether `other` is what woke us.
+/// Wait until the Wayland connection or one of `others` has something to read, handing
+/// the compositor's events over on the way. Returns which of `others` woke us.
 ///
 /// A connection left unread fills its buffer and wedges, so whatever else a host
 /// waits on is waited on together with it rather than instead of it.
@@ -327,23 +354,21 @@ fn wait(
     queue: &mut EventQueue<State>,
     state: &mut State,
     conn: &Connection,
-    other: Option<BorrowedFd<'_>>,
-) -> anyhow::Result<bool> {
+    others: &[BorrowedFd<'_>],
+) -> anyhow::Result<Vec<bool>> {
     queue.dispatch_pending(state)?;
     queue.flush()?;
     // `None` means events arrived between the dispatch and here: go round and hand
     // them over before sleeping.
     let Some(guard) = queue.prepare_read() else {
-        return Ok(false);
+        return Ok(vec![false; others.len()]);
     };
     let wayland = conn.as_fd();
     let mut fds = vec![PollFd::new(&wayland, PollFlags::IN)];
-    if let Some(other) = other.as_ref() {
-        fds.push(PollFd::new(other, PollFlags::IN));
-    }
+    fds.extend(others.iter().map(|fd| PollFd::new(fd, PollFlags::IN)));
     poll(&mut fds, None)?;
     let wayland_ready = !fds[0].revents().is_empty();
-    let other_ready = fds.get(1).is_some_and(|fd| !fd.revents().is_empty());
+    let others_ready = fds[1..].iter().map(|fd| !fd.revents().is_empty()).collect();
     if wayland_ready {
         // Also how a host learns the compositor is gone: the read fails and the
         // error takes it down, rather than leaving it on a dead connection.
@@ -351,7 +376,7 @@ fn wait(
     } else {
         drop(guard);
     }
-    Ok(other_ready)
+    Ok(others_ready)
 }
 
 /// Whether the peer of a readable socket has gone. A requester says everything it

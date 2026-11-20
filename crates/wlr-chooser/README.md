@@ -270,6 +270,8 @@ exits `2`, so a script tells them apart by the exit code.
                        Switch outright, or not, when one window is left to offer
     --cycle-key KEY[:KEY]
                        Keys that move the highlight (default: Tab)
+    --cycle next|prev  Bound to the cycle keys themselves: open the switcher, or move
+                       the highlight of the one up (needs wlr-overlayd)
     --scratchpad only|exclude|toggle
                        Switch among sway's scratchpad windows
     --move             Bring the picked window onto the current workspace
@@ -364,7 +366,8 @@ so `--hints` skips it.
 
 Hold-to-switch is **on by default for `strip`** and **off for `grid`/`card`**. With
 it off (`--no-hold`), the overlay stays open after release — confirm with Enter or a
-click. Only one switcher opens at a time (re-pressing the keybind is a no-op).
+click. Only one switcher opens at a time (re-pressing the keybind is a no-op, unless
+it is a [`--cycle`](#when-the-compositor-keeps-alttab----cycle) one).
 
 When a filter narrows the windows (`--app-id`, `--title`, `--pid`, `--scratchpad`)
 and hold-to-switch is on, a run that finds only one window switches to it outright
@@ -380,6 +383,25 @@ keyboard within milliseconds. `--hold` says the run is bound to a held modifier,
 one already released then was released early, and the switch is made straight away
 without showing anything — the quickest Alt-Tab, and the way to turn hold-to-switch on
 for `grid`/`card`. Run from a terminal, `--hold` says what it will do.
+
+#### When the compositor keeps `Alt+Tab` — `--cycle`
+
+`Tab` reaches the overlay because it asks the compositor to hand over its shortcuts
+(`keyboard-shortcuts-inhibit`). A compositor without that protocol — `wlr-switcher
+--doctor` says — runs its own binding again on the next `Alt+Tab` instead, and a plain
+`wlr-switcher` does nothing then. Bind the run to the cycle keys with `--cycle`, and
+the binding the compositor keeps is what cycles:
+
+```
+bindsym Mod1+Tab exec wlr-switcher --hold --cycle next
+bindsym Mod1+Shift+Tab exec wlr-switcher --hold --cycle prev
+```
+
+With no switcher up, `--cycle` opens one, on the next window — on the last one with
+`prev`. With one up, it moves its highlight instead, and exits at once. The second
+press reaches the overlay through [`wlr-overlayd`](#instant-overlays--wlr-overlayd),
+so `--cycle` needs it running: without it, each run says so and the overlay does not
+move.
 
 ### sway's scratchpad — `--scratchpad`
 

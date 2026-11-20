@@ -49,6 +49,22 @@ enum ScratchpadArg {
     Toggle,
 }
 
+/// Which way `--cycle` moves the highlight (CLI mirror of [`daemon::Step`]).
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum CycleArg {
+    Next,
+    Prev,
+}
+
+impl From<CycleArg> for daemon::Step {
+    fn from(v: CycleArg) -> Self {
+        match v {
+            CycleArg::Next => daemon::Step::Next,
+            CycleArg::Prev => daemon::Step::Prev,
+        }
+    }
+}
+
 /// [`CycleKeys`] as the command line writes them (CLI mirror).
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 struct CycleKeysArg(CycleKeys);
@@ -151,6 +167,18 @@ struct Cli {
     /// is the same key with the Shift state toggled.
     #[arg(long, value_name = "KEY[:KEY]", default_value_t)]
     cycle_key: CycleKeysArg,
+    /// For a compositor that keeps its own bindings while the overlay holds the
+    /// keyboard (no `keyboard-shortcuts-inhibit`): bind this run to the cycle keys
+    /// themselves. With no switcher up it opens one, on the next window or, with
+    /// `prev`, the last; with one up it moves its highlight instead. Needs
+    /// `wlr-overlayd`, which the second press reaches the overlay through.
+    #[arg(
+        long,
+        value_enum,
+        value_name = "DIRECTION",
+        conflicts_with = "no_daemon"
+    )]
+    cycle: Option<CycleArg>,
     /// Switch among the windows the compositor keeps aside — sway's scratchpad:
     /// `only` offers just those, `exclude` just the others. `toggle` is `only`,
     /// except that a focused window already shown from the scratchpad is put back
@@ -240,8 +268,15 @@ pub fn main() {
     if !cli.no_daemon {
         if !daemon_can_serve(&cli, &args) {
             eprintln!("{}", tr!("daemon-bypassed"));
+            if cli.cycle.is_some() {
+                eprintln!("{}", tr!("cycle-needs-daemon"));
+            }
         } else {
-            match daemon::request(daemon::Tool::Switch, &args) {
+            let reply = match cli.cycle {
+                Some(step) => daemon::request_step(step.into(), &args),
+                None => daemon::request(daemon::Tool::Switch, &args),
+            };
+            match reply {
                 // An overlay is already up. That is what pressing the keybinding
                 // twice has always been: a no-op, not a second overlay.
                 Some(daemon::Reply::Busy) => return,
@@ -251,7 +286,12 @@ pub fn main() {
                     }
                     std::process::exit(reply.exit_code());
                 }
-                None => eprintln!("{}", tr!("daemon-not-running")),
+                None => {
+                    eprintln!("{}", tr!("daemon-not-running"));
+                    if cli.cycle.is_some() {
+                        eprintln!("{}", tr!("cycle-needs-daemon"));
+                    }
+                }
             }
         }
     }
@@ -334,6 +374,7 @@ fn run(cli: Cli, t0: Instant, host: Option<&mut shell::Host>) -> Result<Ran, Str
         cycle: cli.cycle_key.into(),
         namespace: "wlr-switcher",
         leave_current: true,
+        start_backward: cli.cycle == Some(CycleArg::Prev),
     };
     if let Some(mode) = cli.scratchpad
         && scratchpad_settled(mode, &mut opts)?
@@ -513,6 +554,15 @@ mod tests {
         assert!(!auto(&["--app-id", "firefox", "--no-hold"]));
         assert!(!auto(&["--app-id", "firefox", "--no-auto-select"]));
         assert!(auto(&["--auto-select", "--no-hold"]));
+    }
+
+    #[test]
+    fn cycle_needs_the_daemon() {
+        let parse = |args: &[&str]| Cli::try_parse_from([&["wlr-switcher"], args].concat());
+        assert!(parse(&["--cycle", "next"]).is_ok());
+        assert!(parse(&["--hold", "--cycle", "prev"]).is_ok());
+        assert!(parse(&["--cycle", "next", "--no-daemon"]).is_err());
+        assert!(parse(&["--cycle", "sideways"]).is_err());
     }
 
     #[test]

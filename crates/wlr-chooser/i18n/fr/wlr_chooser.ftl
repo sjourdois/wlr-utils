@@ -28,5 +28,6 @@ daemon-not-running = Aucun démon wlr-overlayd ne tourne : cet overlay paie donc
 daemon-busy = Le démon wlr-overlayd affiche déjà un overlay ; celui-ci est donc affiché ici et paie tout le démarrage.
 daemon-bypassed = Cette exécution ne passe pas par le démon — --no-gpu change le comportement de tout le processus — elle paie donc tout le démarrage.
 daemon-cannot-serve = Un démon ne peut pas prendre en charge cette exécution : --no-gpu et --doctor changent le comportement de tout le processus. Lancez-la avec --no-daemon.
+cycle-needs-daemon = --cycle atteint l'overlay par wlr-overlayd : cette exécution affiche le sien, et un nouvel appui sur le raccourci pendant qu'il est ouvert ne déplacera pas sa sélection. Lancez `wlr-overlayd` avec votre session.
 hold-no-modifier = Le mode maintien est actif : le sélecteur bascule dès qu'aucune touche Alt ou Super n'est tenue — aussitôt, sans rien afficher, si aucune ne l'est à son ouverture. Retirez --hold pour que l'overlay attende quand aucune n'est tenue.
 chooser-config-min = doit valoir au moins { $min }

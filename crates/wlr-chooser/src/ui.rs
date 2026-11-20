@@ -982,6 +982,9 @@ pub struct Options {
     /// pick is a window to go to, and the current one would switch nowhere. Hold-to-
     /// switch does the same when it arms, whatever this says.
     pub leave_current: bool,
+    /// Step away from the current window backwards: open on the last window rather
+    /// than the next one, as `Alt+Shift+Tab` does.
+    pub start_backward: bool,
 }
 
 /// How long the tiles stay hidden in hold-to-switch mode if keyboard focus
@@ -1036,6 +1039,14 @@ pub struct App {
     /// releasing Alt immediately switches — like a real Alt-Tab where the launching
     /// Tab already advanced once (see [`App::apply_initial_select`]).
     pending_initial_select: bool,
+    /// Which way the initial selection steps away from the current window.
+    start_backward: bool,
+    /// Steps handed over by the host (see [`App::step`]), not yet applied to the
+    /// selection.
+    pending_steps: isize,
+    /// Whether a step has moved the selection: the initial placement is then behind
+    /// it, and arming must not redo it.
+    stepped: bool,
     /// The window that had the focus at launch, if it could be read: the one the
     /// initial selection steps away from.
     focused: Option<wl::WindowIdentity>,
@@ -1094,6 +1105,9 @@ impl App {
             armed: false,
             pending_auto_select: opts.auto_select,
             pending_initial_select: opts.leave_current,
+            start_backward: opts.start_backward,
+            pending_steps: 0,
+            stepped: false,
             focused,
             pending_confirm: false,
             // Without hold-to-switch there is no tap to mistake the first frames for.
@@ -1195,7 +1209,7 @@ impl App {
     pub fn arm(&mut self) {
         if !self.armed {
             self.armed = true;
-            self.pending_initial_select = true;
+            self.pending_initial_select = !self.stepped;
         }
     }
 
@@ -1254,14 +1268,14 @@ impl App {
     fn apply_initial_select(&mut self) {
         if self.pending_initial_select && self.sources.is_some() {
             self.pending_initial_select = false;
-            self.selected = match &self.focused {
-                Some(f) => self
-                    .visible()
-                    .iter()
-                    .position(|s| !s.is(f))
-                    .unwrap_or_default(),
-                None => 0,
-            };
+            let visible = self.visible();
+            let other = |s: &&Source| self.focused.as_ref().is_none_or(|f| !s.is(f));
+            self.selected = if self.start_backward {
+                visible.iter().rposition(other)
+            } else {
+                visible.iter().position(other)
+            }
+            .unwrap_or_default();
         }
     }
 
@@ -1269,6 +1283,30 @@ impl App {
     /// them while armed, before egui gets a look.
     pub fn cycle_keys(&self) -> CycleKeys {
         self.cycle
+    }
+
+    /// Move the highlight `by` sources, forwards for a positive count: the presses of
+    /// a cycle binding the compositor kept for itself, as the daemon passes them on.
+    ///
+    /// Each is one more press after the one that opened the overlay, so they apply
+    /// after the initial placement; until the sources are in, they wait.
+    pub fn step(&mut self, by: isize) {
+        self.pending_steps += by;
+        self.apply_steps();
+    }
+
+    fn apply_steps(&mut self) {
+        if self.pending_steps == 0 || self.pending_initial_select || self.sources.is_none() {
+            return;
+        }
+        let n = self.visible().len();
+        if n == 0 {
+            return;
+        }
+        let at = self.selected as isize + self.pending_steps;
+        self.selected = at.rem_euclid(n as isize) as usize;
+        self.pending_steps = 0;
+        self.stepped = true;
     }
 
     /// Advance (or retreat) the highlighted source.
@@ -1301,6 +1339,7 @@ impl App {
         }
         // Arming may have happened since the last frame, leaving the jump still pending.
         self.apply_initial_select();
+        self.apply_steps();
         if let Some(sel) = self.visible().get(self.selected).map(|s| s.selection()) {
             self.choose(sel);
         } else {
@@ -1454,6 +1493,7 @@ impl App {
 
         self.apply_auto_select();
         self.apply_initial_select();
+        self.apply_steps();
         self.apply_confirm();
         if self.closing {
             return;
@@ -2311,6 +2351,7 @@ mod tests {
         Options {
             namespace: "wlr-switcher",
             leave_current: false,
+            start_backward: false,
             mode: Mode::Windows,
             show_system: false,
             grid: None,
@@ -2595,6 +2636,44 @@ mod tests {
             h.app.confirm_release();
             assert_eq!(h.picked().as_deref(), Some("Window: b"), "order: {name}");
         }
+    }
+
+    #[test]
+    fn steps_count_from_where_the_switcher_opened() {
+        let switcher = |start_backward| Options {
+            order: Order::Mru,
+            leave_current: true,
+            start_backward,
+            ..options()
+        };
+        let windows = || {
+            vec![
+                window("a", "foot"),
+                window("b", "firefox"),
+                window("c", "mpv"),
+            ]
+        };
+        let mut h = Harness::focused_on(switcher(false), Some(focus("foot")));
+        // A press that beat the source list waits for it.
+        h.app.step(1);
+        h.send(windows());
+        h.frame();
+        assert_eq!(h.app.selected, 2);
+        // Then each press moves on from there, round the ends.
+        h.app.step(1);
+        assert_eq!(h.app.selected, 0);
+        h.app.step(-2);
+        assert_eq!(h.app.selected, 1);
+        // Arming afterwards keeps what the presses chose.
+        h.app.arm();
+        h.frame();
+        assert_eq!(h.app.selected, 1);
+
+        // `--cycle prev` opens on the last window, as Alt+Shift+Tab does.
+        let mut h = Harness::focused_on(switcher(true), Some(focus("foot")));
+        h.send(windows());
+        h.frame();
+        assert_eq!(h.app.selected, 2);
     }
 
     #[test]

@@ -28,5 +28,6 @@ daemon-not-running = Es läuft kein wlr-overlayd-Daemon, daher zahlt dieses Over
 daemon-busy = Der wlr-overlayd-Daemon zeigt bereits ein Overlay, daher wird dieses hier gezeigt und zahlt den vollen Start.
 daemon-bypassed = Dieser Lauf geht nicht über den Daemon — --no-gpu ändert das Verhalten des gesamten Prozesses — und zahlt daher den vollen Start.
 daemon-cannot-serve = Ein Daemon kann diesen Lauf nicht übernehmen: --no-gpu und --doctor ändern das Verhalten des gesamten Prozesses. Führe ihn mit --no-daemon aus.
+cycle-needs-daemon = --cycle erreicht das Overlay über wlr-overlayd: Dieser Lauf zeigt sein eigenes, und ein erneuter Druck auf die Tastenbelegung verschiebt dessen Auswahl nicht, solange es offen ist. Starten Sie `wlr-overlayd` mit Ihrer Sitzung.
 hold-no-modifier = Halten-zum-Wechseln ist aktiv: Der Umschalter wechselt, sobald keine Alt- oder Super-Taste gehalten wird — sofort und ohne etwas anzuzeigen, wenn beim Öffnen keine gehalten wird. Lass --hold weg, damit das Overlay wartet, wenn keine gehalten wird.
 chooser-config-min = muss mindestens { $min } sein
