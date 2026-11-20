@@ -47,33 +47,33 @@ wayland-protocols = { version = "0.32", features = ["staging", "client"] }
 wayland-protocols-wlr = { version = "0.3.12", features = ["client"] }
 wayland-scanner = "0.31"
 wayland-backend = "0.3"
-rustix = { version = "1.1.5", features = ["fs", "mm", "event", "process"] }
+rustix = { version = "1.1.6", features = ["fs", "mm", "event", "process"] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 i18n-embed = { version = "0.16.0", features = ["fluent-system", "desktop-requester"] }
-rust-embed = "8.13.0"
+rust-embed = "8.14.0"
 unic-langid = "0.9.6"
-resvg = { version = "0.48.1", default-features = false }
-toml = { version = "1.1.8", default-features = false, features = ["parse", "serde"] }
+resvg = { version = "0.50.0", default-features = false }
+toml = { version = "1.2.1", default-features = false, features = ["parse", "serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1"
 # Names the entries a config file holds that its schema does not (a misspelled key).
 serde_ignored = "0.1.14"
 # Rewrites the old configuration files into config.toml, comments included.
-toml_edit = "0.25.17"
+toml_edit = "0.25.19"
 swayipc = "4.0.0"
 smithay-client-toolkit = "0.21.1"
 wayland-egl = "0.32.11"
 # Maintained fork of the unmaintained khronos-egl; same dynamic API, tracks libloading 0.9.
-edgefirst-egl = { version = "0.35.0", features = ["dynamic"] }
+edgefirst-egl = { version = "0.41.0", features = ["dynamic"] }
 glow = "0.17" # must match the glow version egui_glow uses (0.37 is still on 0.17)
 egui_glow = "0.37"
-libloading = "0.9.0"
-clap = { version = "4.6.7", features = ["derive"] }
+libloading = "0.9.1"
+clap = { version = "4.6.9", features = ["derive"] }
 fontconfig = { version = "0.11.0", default-features = false, features = ["dlopen"] }
 gbm = { version = "0.18.0", default-features = false }
 # Native FFmpeg bindings for hardware/software video encoding (the `video` feature).
 # 9.x adapts at build time to whichever system libav* it finds (needs the -dev packages).
-ffmpeg-next = "9.0"
+ffmpeg-next = "9.1"
 # SIGINT handler so `wlr-shot record` finalises the file cleanly on Ctrl-C.
 ctrlc = "3.5"
 # Typed library errors (wlr-capture's public API surface).
@@ -85,7 +85,7 @@ tempfile = "3"
 # no new system dependency (libxkbcommon is required either way).
 xkbcommon = "0.9"
 # SIGHUP handler that wakes wlr-draw's event loop to reload its configuration.
-signal-hook = { version = "0.4.5", default-features = false }
+signal-hook = { version = "0.4.6", default-features = false }
 
 [profile.release]
 opt-level = 2

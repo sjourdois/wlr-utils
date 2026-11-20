@@ -18,7 +18,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
-- Dependency refresh: egui/egui_glow 0.37, edgefirst-egl 0.35.
+- Dependency refresh: egui/egui_glow 0.37, edgefirst-egl 0.41, resvg 0.50, ffmpeg-next 9.1; built
+  with Rust 1.100.
 
 ## 1.11.1 — 2026-10-07
 
