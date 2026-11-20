@@ -549,7 +549,7 @@ The ready-made themes set every colour key. Their `name` values are
 An old `~/.config/wlr-chooser/theme.toml` is still read when there is no `config.toml`;
 `wlr-chooser --migrate-config` moves it in.
 
-The sizes, in pixels, come from the `[chooser]` section:
+The sizes, in pixels, and the animations come from the `[chooser]` section:
 
 ```toml
 [chooser]
@@ -558,6 +558,7 @@ card-height = 760
 tile-width = 280      # the narrowest a card tile gets
 spacing = 10          # between tiles; the exposé and the Alt-Tab row scale theirs from it
 switcher-size = 96    # the largest preview or icon in the Alt-Tab row
+animations = true     # false: no growing exposé tiles, no hover fades
 ```
 
 ## Localisation

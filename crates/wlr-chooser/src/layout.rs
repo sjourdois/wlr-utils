@@ -1,4 +1,5 @@
-//! The sizes of the overlays: the `[chooser]` section of `config.toml`, in logical pixels.
+//! How the overlays are drawn: the `[chooser]` section of `config.toml`, its sizes in
+//! logical pixels.
 //!
 //! ```toml
 //! [chooser]
@@ -7,13 +8,14 @@
 //! tile-width = 280       # the narrowest a card tile gets
 //! spacing = 10           # between tiles
 //! switcher-size = 96     # the largest preview or icon in the Alt-Tab row
+//! animations = true      # the exposé's intro and egui's fades
 //! ```
 
 use crate::tr;
 use serde::Deserialize;
 use wlr_config::Config;
 
-/// The sizes the overlays are drawn at.
+/// How the overlays are drawn.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Layout {
     /// The card's size, when `--grid` does not size it to its tiles.
@@ -27,6 +29,9 @@ pub struct Layout {
     /// The largest preview, or icon, in the Alt-Tab row, which shrinks them to fit the
     /// screen.
     pub switcher_size: f32,
+    /// Whether anything moves on its own: the exposé's tiles growing in, egui's hover
+    /// fades and scrolls. Off, every frame is drawn settled.
+    pub animations: bool,
 }
 
 impl Default for Layout {
@@ -37,6 +42,7 @@ impl Default for Layout {
             tile_width: 280.0,
             spacing: 10.0,
             switcher_size: 96.0,
+            animations: true,
         }
     }
 }
@@ -50,6 +56,7 @@ struct Section {
     tile_width: Option<u16>,
     spacing: Option<u16>,
     switcher_size: Option<u16>,
+    animations: Option<bool>,
 }
 
 impl Layout {
@@ -57,7 +64,10 @@ impl Layout {
     /// overlay can be drawn at is raised to it, and becomes one of `config`'s warnings.
     pub fn from_config(config: &mut Config) -> Self {
         let section: Section = config.section("chooser");
-        let mut layout = Layout::default();
+        let mut layout = Layout {
+            animations: section.animations.unwrap_or(true),
+            ..Layout::default()
+        };
         for (value, size, key, min) in [
             (
                 section.card_width,
@@ -124,6 +134,14 @@ mod tests {
     }
 
     #[test]
+    fn animations_can_be_turned_off() {
+        let (layout, warnings) = load("[chooser]\nanimations = false\n");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert!(!layout.animations);
+        assert!(Layout::default().animations);
+    }
+
+    #[test]
     fn a_size_too_small_is_raised_and_named() {
         let (layout, warnings) = load("[chooser]\ntile-width = 10\n");
         assert_eq!(layout.tile_width, 64.0);
@@ -133,7 +151,7 @@ mod tests {
         );
     }
 
-    /// The example `config.toml`, its `[chooser]` settings uncommented, sets every size,
+    /// The example `config.toml`, its `[chooser]` settings uncommented, sets every key,
     /// each to its default.
     #[test]
     fn the_example_holds_the_defaults() {
@@ -158,7 +176,8 @@ mod tests {
                 && section.card_height.is_some()
                 && section.tile_width.is_some()
                 && section.spacing.is_some()
-                && section.switcher_size.is_some(),
+                && section.switcher_size.is_some()
+                && section.animations.is_some(),
             "the example leaves a [chooser] key out"
         );
         let (layout, warnings) = load(example);

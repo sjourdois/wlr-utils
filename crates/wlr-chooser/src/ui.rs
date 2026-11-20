@@ -1319,6 +1319,21 @@ impl App {
     /// Install the palette into an egui context (host loops own the context).
     pub fn apply_theme(&self, ctx: &egui::Context) {
         self.theme.apply(ctx);
+        // Set both ways: the daemon's context outlives the run that turned them off.
+        let animations = self.layout.animations;
+        ctx.global_style_mut(|s| {
+            let default = egui::Style::default();
+            s.animation_time = if animations {
+                default.animation_time
+            } else {
+                0.0
+            };
+            s.scroll_animation = if animations {
+                default.scroll_animation
+            } else {
+                egui::style::ScrollAnimation::none()
+            };
+        });
     }
 
     fn choose(&mut self, sel: Selection) {
@@ -1775,7 +1790,7 @@ impl App {
                     // Per-tile ease-out, slightly delayed by index. Alt-Tab skips
                     // the intro entirely — every millisecond to first usable frame
                     // counts, so tiles appear at full size immediately.
-                    let ease = if self.armed {
+                    let ease = if self.armed || !self.layout.animations {
                         1.0
                     } else {
                         let lt = ((elapsed - *i as f32 * 0.012) / ANIM).clamp(0.0, 1.0);
@@ -2441,6 +2456,23 @@ mod tests {
         fn picked(&self) -> Option<String> {
             self.out.lock().unwrap().as_ref().map(|s| s.token.clone())
         }
+    }
+
+    #[test]
+    fn animations_off_hold_only_for_the_run_that_asked() {
+        // One context for both runs, as the daemon keeps it.
+        let mut h = Harness::new(options());
+        h.app.layout.animations = false;
+        h.app.apply_theme(&h.ctx);
+        let style = h.ctx.global_style();
+        assert_eq!(style.animation_time, 0.0);
+        assert_eq!(style.scroll_animation.duration.max, 0.0);
+        h.app.layout.animations = true;
+        h.app.apply_theme(&h.ctx);
+        assert_eq!(
+            h.ctx.global_style().animation_time,
+            egui::Style::default().animation_time
+        );
     }
 
     #[test]

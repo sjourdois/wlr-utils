@@ -48,6 +48,9 @@
 # spacing = 10
 # The largest preview or icon in the Alt-Tab row, which shrinks them to fit the screen.
 # switcher-size = 96
+# Whether the exposé's tiles grow in as it opens, and hovered tiles fade between
+# colours. false draws every frame settled.
+# animations = true
 
 [draw]
 # Whether a pen stroke held still snaps to a clean line or ellipse, and after how long.

@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format is based on
 
 ## Unreleased
 
+### Added
+
+- **`animations = false` under `[chooser]`** turns off the motion of `wlr-switcher` and
+  `wlr-chooser`: the exposé's tiles no longer grow in, and hovered tiles change colour
+  at once (#27).
+
 ### Changed
 
 - Dependency refresh: egui/egui_glow 0.37, edgefirst-egl 0.35.
